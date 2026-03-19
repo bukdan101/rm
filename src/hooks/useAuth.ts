@@ -5,6 +5,13 @@ import { supabase } from '@/lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
 import type { Profile } from '@/types/marketplace'
 
+// Check if Supabase is properly configured
+const isSupabaseConfigured = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  return url && key && !url.includes('placeholder')
+}
+
 interface AuthState {
   user: User | null
   profile: Profile | null
@@ -54,6 +61,13 @@ export function useAuth(): UseAuthReturn {
 
   // Initialize auth state
   useEffect(() => {
+    // Check if Supabase is configured
+    if (!isSupabaseConfigured()) {
+      console.warn('Supabase not configured, using demo mode')
+      setState(prev => ({ ...prev, loading: false }))
+      return
+    }
+
     // Get initial session
     const getInitialSession = async () => {
       try {

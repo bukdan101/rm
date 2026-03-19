@@ -7,9 +7,9 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 // Check if required env vars are set
 const hasSupabaseConfig = supabaseUrl && supabaseAnonKey
 
-// Only throw in production, allow dev mode without Supabase
-if (!hasSupabaseConfig && process.env.NODE_ENV === 'production') {
-  throw new Error('Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required')
+// Log warning instead of throwing - allow app to render without Supabase
+if (!hasSupabaseConfig) {
+  console.warn('Warning: Supabase environment variables not configured. Using fallback mode.')
 }
 
 // Database types for Supabase

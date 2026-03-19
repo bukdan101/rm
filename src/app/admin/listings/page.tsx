@@ -155,7 +155,15 @@ export default function AdminListingsPage() {
       const data = await res.json()
 
       if (data.success) {
-        setListings(data.listings || [])
+        // Transform data to match expected format
+        const transformedListings = (data.listings || []).map((listing: any) => ({
+          ...listing,
+          brands: listing.brands || null,
+          car_models: listing.car_models || null,
+          profiles: listing.profiles || null,
+          car_images: listing.car_images || [],
+        }))
+        setListings(transformedListings)
         setTotalPages(data.pagination?.totalPages || 1)
         setTotalCount(data.pagination?.total || 0)
       }

@@ -10,6 +10,9 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '12')
     const offset = (page - 1) * limit
 
+    // Admin mode - show all listings regardless of status
+    const isAdmin = searchParams.get('admin') === 'true'
+
     // Filters
     const brandId = searchParams.get('brand_id')
     const modelId = searchParams.get('model_id')
@@ -28,7 +31,8 @@ export async function GET(request: NextRequest) {
     const mileageMin = searchParams.get('mileage_min')
     const mileageMax = searchParams.get('mileage_max')
     const search = searchParams.get('search')
-    const status = searchParams.get('status') || 'active'
+    const status = searchParams.get('status')
+    const marketplaceType = searchParams.get('marketplace_type')
     const dealerId = searchParams.get('dealer_id')
     const featured = searchParams.get('featured')
     const inspectionOnly = searchParams.get('inspection_only')
@@ -36,10 +40,30 @@ export async function GET(request: NextRequest) {
     // Build query - simple version that works with existing schema
     let query = supabase
       .from('car_listings')
-      .select(`*`, { count: 'exact' })
+      .select(`*, brands(name), car_models(name), profiles(id, full_name, email), car_images(image_url, is_primary)`, { count: 'exact' })
 
-    // Apply filters - only filter by status, don't assume columns exist
-    query = query.eq('status', status)
+    // Apply status filter
+    // Admin mode: show all statuses unless specific status is requested
+    // Non-admin mode: only show active listings
+    if (isAdmin) {
+      // If admin and specific status requested, filter by that status
+      if (status && status !== 'all') {
+        if (status === 'banned') {
+          query = query.eq('is_banned', true)
+        } else {
+          query = query.eq('status', status).eq('is_banned', false)
+        }
+      }
+      // Otherwise show all listings (no status filter)
+    } else {
+      // Non-admin: only show active, non-banned listings
+      query = query.eq('status', status || 'active').eq('is_banned', false)
+    }
+    
+    // Marketplace type filter
+    if (marketplaceType && marketplaceType !== 'all') {
+      query = query.eq('marketplace_type', marketplaceType)
+    }
     
     if (brandId) query = query.eq('brand_id', brandId)
     if (modelId) query = query.eq('model_id', modelId)
@@ -84,7 +108,7 @@ export async function GET(request: NextRequest) {
 
     // Get featured listings for banner
     let featuredListings = null
-    if (page === 1) {
+    if (page === 1 && !isAdmin) {
       const { data: featured } = await supabase
         .from('car_listings')
         .select('*')
@@ -96,7 +120,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data,
+      listings: data,
       featured: featuredListings,
       pagination: {
         page,

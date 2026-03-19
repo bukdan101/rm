@@ -13,7 +13,8 @@ import { GradientHeading } from '@/components/ui/gradient-heading'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getLandingData } from '@/lib/landing-data'
-import { ChevronRight, Clock, TrendingUp, Zap, Shield, Car } from 'lucide-react'
+import { ChevronRight, Clock, TrendingUp, Zap, Shield, Car, AlertCircle, Loader2 } from 'lucide-react'
+import { ListingDetailView } from '@/components/marketplace/ListingDetailView'
 
 // Loading skeletons
 function CategoriesSkeleton() {
@@ -62,7 +63,37 @@ function AuctionsSkeleton() {
   )
 }
 
-export default async function HomePage() {
+// Loading component for detail view
+function DetailSkeleton() {
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+      </div>
+    </div>
+  )
+}
+
+interface HomePageProps {
+  searchParams: Promise<{ id?: string; tab?: string; sort?: string; featured?: string }>
+}
+
+export default async function HomePage({ searchParams }: HomePageProps) {
+  const params = await searchParams
+  const listingId = params.id
+  
+  // If there's an ID parameter, show the listing detail
+  if (listingId) {
+    return (
+      <MainLayout>
+        <Suspense fallback={<DetailSkeleton />}>
+          <ListingDetailView listingId={listingId} />
+        </Suspense>
+      </MainLayout>
+    )
+  }
+
+  // Otherwise, show the regular homepage
   const data = await getLandingData()
   const { 
     categories, 

@@ -1,22 +1,21 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 // GET - Fetch user settings
 export async function GET() {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { data: settings, error } = await supabase
       .from('user_settings')
       .select('*')
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .single()
 
     if (error && error.code !== 'PGRST116') {
@@ -45,11 +44,11 @@ export async function GET() {
 // PUT - Update user settings
 export async function PUT(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -68,7 +67,7 @@ export async function PUT(request: Request) {
     const { data, error } = await supabase
       .from('user_settings')
       .upsert({
-        user_id: session.user.id,
+        user_id: user.id,
         email_notifications: email_notifications ?? true,
         push_notifications: push_notifications ?? true,
         sms_notifications: sms_notifications ?? false,

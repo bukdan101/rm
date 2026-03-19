@@ -1,14 +1,13 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ notifications: [], unreadCount: 0 })
     }
 
@@ -19,7 +18,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from('notifications')
       .select('*')
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -38,7 +37,7 @@ export async function GET(request: Request) {
     const { count: unreadCount } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .eq('read', false)
 
     // Transform data for frontend
@@ -65,11 +64,11 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -81,7 +80,7 @@ export async function PUT(request: Request) {
       const { error } = await supabase
         .from('notifications')
         .update({ read: true, read_at: new Date().toISOString() })
-        .eq('user_id', session.user.id)
+        .eq('user_id', user.id)
         .eq('read', false)
 
       if (error) {
@@ -93,7 +92,7 @@ export async function PUT(request: Request) {
         .from('notifications')
         .update({ read: true, read_at: new Date().toISOString() })
         .eq('id', notificationId)
-        .eq('user_id', session.user.id)
+        .eq('user_id', user.id)
 
       if (error) {
         return NextResponse.json({ error: 'Failed to update notification' }, { status: 500 })
@@ -109,11 +108,11 @@ export async function PUT(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -122,7 +121,7 @@ export async function POST(request: Request) {
 
     // Only allow admin or system to create notifications for other users
     // Or allow users to create notifications for themselves
-    const targetUserId = userId || session.user.id
+    const targetUserId = userId || user.id
 
     const { data: notification, error } = await supabase
       .from('notifications')

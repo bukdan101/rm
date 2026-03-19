@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LucideIcon, ArrowUpRight, ArrowDownRight, TrendingFlat } from 'lucide-react';
+import { LucideIcon, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -223,7 +223,7 @@ export function StatsCard({
                   trend.value === 0 && 'text-muted-foreground'
                 )}>
                   {trend.value === 0 ? (
-                    <TrendingFlat className="h-3.5 w-3.5 mr-0.5" />
+                    <Minus className="h-3.5 w-3.5 mr-0.5" />
                   ) : trend.isPositive ? (
                     <ArrowUpRight className="h-3.5 w-3.5 mr-0.5" />
                   ) : (

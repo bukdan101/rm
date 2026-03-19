@@ -1,18 +1,17 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userId = session.user.id
+    const userId = user.id
 
     // Get user profile
     const { data: profile } = await supabase
@@ -108,12 +107,12 @@ export async function GET() {
       .gte('created_at', sevenDaysAgo.toISOString())
 
     // Generate chart data (simplified)
-    const viewsData = Array(7).fill(0).map((_, i) => {
+    const viewsData = Array(7).fill(0).map(() => {
       const base = 20 + Math.floor(Math.random() * 30)
       return base + (analyticsViews?.length || 0) * Math.floor(Math.random() * 2)
     })
 
-    const inquiriesData = Array(7).fill(0).map((_, i) => {
+    const inquiriesData = Array(7).fill(0).map(() => {
       return Math.floor(Math.random() * 10) + (totalOrders || 0)
     })
 

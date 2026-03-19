@@ -1,14 +1,13 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ transactions: [], balance: 0 })
     }
 
@@ -20,7 +19,7 @@ export async function GET(request: Request) {
     const { data: wallet } = await supabase
       .from('wallets')
       .select('id, balance')
-      .eq('user_id', session.user.id)
+      .eq('user_id', user.id)
       .single()
 
     if (!wallet) {
@@ -28,7 +27,7 @@ export async function GET(request: Request) {
       const { data: newWallet } = await supabase
         .from('wallets')
         .insert({
-          user_id: session.user.id,
+          user_id: user.id,
           balance: 0,
           total_earned: 0,
           total_spent: 0,

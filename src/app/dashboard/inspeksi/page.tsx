@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import {
   CheckCircle2, Circle, AlertCircle, Clock, MapPin, 
-  Car, Wrench, Zap, Shield, Wheel, Gauge, FileCheck,
+  Car, Wrench, Zap, Shield, CircleDot, Gauge, FileCheck,
   ChevronRight, ChevronLeft, Save, Send, Camera, Plus,
   Star, AlertTriangle, Info, Loader2
 } from 'lucide-react'
@@ -48,12 +48,12 @@ const CATEGORY_ICONS: Record<string, typeof Car> = {
   'Transmission': Gauge,
   'Brake': Shield,
   'Suspension': Car,
-  'Steering': Wheel,
+  'Steering': CircleDot,
   'Exterior': Car,
   'Interior': Car,
   'Electrical': Zap,
   'Safety': Shield,
-  'Wheels': Wheel,
+  'Wheels': CircleDot,
   'Underbody': Car,
   'Body': Car,
   'Features': Star,

@@ -1,14 +1,13 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ orders: [] })
     }
 
@@ -59,12 +58,12 @@ export async function GET(request: Request) {
 
     // Filter by buyer or seller
     if (type === 'buyer') {
-      query = query.eq('buyer_id', session.user.id)
+      query = query.eq('buyer_id', user.id)
     } else if (type === 'seller') {
-      query = query.eq('seller_id', session.user.id)
+      query = query.eq('seller_id', user.id)
     } else {
       // Show both buyer and seller orders
-      query = query.or(`buyer_id.eq.${session.user.id},seller_id.eq.${session.user.id}`)
+      query = query.or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
     }
 
     // Filter by status
@@ -99,7 +98,7 @@ export async function GET(request: Request) {
       } : null,
       buyer: order.profiles,
       seller: order.seller,
-      isBuyer: order.buyer_id === session.user.id,
+      isBuyer: order.buyer_id === user.id,
     }))
 
     return NextResponse.json({ orders: transformedOrders })
@@ -111,11 +110,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -130,7 +129,7 @@ export async function POST(request: Request) {
       .from('orders')
       .insert({
         order_number: orderNumber,
-        buyer_id: session.user.id,
+        buyer_id: user.id,
         seller_id: sellerId,
         car_listing_id: listingId,
         agreed_price: agreedPrice,
@@ -167,11 +166,11 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

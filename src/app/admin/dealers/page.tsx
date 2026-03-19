@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -36,125 +35,43 @@ import {
   Users,
   TrendingUp,
   Car,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+
+interface DealerOwner {
+  id: string
+  full_name: string | null
+  email: string
+  phone: string | null
+}
 
 interface Dealer {
   id: string
   name: string
   slug: string
-  owner_name: string
-  owner_email: string
-  phone: string
-  email: string
-  address: string
-  city: string
-  province: string
-  logo_url: string | null
-  cover_url: string | null
   description: string | null
-  website: string | null
-  status: 'pending' | 'approved' | 'rejected'
+  phone: string | null
+  address: string | null
+  city_id: string | null
+  province_id: string | null
+  city_name: string | null
+  province_name: string | null
+  verified: boolean
   rating: number
-  review_count: number
   total_listings: number
+  is_active: boolean
   created_at: string
-  submitted_at: string
-  documents: {
-    id: string
-    type: string
-    name: string
-    url: string
-    verified: boolean
-  }[]
+  owner: DealerOwner | null
 }
 
-const mockDealers: Dealer[] = [
-  {
-    id: '1',
-    name: 'Auto Prima Jakarta',
-    slug: 'auto-prima-jakarta',
-    owner_name: 'Budi Santoso',
-    owner_email: 'budi@autoprima.com',
-    phone: '021-5678901',
-    email: 'info@autoprima.com',
-    address: 'Jl. Sudirman No. 123, Jakarta Selatan',
-    city: 'Jakarta Selatan',
-    province: 'DKI Jakarta',
-    logo_url: null,
-    cover_url: null,
-    description: 'Dealer mobil terpercaya dengan koleksi lengkap',
-    website: 'https://autoprima.com',
-    status: 'pending',
-    rating: 0,
-    review_count: 0,
-    total_listings: 0,
-    created_at: '2024-03-18',
-    submitted_at: '2024-03-19',
-    documents: [
-      { id: '1', type: 'siup', name: 'SIUP.pdf', url: '#', verified: false },
-      { id: '2', type: 'npwp', name: 'NPWP.pdf', url: '#', verified: false },
-      { id: '3', type: 'ktp', name: 'KTP_Pemilik.pdf', url: '#', verified: false },
-      { id: '4', type: 'showroom', name: 'Foto_Showroom.jpg', url: '#', verified: false },
-    ]
-  },
-  {
-    id: '2',
-    name: 'Mobil Mantap Surabaya',
-    slug: 'mobil-mantap-surabaya',
-    owner_name: 'Andi Wijaya',
-    owner_email: 'andi@mobilmentap.com',
-    phone: '031-987654',
-    email: 'sales@mobilmentap.com',
-    address: 'Jl. Ahmad Yani No. 456, Surabaya',
-    city: 'Surabaya',
-    province: 'Jawa Timur',
-    logo_url: null,
-    cover_url: null,
-    description: 'Spesialis mobil second berkualitas',
-    website: null,
-    status: 'pending',
-    rating: 0,
-    review_count: 0,
-    total_listings: 0,
-    created_at: '2024-03-17',
-    submitted_at: '2024-03-18',
-    documents: [
-      { id: '5', type: 'siup', name: 'SIUP.pdf', url: '#', verified: false },
-      { id: '6', type: 'npwp', name: 'NPWP.pdf', url: '#', verified: false },
-      { id: '7', type: 'ktp', name: 'KTP_Pemilik.pdf', url: '#', verified: false },
-      { id: '8', type: 'showroom', name: 'Foto_Showroom.jpg', url: '#', verified: false },
-    ]
-  },
-  {
-    id: '3',
-    name: 'Sentra Motor Bandung',
-    slug: 'sentra-motor-bandung',
-    owner_name: 'Dedi Kurnia',
-    owner_email: 'dedi@sentramotor.com',
-    phone: '022-789012',
-    email: 'info@sentramotor.com',
-    address: 'Jl. Dipatiukur No. 789, Bandung',
-    city: 'Bandung',
-    province: 'Jawa Barat',
-    logo_url: null,
-    cover_url: null,
-    description: 'Dealer resmi dengan garansi penuh',
-    website: 'https://sentramotor.com',
-    status: 'approved',
-    rating: 4.8,
-    review_count: 45,
-    total_listings: 32,
-    created_at: '2024-02-15',
-    submitted_at: '2024-02-16',
-    documents: [
-      { id: '9', type: 'siup', name: 'SIUP.pdf', url: '#', verified: true },
-      { id: '10', type: 'npwp', name: 'NPWP.pdf', url: '#', verified: true },
-      { id: '11', type: 'ktp', name: 'KTP_Pemilik.pdf', url: '#', verified: true },
-      { id: '12', type: 'showroom', name: 'Foto_Showroom.jpg', url: '#', verified: true },
-    ]
-  },
-]
+interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
 
 export default function AdminDealers() {
   const [dealers, setDealers] = useState<Dealer[]>([])
@@ -166,17 +83,61 @@ export default function AdminDealers() {
   const [approvalDialog, setApprovalDialog] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
   const [processing, setProcessing] = useState(false)
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    limit: 12,
+    total: 0,
+    totalPages: 0
+  })
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    verified: 0,
+    active: 0
+  })
   const { toast } = useToast()
 
-  useEffect(() => {
-    fetchDealers()
-  }, [])
-
-  async function fetchDealers() {
+  const fetchDealers = useCallback(async () => {
     try {
       setLoading(true)
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setDealers(mockDealers)
+      const params = new URLSearchParams()
+      
+      if (searchQuery) {
+        params.append('search', searchQuery)
+      }
+      
+      if (statusFilter === 'verified') {
+        params.append('verified', 'true')
+      } else if (statusFilter === 'pending') {
+        params.append('verified', 'false')
+      } else if (statusFilter === 'active') {
+        params.append('is_active', 'true')
+      }
+      
+      params.append('limit', pagination.limit.toString())
+      params.append('offset', ((pagination.page - 1) * pagination.limit).toString())
+      
+      const response = await fetch(`/api/admin/dealers?${params.toString()}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch dealers')
+      }
+      
+      const data = await response.json()
+      setDealers(data.dealers || [])
+      setPagination(prev => ({
+        ...prev,
+        total: data.total || 0,
+        totalPages: Math.ceil((data.total || 0) / prev.limit)
+      }))
+      
+      // Calculate stats from data
+      setStats({
+        total: data.total || 0,
+        pending: (data.dealers || []).filter((d: Dealer) => !d.verified).length,
+        verified: (data.dealers || []).filter((d: Dealer) => d.verified).length,
+        active: (data.dealers || []).filter((d: Dealer) => d.is_active).length
+      })
     } catch (error) {
       console.error('Error fetching dealers:', error)
       toast({
@@ -187,47 +148,57 @@ export default function AdminDealers() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [searchQuery, statusFilter, pagination.page, pagination.limit, toast])
 
-  const filteredDealers = dealers.filter(dealer => {
-    const matchesSearch =
-      dealer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      dealer.owner_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      dealer.city.toLowerCase().includes(searchQuery.toLowerCase())
+  useEffect(() => {
+    fetchDealers()
+  }, [fetchDealers])
 
-    const matchesStatus = statusFilter === 'all' || dealer.status === statusFilter
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPagination(prev => ({ ...prev, page: 1 }))
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
-    return matchesSearch && matchesStatus
-  })
-
-  const stats = {
-    total: dealers.length,
-    pending: dealers.filter(d => d.status === 'pending').length,
-    approved: dealers.filter(d => d.status === 'approved').length,
-    rejected: dealers.filter(d => d.status === 'rejected').length,
-  }
-
-  const handleApprove = async (dealer: Dealer) => {
+  const handleVerify = async (dealer: Dealer, verify: boolean) => {
     try {
       setProcessing(true)
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
+      
+      const response = await fetch('/api/admin/dealers', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          dealer_id: dealer.id,
+          verified: verify,
+          is_active: verify // When verifying, also activate
+        })
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update dealer')
+      }
+      
+      // Update local state
       setDealers(prev => prev.map(d =>
-        d.id === dealer.id ? { ...d, status: 'approved' as const } : d
+        d.id === dealer.id ? { ...d, verified: verify, is_active: verify } : d
       ))
-
+      
       toast({
         title: 'Berhasil',
-        description: `${dealer.name} telah disetujui sebagai dealer`,
+        description: `${dealer.name} telah ${verify ? 'diverifikasi' : 'diverifikasi ulang'}`,
       })
-
+      
       setApprovalDialog(false)
       setSelectedDealer(null)
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Gagal menyetujui dealer',
+        description: error instanceof Error ? error.message : 'Gagal memperbarui dealer',
         variant: 'destructive',
       })
     } finally {
@@ -235,36 +206,39 @@ export default function AdminDealers() {
     }
   }
 
-  const handleReject = async () => {
-    if (!selectedDealer || !rejectionReason.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Alasan penolakan wajib diisi',
-        variant: 'destructive',
-      })
-      return
-    }
-
+  const handleActivate = async (dealer: Dealer, activate: boolean) => {
     try {
       setProcessing(true)
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
+      
+      const response = await fetch('/api/admin/dealers', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          dealer_id: dealer.id,
+          is_active: activate
+        })
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update dealer')
+      }
+      
+      // Update local state
       setDealers(prev => prev.map(d =>
-        d.id === selectedDealer.id ? { ...d, status: 'rejected' as const } : d
+        d.id === dealer.id ? { ...d, is_active: activate } : d
       ))
-
+      
       toast({
         title: 'Berhasil',
-        description: `${selectedDealer.name} telah ditolak`,
+        description: `${dealer.name} telah ${activate ? 'diaktifkan' : 'dinonaktifkan'}`,
       })
-
-      setApprovalDialog(false)
-      setSelectedDealer(null)
-      setRejectionReason('')
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Gagal menolak dealer',
+        description: error instanceof Error ? error.message : 'Gagal memperbarui dealer',
         variant: 'destructive',
       })
     } finally {
@@ -272,27 +246,18 @@ export default function AdminDealers() {
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return <Badge variant="secondary" className="gap-1"><Clock className="h-3 w-3" />Pending</Badge>
-      case 'approved':
-        return <Badge className="bg-emerald-500 gap-1"><CheckCircle2 className="h-3 w-3" />Approved</Badge>
-      case 'rejected':
-        return <Badge variant="destructive" className="gap-1"><XCircle className="h-3 w-3" />Rejected</Badge>
-      default:
-        return null
-    }
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }))
   }
 
-  const getDocumentType = (type: string) => {
-    const types: Record<string, string> = {
-      siup: 'SIUP',
-      npwp: 'NPWP',
-      ktp: 'KTP Pemilik',
-      showroom: 'Foto Showroom',
+  const getStatusBadge = (dealer: Dealer) => {
+    if (!dealer.verified) {
+      return <Badge variant="secondary" className="gap-1"><Clock className="h-3 w-3" />Pending</Badge>
     }
-    return types[type] || type
+    if (dealer.is_active) {
+      return <Badge className="bg-emerald-500 gap-1"><CheckCircle2 className="h-3 w-3" />Active</Badge>
+    }
+    return <Badge variant="destructive" className="gap-1"><XCircle className="h-3 w-3" />Inactive</Badge>
   }
 
   return (
@@ -304,10 +269,10 @@ export default function AdminDealers() {
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
               <Building2 className="h-5 w-5 text-white" />
             </div>
-            Dealer Approval
+            Dealer Management
           </h1>
           <p className="text-muted-foreground mt-1">
-            Review dan setujui pendaftaran dealer baru
+            Kelola dan verifikasi dealer di platform
           </p>
         </div>
       </div>
@@ -320,37 +285,53 @@ export default function AdminDealers() {
             <Building2 className="h-5 w-5 text-cyan-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.total}</div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-3xl font-bold">{stats.total}</div>
+            )}
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-amber-500">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Verification</CardTitle>
             <Clock className="h-5 w-5 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.pending}</div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-3xl font-bold">{stats.pending}</div>
+            )}
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-emerald-500">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Approved</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Verified</CardTitle>
             <CheckCircle2 className="h-5 w-5 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.approved}</div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-3xl font-bold">{stats.verified}</div>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-red-500">
+        <Card className="border-l-4 border-l-purple-500">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Rejected</CardTitle>
-            <XCircle className="h-5 w-5 text-red-500" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active</CardTitle>
+            <TrendingUp className="h-5 w-5 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.rejected}</div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-3xl font-bold">{stats.active}</div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -362,13 +343,13 @@ export default function AdminDealers() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Cari dealer, pemilik, atau kota..."
+                placeholder="Cari dealer, slug, atau telepon..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button
                 variant={statusFilter === 'all' ? 'default' : 'outline'}
                 onClick={() => setStatusFilter('all')}
@@ -384,11 +365,18 @@ export default function AdminDealers() {
                 Pending
               </Button>
               <Button
-                variant={statusFilter === 'approved' ? 'default' : 'outline'}
-                onClick={() => setStatusFilter('approved')}
+                variant={statusFilter === 'verified' ? 'default' : 'outline'}
+                onClick={() => setStatusFilter('verified')}
                 size="sm"
               >
-                Approved
+                Verified
+              </Button>
+              <Button
+                variant={statusFilter === 'active' ? 'default' : 'outline'}
+                onClick={() => setStatusFilter('active')}
+                size="sm"
+              >
+                Active
               </Button>
             </div>
           </div>
@@ -398,20 +386,43 @@ export default function AdminDealers() {
       {/* Dealer Cards */}
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <Card key={i}>
               <CardContent className="p-6">
-                <Skeleton className="h-12 w-12 rounded-lg mb-4" />
-                <Skeleton className="h-5 w-32 mb-2" />
-                <Skeleton className="h-4 w-48 mb-4" />
-                <Skeleton className="h-10 w-full" />
+                <div className="flex items-start gap-4 mb-4">
+                  <Skeleton className="h-12 w-12 rounded-xl" />
+                  <div className="flex-1">
+                    <Skeleton className="h-5 w-32 mb-2" />
+                    <Skeleton className="h-4 w-48" />
+                  </div>
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Skeleton className="h-9 flex-1" />
+                  <Skeleton className="h-9 flex-1" />
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
+      ) : dealers.length === 0 ? (
+        <Card>
+          <CardContent className="p-12 text-center">
+            <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium mb-2">Tidak ada dealer ditemukan</h3>
+            <p className="text-muted-foreground">
+              {searchQuery ? 'Coba ubah kata kunci pencarian' : 'Belum ada dealer terdaftar'}
+            </p>
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredDealers.map((dealer) => (
+          {dealers.map((dealer) => (
             <Card key={dealer.id} className="overflow-hidden">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -421,27 +432,33 @@ export default function AdminDealers() {
                     </div>
                     <div>
                       <CardTitle className="text-base">{dealer.name}</CardTitle>
-                      <CardDescription className="text-xs">{dealer.city}</CardDescription>
+                      <CardDescription className="text-xs">
+                        {dealer.city_name || dealer.province_name || 'No location'}
+                      </CardDescription>
                     </div>
                   </div>
-                  {getStatusBadge(dealer.status)}
+                  {getStatusBadge(dealer)}
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <span>{dealer.owner_name}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  <span className="truncate">{dealer.owner_email}</span>
-                </div>
+                {dealer.owner && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <span>{dealer.owner.full_name || 'No name'}</span>
+                  </div>
+                )}
+                {dealer.owner && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <span className="truncate">{dealer.owner.email}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span>Submitted: {new Date(dealer.submitted_at).toLocaleDateString('id-ID')}</span>
+                  <span>Created: {new Date(dealer.created_at).toLocaleDateString('id-ID')}</span>
                 </div>
 
-                {dealer.status === 'approved' && (
+                {dealer.verified && (
                   <div className="flex gap-4 text-sm pt-2 border-t">
                     <div className="flex items-center gap-1">
                       <Car className="h-4 w-4 text-muted-foreground" />
@@ -449,25 +466,25 @@ export default function AdminDealers() {
                     </div>
                     <div className="flex items-center gap-1">
                       <Star className="h-4 w-4 text-amber-500" />
-                      <span>{dealer.rating}</span>
+                      <span>{dealer.rating.toFixed(1)}</span>
                     </div>
                   </div>
                 )}
 
-                {dealer.status === 'pending' && (
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => {
-                        setSelectedDealer(dealer)
-                        setDetailDialog(true)
-                      }}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      Review
-                    </Button>
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setSelectedDealer(dealer)
+                      setDetailDialog(true)
+                    }}
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    Detail
+                  </Button>
+                  {!dealer.verified ? (
                     <Button
                       size="sm"
                       className="flex-1 bg-emerald-500 hover:bg-emerald-600"
@@ -476,13 +493,80 @@ export default function AdminDealers() {
                         setApprovalDialog(true)
                       }}
                     >
-                      Approve
+                      <CheckCircle2 className="h-4 w-4 mr-1" />
+                      Verify
                     </Button>
-                  </div>
-                )}
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant={dealer.is_active ? "destructive" : "default"}
+                      className="flex-1"
+                      onClick={() => handleActivate(dealer, !dealer.is_active)}
+                      disabled={processing}
+                    >
+                      {processing ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : dealer.is_active ? (
+                        <XCircle className="h-4 w-4 mr-1" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                      )}
+                      {dealer.is_active ? 'Deactivate' : 'Activate'}
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handlePageChange(pagination.page - 1)}
+            disabled={pagination.page === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </Button>
+          <div className="flex items-center gap-1">
+            {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+              let page: number
+              if (pagination.totalPages <= 5) {
+                page = i + 1
+              } else if (pagination.page <= 3) {
+                page = i + 1
+              } else if (pagination.page >= pagination.totalPages - 2) {
+                page = pagination.totalPages - 4 + i
+              } else {
+                page = pagination.page - 2 + i
+              }
+              return (
+                <Button
+                  key={page}
+                  variant={page === pagination.page ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handlePageChange(page)}
+                  className="w-9"
+                >
+                  {page}
+                </Button>
+              )
+            })}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handlePageChange(pagination.page + 1)}
+            disabled={pagination.page === pagination.totalPages}
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       )}
 
@@ -490,9 +574,9 @@ export default function AdminDealers() {
       <Dialog open={detailDialog} onOpenChange={setDetailDialog}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Dealer Registration Details</DialogTitle>
+            <DialogTitle>Dealer Details</DialogTitle>
             <DialogDescription>
-              Review all information before approval
+              Complete dealer information
             </DialogDescription>
           </DialogHeader>
           {selectedDealer && (
@@ -504,97 +588,117 @@ export default function AdminDealers() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-lg">{selectedDealer.name}</h3>
-                  <p className="text-sm text-muted-foreground">{selectedDealer.description}</p>
-                  {selectedDealer.website && (
-                    <a href={selectedDealer.website} className="text-sm text-cyan-600 hover:underline flex items-center gap-1 mt-1">
-                      <Globe className="h-3 w-3" />
-                      {selectedDealer.website}
-                    </a>
-                  )}
+                  <p className="text-sm text-muted-foreground">{selectedDealer.description || 'No description'}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    {getStatusBadge(selectedDealer)}
+                    {selectedDealer.verified && (
+                      <Badge variant="outline">
+                        <Star className="h-3 w-3 mr-1 text-amber-500" />
+                        {selectedDealer.rating.toFixed(1)} rating
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Contact Info */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Owner Info */}
+              {selectedDealer.owner && (
                 <div className="p-4 rounded-lg bg-muted/50 space-y-3">
                   <p className="text-sm font-medium">Owner Information</p>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-muted-foreground" />
-                      {selectedDealer.owner_name}
+                      {selectedDealer.owner.full_name || 'No name provided'}
                     </div>
                     <div className="flex items-center gap-2">
                       <Mail className="h-4 w-4 text-muted-foreground" />
-                      {selectedDealer.owner_email}
+                      {selectedDealer.owner.email}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      {selectedDealer.phone}
-                    </div>
+                    {selectedDealer.owner.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-muted-foreground" />
+                        {selectedDealer.owner.phone}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="p-4 rounded-lg bg-muted/50 space-y-3">
-                  <p className="text-sm font-medium">Business Location</p>
-                  <div className="space-y-2 text-sm">
+              )}
+
+              {/* Business Location */}
+              <div className="p-4 rounded-lg bg-muted/50 space-y-3">
+                <p className="text-sm font-medium">Business Location</p>
+                <div className="space-y-2 text-sm">
+                  {selectedDealer.address && (
                     <div className="flex items-start gap-2">
                       <MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                       <span>{selectedDealer.address}</span>
                     </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    {selectedDealer.city_name && selectedDealer.province_name
+                      ? `${selectedDealer.city_name}, ${selectedDealer.province_name}`
+                      : 'Location not specified'}
+                  </div>
+                  {selectedDealer.phone && (
                     <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      {selectedDealer.city}, {selectedDealer.province}
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      {selectedDealer.phone}
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
-              {/* Documents */}
-              <div>
-                <p className="text-sm font-medium mb-3">Submitted Documents</p>
-                <div className="space-y-2">
-                  {selectedDealer.documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg border">
-                      <div className="flex items-center gap-3">
-                        <FileCheck className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">{getDocumentType(doc.type)}</p>
-                          <p className="text-xs text-muted-foreground">{doc.name}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {doc.verified ? (
-                          <Badge className="bg-emerald-500">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Verified
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary">Pending</Badge>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Important Note */}
-              <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-amber-800 dark:text-amber-200">Important</p>
-                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                      Pastikan semua dokumen sudah diverifikasi sebelum menyetujui dealer. 
-                      Foto showroom depan wajib ada untuk verifikasi lokasi fisik.
-                    </p>
+              {/* Stats */}
+              {selectedDealer.verified && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-3 rounded-lg bg-cyan-50 dark:bg-cyan-950/20 text-center">
+                    <Car className="h-5 w-5 mx-auto text-cyan-600 mb-1" />
+                    <p className="font-semibold">{selectedDealer.total_listings}</p>
+                    <p className="text-xs text-muted-foreground">Listings</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 text-center">
+                    <Star className="h-5 w-5 mx-auto text-amber-600 mb-1" />
+                    <p className="font-semibold">{selectedDealer.rating.toFixed(1)}</p>
+                    <p className="text-xs text-muted-foreground">Rating</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 text-center">
+                    <CheckCircle2 className="h-5 w-5 mx-auto text-emerald-600 mb-1" />
+                    <p className="font-semibold">{selectedDealer.is_active ? 'Active' : 'Inactive'}</p>
+                    <p className="text-xs text-muted-foreground">Status</p>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {/* Important Note for Pending */}
+              {!selectedDealer.verified && (
+                <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-amber-800 dark:text-amber-200">Pending Verification</p>
+                      <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                        Dealer ini menunggu verifikasi. Periksa dokumen dan informasi bisnis sebelum menyetujui.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex gap-2">
+            {!selectedDealer?.verified && selectedDealer && (
+              <Button
+                className="bg-emerald-500 hover:bg-emerald-600"
+                onClick={() => {
+                  setDetailDialog(false)
+                  setApprovalDialog(true)
+                }}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                Verify Dealer
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setDetailDialog(false)}>
               Close
             </Button>
@@ -606,16 +710,25 @@ export default function AdminDealers() {
       <Dialog open={approvalDialog} onOpenChange={setApprovalDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Dealer Approval</DialogTitle>
+            <DialogTitle>Dealer Verification</DialogTitle>
             <DialogDescription>
-              Approve or reject this dealer registration
+              Verify or reject this dealer registration
             </DialogDescription>
           </DialogHeader>
           {selectedDealer && (
             <div className="space-y-4">
               <div className="p-4 rounded-lg bg-muted/50">
                 <p className="font-medium">{selectedDealer.name}</p>
-                <p className="text-sm text-muted-foreground">{selectedDealer.city}</p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedDealer.city_name && selectedDealer.province_name
+                    ? `${selectedDealer.city_name}, ${selectedDealer.province_name}`
+                    : 'No location'}
+                </p>
+                {selectedDealer.owner && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Owner: {selectedDealer.owner.full_name || selectedDealer.owner.email}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -632,7 +745,22 @@ export default function AdminDealers() {
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
               variant="destructive"
-              onClick={handleReject}
+              onClick={() => {
+                if (!rejectionReason.trim()) {
+                  toast({
+                    title: 'Error',
+                    description: 'Alasan penolakan wajib diisi',
+                    variant: 'destructive',
+                  })
+                  return
+                }
+                // For now, just deactivate since we don't have a reject endpoint
+                if (selectedDealer) {
+                  handleActivate(selectedDealer, false)
+                  setApprovalDialog(false)
+                  setRejectionReason('')
+                }
+              }}
               disabled={processing || !rejectionReason.trim()}
               className="w-full sm:w-auto"
             >
@@ -640,12 +768,12 @@ export default function AdminDealers() {
               Reject
             </Button>
             <Button
-              onClick={() => selectedDealer && handleApprove(selectedDealer)}
+              onClick={() => selectedDealer && handleVerify(selectedDealer, true)}
               disabled={processing}
               className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600"
             >
               {processing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-              Approve
+              Verify & Activate
             </Button>
           </DialogFooter>
         </DialogContent>

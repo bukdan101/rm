@@ -1109,3 +1109,515 @@ Updated the predictions API and page to fetch real data from database tables:
 - **Confidence Display**: Progress bar showing accuracy percentage
 - **User Experience**: Clear CTAs for improving predictions via inspection
 - **Lint Status**: All files pass lint with no errors
+
+---
+## Task ID: 3-a - admin-api-agent
+### Work Task
+Create Admin API endpoints for users, dealers, KYC, and stats management.
+
+### Work Summary
+Created 4 Admin API endpoints following the existing pattern from `/src/app/api/admin/payments/route.ts`:
+
+**1. Created `/src/app/api/admin/users/route.ts`:**
+- **GET**: Fetch all users with pagination, search, and role filter
+  - Fields: id, email, full_name, phone, role, is_verified, created_at
+  - Includes counts for listings and favorites
+  - Supports search by name, email, phone
+  - Filters by role and is_verified status
+- **PUT**: Update user role or verification status
+  - Validates role values (buyer, seller, dealer, admin, inspector)
+  - Updates single or both fields
+  - Returns updated user data
+
+**2. Created `/src/app/api/admin/dealers/route.ts`:**
+- **GET**: Fetch all dealers with pagination and search
+  - Fields: id, name, slug, description, phone, address, city_id, province_id, verified, rating, total_listings, is_active, created_at
+  - Includes owner profile data (join with profiles)
+  - Includes city and province names via separate queries
+  - Filters by verified and is_active status
+- **PUT**: Verify/activate dealer
+  - Updates verified and/or is_active fields
+  - Returns updated dealer data
+
+**3. Created `/src/app/api/admin/kyc/route.ts`:**
+- **GET**: Fetch all KYC submissions with status filter
+  - Fields from kyc_verifications table: id, user_id, full_name, ktp_number, phone_number, address info, document URLs, status, etc.
+  - Includes user profile data
+  - Includes location names (province, city, district, village)
+  - Includes reviewer info
+  - Filters by status (not_submitted, pending, approved, rejected)
+- **PUT**: Approve/reject KYC submission
+  - Approve: Updates status to 'approved', sets user is_verified to true
+  - Reject: Updates status to 'rejected' with rejection_reason
+  - Records reviewer and review timestamp
+
+**4. Created `/src/app/api/admin/stats/route.ts`:**
+- **GET**: Get admin dashboard stats with aggregation queries
+  - Primary stats: totalUsers, totalDealers, totalListings, pendingKyc, pendingDealerApproval, totalRevenue, tokenSales, boostRevenue, activeBoosts, monthlyGrowth
+  - Breakdown stats:
+    - Users: total, thisMonth, lastMonth
+    - Dealers: total, verified, pending
+    - Listings: total, active, pending, sold
+    - KYC: pending, approved
+    - Payments: pending
+
+**Implementation Details:**
+- All endpoints use `createClient` from `@/lib/supabase/server`
+- Admin role check before allowing access
+- Proper error handling with try/catch
+- Pagination support with limit and offset
+- Returns proper JSON responses with status codes
+
+**Stage Summary:**
+- **4 Admin APIs Created**: users, dealers, kyc, stats
+- **Pattern Followed**: Same structure as existing payments route
+- **Security**: Admin role verification on all endpoints
+- **Features**: Pagination, search, filtering, aggregation
+- **Lint Status**: All files pass lint with no errors
+
+---
+## Task ID: 3-c - dealer-api-agent
+### Work Task
+Create Dealer API endpoints for reviews and team management.
+
+### Work Summary
+Created two API endpoints for dealer management:
+
+**1. Created `/src/app/api/dealer/reviews/route.ts`:**
+- **GET: Fetch reviews for a dealer**
+  - Query params: `dealer_id` (required), `page`, `limit`, `rating`, `sort_by` (newest, oldest, highest, lowest)
+  - Returns: 
+    - Reviews with user profile (name, avatar_url)
+    - Fields: id, rating, comment, user_id, dealer_id, created_at
+    - Rating distribution summary:
+      - Count per rating (1-5 stars)
+      - Total reviews count
+      - Average rating
+    - Pagination info
+  - User names are masked as "Anonymous" if not available
+  - Falls back to manual calculation if RPC function doesn't exist
+
+- **POST: Create new review**
+  - Auth required
+  - Body: `dealer_id`, `rating` (1-5), `comment` (optional)
+  - Validates:
+    - Rating must be between 1 and 5
+    - Dealer must exist
+    - User cannot review the same dealer twice
+  - Auto-updates dealer's rating and review_count after creation
+  - Returns created review with user profile
+
+**2. Created `/src/app/api/dealer/team/route.ts`:**
+- **GET: Fetch team members for a dealer**
+  - Query params: `dealer_id` (required)
+  - Returns team members with:
+    - id, dealer_id, user_id, role, permissions (can_edit, can_delete), joined_at
+    - User profile data (id, name, email, phone, avatar_url)
+  - Includes dealer owner as first member if not in dealer_staff
+  - Roles: owner, manager, sales, inspector
+
+- **POST: Add team member**
+  - Auth required, dealer admin/owner only
+  - Body: `dealer_id`, `user_id`, `role`, `permissions` (optional)
+  - Validates:
+    - Role must be valid (owner, manager, sales, inspector)
+    - User must exist
+    - User must not already be a team member
+  - Returns created team member
+
+- **PUT: Update team member role/permissions**
+  - Auth required, dealer admin/owner only
+  - Body: `id`, `dealer_id`, `role`, `permissions`
+  - Cannot change owner role
+  - Returns updated team member
+
+- **DELETE: Remove team member**
+  - Auth required, dealer admin/owner only
+  - Query params: `id`, `dealer_id`
+  - Cannot remove owner from team
+  - Returns success message
+
+**Security Features:**
+- All write operations check if user is dealer admin/owner
+- Admin check includes:
+  - Direct owner_id match on dealers table
+  - Manager role in dealer_staff table
+- Proper error handling with appropriate HTTP status codes
+
+**Database Tables Used:**
+- `dealer_reviews` - id, dealer_id, user_id, rating, title, comment, helpful_count, created_at
+- `dealer_staff` - id, dealer_id, user_id, role, can_edit, can_delete, created_at
+- `profiles` - User profile data
+- `dealers` - Dealer info and owner_id
+
+**Lint Status:** All files pass lint with no errors
+
+---
+## Task ID: 3-b - admin-api-agent
+### Work Task
+Create additional Admin API endpoints for the AutoMarket project:
+1. Boost features with usage statistics
+2. Categories management (brands, body types, transmissions, fuel types)
+3. Revenue data for charts
+4. Reports data for dashboard
+
+### Work Summary
+Created 4 comprehensive admin API endpoints with full CRUD operations and admin access control:
+
+**1. Created `/src/app/api/admin/boost/route.ts`:**
+- **GET**: Fetch all boost features with usage statistics
+  - Returns: features list with active_listings_count, total_usage_count, total_credits_spent
+  - Falls back to mock data if boost_features table doesn't exist
+- **POST**: Create new boost feature
+  - Required fields: name, slug, credit_cost, duration_days
+  - Optional: description, icon, color, benefits array
+- **PUT**: Update boost feature pricing/status
+  - Allowed fields: name, slug, description, credit_cost, duration_days, icon, color, benefits, is_active, display_order
+- **DELETE**: Delete boost feature
+  - Soft delete (deactivate) if has active usage
+  - Hard delete if not used
+- Admin role verification on all operations
+
+**2. Created `/src/app/api/admin/categories/route.ts`:**
+- **GET**: Fetch all categories (brands, body types, transmissions, fuel types)
+  - Query param `type`: 'brands', 'body_types', 'transmissions', 'fuel_types', or 'all'
+  - Brands: fetched from brands table with listing_count
+  - Body types: aggregated from car_listings.body_type enum
+  - Transmissions: aggregated from car_listings.transmission enum
+  - Fuel types: aggregated from car_listings.fuel enum
+- **POST**: Create new category (currently supports 'brand' type)
+- **PUT**: Update category (currently supports 'brand' type)
+- **DELETE**: Delete category with listing count check
+- Falls back to mock data if tables don't exist
+
+**3. Created `/src/app/api/admin/revenue/route.ts`:**
+- **GET**: Fetch revenue data for charts
+  - Query params: `year` (default current year), `period` (monthly)
+  - Returns:
+    - `monthly_revenue`: 12 months of data with revenue and transaction_count
+    - `revenue_by_source`: Credit purchases, boost usage breakdown
+    - `revenue_by_package`: Revenue by credit package with transaction counts
+    - `summary`: total_revenue, total_credits_sold, pending_payments, this_month_revenue, growth_percentage
+- Aggregates from payments and credit_transactions tables
+- Falls back to mock data if tables are empty
+
+**4. Created `/src/app/api/admin/reports/route.ts`:**
+- **GET**: Fetch report data for dashboard
+  - Query params: `report_type`, `year`
+  - Report types:
+    - `user_growth`: Monthly registration data with role breakdown (buyers, sellers, dealers)
+    - `listing_activity`: Monthly listing creation, publishing, sales counts
+    - `conversion_funnel`: Visitor → Register → Verify → Create Listing → Purchase → Sold
+    - `top_brands`: Top 10 brands by listing count with conversion rates
+    - `top_dealers`: Top 10 dealers by listings with ratings
+    - `geographic_distribution`: Listings by province with top cities
+    - `overview_stats`: Quick stats summary (users, listings, engagement)
+- Comprehensive aggregation from multiple tables
+- Falls back to mock data for empty tables
+
+**Security Features:**
+- All endpoints use `createClient` from `@/lib/supabase/server`
+- Admin role verification before any operation
+- Returns 401 for unauthenticated users
+- Returns 403 for non-admin users
+- Graceful error handling with appropriate HTTP status codes
+
+**Default Mock Data:**
+- All endpoints provide reasonable mock data structure when tables don't exist or are empty
+- Ensures frontend can still render UI even without data
+- Includes realistic Indonesian market data (brands, provinces, etc.)
+
+**Lint Status:** All files pass lint with no errors
+
+---
+## Task ID: 4-c - admin-dealers-page-agent
+### Work Task
+Update the Admin Dealers page to use real database data instead of mock data.
+
+### Work Summary
+Updated `/src/app/admin/dealers/page.tsx` to fetch real data from the API:
+
+**1. Removed Mock Data:**
+- Deleted all hardcoded `mockDealers` array
+- Removed simulated delay with `setTimeout`
+
+**2. Real API Integration:**
+- Added `useEffect` with `fetchDealers` function calling `/api/admin/dealers`
+- Added `useCallback` for proper dependency management
+- Integrated pagination with offset-based loading
+
+**3. Pagination Support:**
+- Added `PaginationInfo` interface with page, limit, total, totalPages
+- Implemented pagination controls at bottom of dealer list
+- Previous/Next buttons with page number display
+- Automatic page reset on search/filter changes
+
+**4. Search and Filter:**
+- Search by dealer name, slug, or phone (API-side filtering)
+- Status filter buttons: All, Pending, Verified, Active
+- Debounced search (300ms delay) for better performance
+
+**5. Loading Skeleton States:**
+- Added 6 card skeleton placeholders during loading
+- Individual stat card skeletons while fetching
+- Smooth transition between loading and loaded states
+
+**6. API Actions Connected:**
+- `handleVerify`: Verifies and activates dealer via PUT `/api/admin/dealers`
+- `handleActivate`: Toggles dealer active status via PUT `/api/admin/dealers`
+- Proper error handling with toast notifications
+- Local state updates after successful API calls
+
+**7. Updated Dealer Interface:**
+- Changed from `status: 'pending' | 'approved' | 'rejected'` to database schema
+- Now uses `verified: boolean` and `is_active: boolean` fields
+- Added `city_name` and `province_name` from joined location data
+- Owner object with `full_name`, `email`, `phone`
+
+**8. UI Enhancements:**
+- Stats cards now show Pending, Verified, Active counts (was Pending/Approved/Rejected)
+- Status badges properly reflect database state
+- Empty state message when no dealers found
+- Dealer detail dialog shows complete information
+
+**API Response Format Used:**
+```typescript
+{
+  dealers: Dealer[],
+  total: number,
+  limit: number,
+  offset: number
+}
+```
+
+**Stage Summary:**
+- **Mock Data Removed**: All hardcoded data deleted
+- **Real Database Data**: Fetched from `/api/admin/dealers`
+- **Pagination**: Full pagination with page controls
+- **Search & Filter**: Server-side filtering by name/slug/phone
+- **Loading States**: Skeleton placeholders during fetch
+- **API Actions**: Verify and activate connected to PUT endpoint
+- **Lint Status**: All files pass lint with no errors
+
+---
+## Task ID: 4-d - admin-kyc-page-agent
+### Work Task
+Update the Admin KYC page to use real database data instead of mock data.
+
+### Work Summary
+Completely rewrote the Admin KYC page to fetch real data from the `/api/admin/kyc` API endpoint:
+
+**1. Removed Mock Data:**
+- Deleted all hardcoded `mockKYCSubmissions` array
+- Removed fake data references
+
+**2. Updated Data Fetching:**
+- Modified `fetchSubmissions()` to call `/api/admin/kyc` with query params
+- Added `statusFilter` state for status filtering
+- Added search functionality with Enter key support
+- Re-fetches data when status filter changes
+
+**3. Updated KYCSubmission Interface:**
+- Updated interface to match API response structure:
+  - Added `full_name`, `phone_number`, `province_id`, `city_id`, `district_id`, `village_id`, `full_address`
+  - Added nested `user` object with `id`, `email`, `full_name`, `phone`, `avatar_url`, `role`
+  - Added `province_name`, `city_name`, `district_name`, `village_name`
+  - Added `reviewer` object for review information
+  - Removed old mock fields: `user_name`, `user_email`, `user_phone`, `user_avatar`, `notes`
+
+**4. Added Helper Functions:**
+- `getUserName()`: Gets user name from `user.full_name` or `full_name` fallback
+- `getUserEmail()`: Gets email from `user.email`
+- `getUserPhone()`: Gets phone from `phone_number` or `user.phone` fallback
+- `getUserAvatar()`: Gets avatar from `user.avatar_url`
+
+**5. Enhanced Status Filtering:**
+- Added dropdown filter for status: Semua Status, Pending, Approved, Rejected
+- Filter button to apply both search and status filters
+- Re-fetches data when filter changes
+
+**6. Added Loading Skeleton States:**
+- Skeleton loaders for stats cards (4 cards)
+- Skeleton loaders for pending submissions grid (3 cards)
+- Skeleton loaders for processed submissions list (3 rows)
+
+**7. Connected Approve/Reject Actions to API:**
+- `handleApprove()`: Calls `PUT /api/admin/kyc` with `{ kyc_id, action: 'approve' }`
+- `handleReject()`: Calls `PUT /api/admin/kyc` with `{ kyc_id, action: 'reject', rejection_reason }`
+- Proper error handling with toast notifications
+- Re-fetches data after successful action
+
+**8. Enhanced Detail Dialog:**
+- Added location display (province, city, district, village names)
+- Added reviewer information display
+- Added rejection reason display
+- Added null checks for optional fields
+
+**9. UI Improvements:**
+- Added "No KTP" and "No Selfie" fallback text when images are missing
+- Empty states for both tabs
+- Eye button to view processed submission details
+
+**Stage Summary:**
+- **Real Data**: Page now fetches from real API endpoint
+- **Status Filtering**: Dropdown filter for pending, approved, rejected
+- **Search**: Search by name, email, or NIK
+- **Loading States**: Comprehensive skeleton loaders
+- **API Integration**: Approve/reject actions connected to API
+- **Helper Functions**: Proper data mapping from API response
+- **Lint Status**: All files pass lint with no errors
+
+---
+## Task ID: 4-b - admin-users-page-agent
+### Work Task
+Update the Admin Users page to use real database data instead of mock data.
+
+### Work Summary
+Completely rewrote the Admin Users page to fetch real data from the `/api/admin/users` API endpoint:
+
+**1. Removed Mock Data:**
+- Deleted all hardcoded `mockUsers` array (5 fake users)
+- Removed fake data references
+
+**2. Updated Data Fetching:**
+- Added `useCallback` for `fetchUsers()` function
+- Fetches from `/api/admin/users` with query params:
+  - `search`: For searching by name, email, or phone
+  - `role`: For role filtering (buyer, seller, dealer, admin, inspector)
+  - `is_verified`: For verification status filtering
+  - `limit` and `offset`: For pagination
+- Added automatic re-fetch when filters or page changes
+- Added `useEffect` to reset to page 1 when filters change
+
+**3. Updated User Interface:**
+- Changed `listing_count` to `listings_count` (matches API response)
+- Changed `token_balance` to `favorites_count` (API returns favorites_count instead)
+- Removed unused fields: `avatar_url`, `email_verified`, `phone_verified`, `last_login`
+- Added `PaginationInfo` interface for pagination state
+
+**4. Added Pagination:**
+- Server-side pagination with page and limit
+- Calculates `totalPages` from API response
+- Previous/Next buttons with disabled states
+- Shows "Menampilkan X - Y dari Z user" text
+- Default limit of 10 users per page
+
+**5. Added Loading Skeleton States:**
+- Skeleton loaders for stats cards (4 cards)
+- Skeleton loaders for users table rows (5 rows)
+- Loading state during initial fetch and pagination
+
+**6. Connected Update Actions to API:**
+- `updateUserRole()`: Calls `PUT /api/admin/users` with `{ user_id, role }`
+- `updateUserVerification()`: Calls `PUT /api/admin/users` with `{ user_id, is_verified }`
+- Proper loading states during update (`updating` state)
+- Toast notifications for success/error
+- Local state updates after successful API calls
+
+**7. Enhanced UI Components:**
+- Added `RefreshCw` button to manually refresh data
+- Added role labels mapping for display (`ROLE_LABELS`)
+- Added `inspector` role support
+- Removed `Add User` button (not in requirements)
+- Updated stats cards to show Total, Dealers, Sellers, Verified counts
+
+**8. Added Edit Role Dialog:**
+- Dropdown to select new role
+- Disables button if role unchanged
+- Loading state during update
+
+**9. Added Verify/Unverify Dialog:**
+- Confirmation dialog for verify/unverify actions
+- Different messages for verify vs unverify
+- Destructive variant for unverify action
+
+**10. Enhanced User Detail Dialog:**
+- Shows user avatar with initials fallback
+- Displays phone, listings, favorites, joined date
+- Shows verification status badge
+- Added "Edit User" button to open role dialog
+
+**API Response Format Used:**
+```typescript
+{
+  users: User[],
+  total: number,
+  limit: number,
+  offset: number
+}
+```
+
+**Stage Summary:**
+- **Mock Data Removed**: All hardcoded data deleted
+- **Real Database Data**: Fetched from `/api/admin/users`
+- **Pagination**: Full pagination with Previous/Next controls
+- **Search & Filter**: Server-side filtering by search, role, and verification status
+- **Loading States**: Skeleton placeholders during fetch
+- **API Actions**: Role change and verification toggle connected to API
+- **Dialogs**: Edit role dialog and verify/unverify confirmation dialog
+- **Lint Status**: All files pass lint with no errors
+
+---
+## Task ID: 4-a - admin-dashboard-agent
+### Work Task
+Update the Admin Dashboard page to use real database data instead of mock data.
+
+### Work Summary
+Updated the Admin Dashboard to fetch real data from the `/api/admin/stats` API endpoint:
+
+**1. Updated `/src/app/api/admin/stats/route.ts`:**
+- Added three new helper functions for chart data:
+  - `fetchMonthlyRevenueData()`: Returns monthly revenue and token sales data for the year
+  - `fetchUserGrowthData()`: Returns monthly user and dealer registration counts
+  - `fetchTokenUsageData()`: Returns token usage distribution by category (listings, boosts, AI predictions, dealer contacts)
+- Added new response fields:
+  - `monthlyData`: Array of `{ name, revenue, tokens }` for each month
+  - `userGrowth`: Array of `{ name, users, dealers }` for each month
+  - `tokenUsage`: Array of `{ name, value, color }` for pie chart
+- Maintains existing stats: totalUsers, totalDealers, totalListings, pendingKyc, pendingDealerApproval, totalRevenue, tokenSales, boostRevenue, activeBoosts, monthlyGrowth, breakdown
+
+**2. Updated `/src/app/admin/page.tsx`:**
+- **Removed all mock data:**
+  - Deleted `revenueData` hardcoded array (7 months of fake data)
+  - Deleted `userGrowthData` hardcoded array (7 months of fake data)
+  - Deleted `tokenUsageData` hardcoded array (4 fake categories)
+  
+- **Added real data fetching:**
+  - `useEffect` fetches from `/api/admin/stats` on mount
+  - Handles 401 (Unauthorized) and 403 (Forbidden) errors with error state display
+  - Added `handleRefresh()` function for manual data refresh
+  - Refresh button on page header triggers re-fetch
+
+- **Added loading states:**
+  - Skeleton loaders for all stat cards
+  - Skeleton loaders for secondary stats (Token Sales, Boost Revenue, etc.)
+  - Skeleton placeholders for all charts (Revenue, User Growth, Token Usage)
+  - Loading state on Refresh button while fetching
+
+- **Updated TypeScript interfaces:**
+  - `MonthlyDataItem`: `{ name: string, revenue: number, tokens: number }`
+  - `UserGrowthItem`: `{ name: string, users: number, dealers: number }`
+  - `TokenUsageItem`: `{ name: string, value: number, color: string }`
+  - `DashboardStats`: Updated to include all API response fields
+
+- **Kept same UI layout and styling:**
+  - Main stats cards: Total Users, Total Dealers, Active Listings, Total Revenue
+  - Secondary stats: Token Sales, Boost Revenue, Active Boosts, Pending KYC
+  - Charts: Revenue Overview (AreaChart), User Growth (BarChart), Token Usage (PieChart)
+  - Quick Actions: Review KYC, Dealer Approval, Verify Payments
+  - Recent Activity section with placeholder activities
+
+**3. Connected Quick Actions to real data:**
+- "Review KYC" button shows `{stats?.pendingKyc}` pending reviews
+- "Dealer Approval" button shows `{stats?.pendingDealerApproval}` pending
+- "Verify Payments" button shows `{stats?.breakdown?.payments?.pending}` unverified payments
+
+**Stage Summary:**
+- **Mock Data Removed**: All 3 hardcoded data arrays deleted
+- **Real Database Data**: Fetched from `/api/admin/stats`
+- **Chart Data**: Monthly revenue, user growth, token usage from real database
+- **Loading States**: Comprehensive skeleton loaders for all sections
+- **Error Handling**: Unauthorized and forbidden error states with retry button
+- **Refresh Function**: Manual data refresh capability
+- **Same UI Layout**: All original styling and structure preserved
+- **Lint Status**: All files pass lint with no errors

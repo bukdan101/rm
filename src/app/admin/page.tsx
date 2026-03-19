@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Users,
@@ -12,19 +11,14 @@ import {
   Car,
   Coins,
   TrendingUp,
-  TrendingDown,
   ArrowUpRight,
-  ArrowDownRight,
   DollarSign,
   Activity,
   Clock,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  Sparkles,
-  Zap,
   FileCheck,
   CreditCard,
+  Zap,
+  Sparkles,
 } from 'lucide-react'
 import {
   AreaChart,
@@ -41,33 +35,23 @@ import {
   Cell,
 } from 'recharts'
 
-// Mock data for charts
-const revenueData = [
-  { name: 'Jan', revenue: 45000000, tokens: 1200 },
-  { name: 'Feb', revenue: 52000000, tokens: 1450 },
-  { name: 'Mar', revenue: 48000000, tokens: 1300 },
-  { name: 'Apr', revenue: 61000000, tokens: 1700 },
-  { name: 'May', revenue: 55000000, tokens: 1500 },
-  { name: 'Jun', revenue: 67000000, tokens: 1900 },
-  { name: 'Jul', revenue: 72000000, tokens: 2100 },
-]
+interface MonthlyDataItem {
+  name: string
+  revenue: number
+  tokens: number
+}
 
-const userGrowthData = [
-  { name: 'Jan', users: 450, dealers: 12 },
-  { name: 'Feb', users: 520, dealers: 18 },
-  { name: 'Mar', users: 610, dealers: 24 },
-  { name: 'Apr', users: 680, dealers: 32 },
-  { name: 'May', users: 750, dealers: 38 },
-  { name: 'Jun', users: 840, dealers: 45 },
-  { name: 'Jul', users: 920, dealers: 52 },
-]
+interface UserGrowthItem {
+  name: string
+  users: number
+  dealers: number
+}
 
-const tokenUsageData = [
-  { name: 'Listings', value: 45, color: '#8b5cf6' },
-  { name: 'Boosts', value: 30, color: '#06b6d4' },
-  { name: 'AI Predict', value: 15, color: '#f59e0b' },
-  { name: 'Dealer Contact', value: 10, color: '#10b981' },
-]
+interface TokenUsageItem {
+  name: string
+  value: number
+  color: string
+}
 
 interface DashboardStats {
   totalUsers: number
@@ -80,6 +64,9 @@ interface DashboardStats {
   boostRevenue: number
   activeBoosts: number
   monthlyGrowth: number
+  monthlyData: MonthlyDataItem[]
+  userGrowth: UserGrowthItem[]
+  tokenUsage: TokenUsageItem[]
 }
 
 const formatCurrency = (amount: number) => {
@@ -100,32 +87,63 @@ const formatNumber = (num: number) => {
 export default function AdminDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        setStats({
-          totalUsers: 12580,
-          totalDealers: 156,
-          totalListings: 8920,
-          pendingKyc: 23,
-          pendingDealerApproval: 8,
-          totalRevenue: 450000000,
-          tokenSales: 320000000,
-          boostRevenue: 95000000,
-          activeBoosts: 234,
-          monthlyGrowth: 12.5,
-        })
-      } catch (error) {
-        console.error('Error fetching stats:', error)
+        const response = await fetch('/api/admin/stats')
+        
+        if (!response.ok) {
+          if (response.status === 401) {
+            setError('Unauthorized - Please login as admin')
+          } else if (response.status === 403) {
+            setError('Admin access required')
+          } else {
+            setError('Failed to fetch dashboard data')
+          }
+          return
+        }
+        
+        const data = await response.json()
+        setStats(data)
+      } catch (err) {
+        console.error('Error fetching stats:', err)
+        setError('Failed to load dashboard data')
       } finally {
         setLoading(false)
       }
     }
     fetchStats()
   }, [])
+
+  const handleRefresh = () => {
+    setLoading(true)
+    setError(null)
+    fetch('/api/admin/stats')
+      .then(res => res.json())
+      .then(data => setStats(data))
+      .catch(err => {
+        console.error('Error refreshing stats:', err)
+        setError('Failed to refresh data')
+      })
+      .finally(() => setLoading(false))
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center">
+            <p className="text-destructive mb-4">{error}</p>
+            <Button onClick={handleRefresh} variant="outline">
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
@@ -144,7 +162,11 @@ export default function AdminDashboard() {
             <Clock className="h-3.5 w-3.5" />
             Last updated: Just now
           </Badge>
-          <Button className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700">
+          <Button 
+            onClick={handleRefresh}
+            disabled={loading}
+            className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700"
+          >
             <Activity className="h-4 w-4 mr-2" />
             Refresh Data
           </Button>
@@ -174,7 +196,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="flex items-center gap-1 mt-1">
                   <TrendingUp className="h-4 w-4 text-emerald-500" />
-                  <span className="text-sm text-emerald-600 dark:text-emerald-400">+12.5%</span>
+                  <span className="text-sm text-emerald-600 dark:text-emerald-400">+{stats?.monthlyGrowth || 0}%</span>
                   <span className="text-xs text-muted-foreground">from last month</span>
                 </div>
               </>
@@ -232,7 +254,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="flex items-center gap-1 mt-1">
                   <TrendingUp className="h-4 w-4 text-emerald-500" />
-                  <span className="text-sm text-emerald-600 dark:text-emerald-400">+8.2%</span>
+                  <span className="text-sm text-emerald-600 dark:text-emerald-400">+{stats?.monthlyGrowth || 0}%</span>
                   <span className="text-xs text-muted-foreground">from last week</span>
                 </div>
               </>
@@ -281,7 +303,11 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Token Sales</p>
-                <p className="text-xl font-bold">{formatCurrency(stats?.tokenSales || 0)}</p>
+                {loading ? (
+                  <Skeleton className="h-6 w-20" />
+                ) : (
+                  <p className="text-xl font-bold">{formatCurrency(stats?.tokenSales || 0)}</p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -296,7 +322,11 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Boost Revenue</p>
-                <p className="text-xl font-bold">{formatCurrency(stats?.boostRevenue || 0)}</p>
+                {loading ? (
+                  <Skeleton className="h-6 w-20" />
+                ) : (
+                  <p className="text-xl font-bold">{formatCurrency(stats?.boostRevenue || 0)}</p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -311,7 +341,11 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Active Boosts</p>
-                <p className="text-xl font-bold">{stats?.activeBoosts}</p>
+                {loading ? (
+                  <Skeleton className="h-6 w-12" />
+                ) : (
+                  <p className="text-xl font-bold">{stats?.activeBoosts || 0}</p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -326,7 +360,11 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Pending KYC</p>
-                <p className="text-xl font-bold">{stats?.pendingKyc}</p>
+                {loading ? (
+                  <Skeleton className="h-6 w-12" />
+                ) : (
+                  <p className="text-xl font-bold">{stats?.pendingKyc || 0}</p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -345,37 +383,43 @@ export default function AdminDashboard() {
             <CardDescription>Monthly revenue and token sales</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenueData}>
-                  <defs>
-                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="name" className="text-xs" />
-                  <YAxis className="text-xs" tickFormatter={formatNumber} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
-                    }}
-                    formatter={(value: number) => [formatCurrency(value), 'Revenue']}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="revenue" 
-                    stroke="#8b5cf6" 
-                    strokeWidth={2}
-                    fillOpacity={1} 
-                    fill="url(#colorRevenue)" 
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {loading ? (
+              <div className="h-[300px] flex items-center justify-center">
+                <Skeleton className="h-[250px] w-full" />
+              </div>
+            ) : (
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={stats?.monthlyData || []}>
+                    <defs>
+                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="name" className="text-xs" />
+                    <YAxis className="text-xs" tickFormatter={formatNumber} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                      formatter={(value: number) => [formatCurrency(value), 'Revenue']}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="revenue" 
+                      stroke="#8b5cf6" 
+                      strokeWidth={2}
+                      fillOpacity={1} 
+                      fill="url(#colorRevenue)" 
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -389,24 +433,30 @@ export default function AdminDashboard() {
             <CardDescription>New users and dealers registration</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={userGrowthData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="name" className="text-xs" />
-                  <YAxis className="text-xs" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Bar dataKey="users" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="dealers" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {loading ? (
+              <div className="h-[300px] flex items-center justify-center">
+                <Skeleton className="h-[250px] w-full" />
+              </div>
+            ) : (
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stats?.userGrowth || []}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="name" className="text-xs" />
+                    <YAxis className="text-xs" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Bar dataKey="users" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="dealers" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -423,35 +473,43 @@ export default function AdminDashboard() {
             <CardDescription>Distribution of token usage</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={tokenUsageData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {tokenUsageData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              {tokenUsageData.map((item) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-sm text-muted-foreground">{item.name}</span>
-                  <span className="text-sm font-medium ml-auto">{item.value}%</span>
+            {loading ? (
+              <div className="h-[200px] flex items-center justify-center">
+                <Skeleton className="h-[150px] w-[150px] rounded-full" />
+              </div>
+            ) : (
+              <>
+                <div className="h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={stats?.tokenUsage || []}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {(stats?.tokenUsage || []).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              ))}
-            </div>
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  {(stats?.tokenUsage || []).map((item) => (
+                    <div key={item.name} className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                      <span className="text-sm text-muted-foreground">{item.name}</span>
+                      <span className="text-sm font-medium ml-auto">{item.value}%</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -468,7 +526,7 @@ export default function AdminDashboard() {
               </div>
               <div className="text-left">
                 <p className="font-medium">Review KYC</p>
-                <p className="text-xs text-muted-foreground">{stats?.pendingKyc} pending reviews</p>
+                <p className="text-xs text-muted-foreground">{stats?.pendingKyc || 0} pending reviews</p>
               </div>
               <ArrowUpRight className="h-4 w-4 ml-auto text-muted-foreground" />
             </Button>
@@ -478,7 +536,7 @@ export default function AdminDashboard() {
               </div>
               <div className="text-left">
                 <p className="font-medium">Dealer Approval</p>
-                <p className="text-xs text-muted-foreground">{stats?.pendingDealerApproval} pending</p>
+                <p className="text-xs text-muted-foreground">{stats?.pendingDealerApproval || 0} pending</p>
               </div>
               <ArrowUpRight className="h-4 w-4 ml-auto text-muted-foreground" />
             </Button>
@@ -488,7 +546,7 @@ export default function AdminDashboard() {
               </div>
               <div className="text-left">
                 <p className="font-medium">Verify Payments</p>
-                <p className="text-xs text-muted-foreground">5 unverified payments</p>
+                <p className="text-xs text-muted-foreground">{stats?.breakdown?.payments?.pending || 0} unverified payments</p>
               </div>
               <ArrowUpRight className="h-4 w-4 ml-auto text-muted-foreground" />
             </Button>
@@ -506,8 +564,8 @@ export default function AdminDashboard() {
               {[
                 { type: 'user', text: 'New user registered', time: '2 min ago', icon: Users, color: 'violet' },
                 { type: 'dealer', text: 'Dealer registration pending', time: '15 min ago', icon: Building2, color: 'cyan' },
-                { type: 'payment', text: 'Payment verified Rp 500.000', time: '1 hour ago', icon: CreditCard, color: 'emerald' },
-                { type: 'boost', text: '45 new boosts activated', time: '2 hours ago', icon: Zap, color: 'amber' },
+                { type: 'payment', text: 'Payment verified', time: '1 hour ago', icon: CreditCard, color: 'emerald' },
+                { type: 'boost', text: 'New boosts activated', time: '2 hours ago', icon: Zap, color: 'amber' },
               ].map((activity, index) => (
                 <div key={index} className="flex items-start gap-3">
                   <div className={`h-8 w-8 rounded-lg bg-${activity.color}-100 dark:bg-${activity.color}-900/30 flex items-center justify-center shrink-0`}>

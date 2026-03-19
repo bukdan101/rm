@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -49,13 +49,15 @@ import {
   Mail,
   Calendar,
   Loader2,
-  Filter,
   Download,
   UserPlus,
   CheckCircle2,
   XCircle,
   Clock,
   TrendingUp,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -64,94 +66,198 @@ interface User {
   email: string
   full_name: string | null
   phone: string | null
-  avatar_url: string | null
   role: string
   is_verified: boolean
-  email_verified: boolean
-  phone_verified: boolean
   created_at: string
-  last_login: string | null
-  listing_count: number
-  token_balance: number
+  listings_count: number
+  favorites_count: number
 }
 
-const mockUsers: User[] = [
-  { id: '1', email: 'john@example.com', full_name: 'John Doe', phone: '081234567890', avatar_url: null, role: 'user', is_verified: true, email_verified: true, phone_verified: true, created_at: '2024-01-15', last_login: '2024-03-20', listing_count: 5, token_balance: 150 },
-  { id: '2', email: 'jane@example.com', full_name: 'Jane Smith', phone: '082345678901', avatar_url: null, role: 'seller', is_verified: true, email_verified: true, phone_verified: false, created_at: '2024-02-10', last_login: '2024-03-19', listing_count: 12, token_balance: 320 },
-  { id: '3', email: 'dealer@auto.com', full_name: 'Auto Dealer Jakarta', phone: '083456789012', avatar_url: null, role: 'dealer', is_verified: true, email_verified: true, phone_verified: true, created_at: '2024-01-05', last_login: '2024-03-20', listing_count: 45, token_balance: 1250 },
-  { id: '4', email: 'mike@test.com', full_name: 'Mike Wilson', phone: '084567890123', avatar_url: null, role: 'user', is_verified: false, email_verified: false, phone_verified: false, created_at: '2024-03-18', last_login: null, listing_count: 0, token_balance: 0 },
-  { id: '5', email: 'sarah@mail.com', full_name: 'Sarah Connor', phone: '085678901234', avatar_url: null, role: 'seller', is_verified: true, email_verified: true, phone_verified: true, created_at: '2024-02-20', last_login: '2024-03-15', listing_count: 8, token_balance: 75 },
-]
+interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  buyer: 'Buyer',
+  seller: 'Seller',
+  dealer: 'Dealer',
+  admin: 'Admin',
+  inspector: 'Inspector',
+}
 
 export default function AdminUsers() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
+  const [updating, setUpdating] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  })
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [detailDialog, setDetailDialog] = useState(false)
+  const [editRoleDialog, setEditRoleDialog] = useState(false)
+  const [verifyDialog, setVerifyDialog] = useState(false)
+  const [newRole, setNewRole] = useState<string>('')
   const { toast } = useToast()
 
-  useEffect(() => {
-    fetchUsers()
-  }, [])
-
-  async function fetchUsers() {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true)
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setUsers(mockUsers)
+      const params = new URLSearchParams()
+      
+      if (searchQuery) {
+        params.append('search', searchQuery)
+      }
+      if (roleFilter !== 'all') {
+        params.append('role', roleFilter)
+      }
+      if (statusFilter !== 'all') {
+        params.append('is_verified', statusFilter === 'verified' ? 'true' : 'false')
+      }
+      
+      const offset = (pagination.page - 1) * pagination.limit
+      params.append('limit', pagination.limit.toString())
+      params.append('offset', offset.toString())
+      
+      const response = await fetch(`/api/admin/users?${params.toString()}`)
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to fetch users')
+      }
+      
+      const data = await response.json()
+      setUsers(data.users || [])
+      setPagination(prev => ({
+        ...prev,
+        total: data.total || 0,
+        totalPages: Math.ceil((data.total || 0) / prev.limit),
+      }))
     } catch (error) {
       console.error('Error fetching users:', error)
       toast({
         title: 'Error',
-        description: 'Gagal memuat data user',
+        description: error instanceof Error ? error.message : 'Gagal memuat data user',
         variant: 'destructive',
       })
     } finally {
       setLoading(false)
     }
+  }, [searchQuery, roleFilter, statusFilter, pagination.page, pagination.limit, toast])
+
+  useEffect(() => {
+    fetchUsers()
+  }, [fetchUsers])
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }, [searchQuery, roleFilter, statusFilter])
+
+  const updateUserRole = async (userId: string, role: string) => {
+    try {
+      setUpdating(userId)
+      
+      const response = await fetch('/api/admin/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, role }),
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update user role')
+      }
+      
+      toast({
+        title: 'Berhasil',
+        description: 'Role user berhasil diubah',
+      })
+      
+      // Update local state
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u))
+      
+      if (selectedUser?.id === userId) {
+        setSelectedUser({ ...selectedUser, role })
+      }
+      
+      setEditRoleDialog(false)
+    } catch (error) {
+      console.error('Error updating user role:', error)
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Gagal mengubah role user',
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdating(null)
+    }
   }
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = 
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-      (user.phone?.includes(searchQuery) ?? false)
-
-    const matchesRole = roleFilter === 'all' || user.role === roleFilter
-    const matchesStatus = statusFilter === 'all' || 
-      (statusFilter === 'verified' && user.is_verified) ||
-      (statusFilter === 'unverified' && !user.is_verified)
-
-    return matchesSearch && matchesRole && matchesStatus
-  })
+  const updateUserVerification = async (userId: string, isVerified: boolean) => {
+    try {
+      setUpdating(userId)
+      
+      const response = await fetch('/api/admin/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, is_verified: isVerified }),
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update user verification')
+      }
+      
+      toast({
+        title: 'Berhasil',
+        description: isVerified ? 'User berhasil diverifikasi' : 'Verifikasi user dibatalkan',
+      })
+      
+      // Update local state
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_verified: isVerified } : u))
+      
+      if (selectedUser?.id === userId) {
+        setSelectedUser({ ...selectedUser, is_verified: isVerified })
+      }
+      
+      setVerifyDialog(false)
+    } catch (error) {
+      console.error('Error updating user verification:', error)
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Gagal mengubah verifikasi user',
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdating(null)
+    }
+  }
 
   const stats = {
-    total: users.length,
+    total: pagination.total,
     verified: users.filter(u => u.is_verified).length,
-    activeToday: users.filter(u => {
-      if (!u.last_login) return false
-      const lastLogin = new Date(u.last_login)
-      const today = new Date()
-      return lastLogin.toDateString() === today.toDateString()
-    }).length,
-    newThisMonth: users.filter(u => {
-      const created = new Date(u.created_at)
-      const now = new Date()
-      return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()
-    }).length,
+    dealers: users.filter(u => u.role === 'dealer').length,
+    sellers: users.filter(u => u.role === 'seller').length,
   }
 
   const getRoleBadge = (role: string) => {
     const styles: Record<string, string> = {
-      user: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+      buyer: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
       seller: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
       dealer: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
       admin: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+      inspector: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
     }
-    return styles[role] || styles.user
+    return styles[role] || styles.buyer
   }
 
   const formatDate = (dateString: string | null) => {
@@ -161,6 +267,29 @@ export default function AdminUsers() {
       month: 'short',
       year: 'numeric',
     })
+  }
+
+  const handlePrevPage = () => {
+    if (pagination.page > 1) {
+      setPagination(prev => ({ ...prev, page: prev.page - 1 }))
+    }
+  }
+
+  const handleNextPage = () => {
+    if (pagination.page < pagination.totalPages) {
+      setPagination(prev => ({ ...prev, page: prev.page + 1 }))
+    }
+  }
+
+  const openRoleDialog = (user: User) => {
+    setSelectedUser(user)
+    setNewRole(user.role)
+    setEditRoleDialog(true)
+  }
+
+  const openVerifyDialog = (user: User) => {
+    setSelectedUser(user)
+    setVerifyDialog(true)
   }
 
   return (
@@ -179,13 +308,13 @@ export default function AdminUsers() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={fetchUsers}>
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
           <Button variant="outline" className="gap-2">
             <Download className="h-4 w-4" />
             Export
-          </Button>
-          <Button className="gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700">
-            <UserPlus className="h-4 w-4" />
-            Add User
           </Button>
         </div>
       </div>
@@ -198,41 +327,57 @@ export default function AdminUsers() {
             <Users className="h-5 w-5 text-violet-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.total}</div>
+            {loading ? (
+              <Skeleton className="h-9 w-20" />
+            ) : (
+              <div className="text-3xl font-bold">{pagination.total}</div>
+            )}
             <p className="text-xs text-muted-foreground mt-1">Semua pengguna</p>
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-emerald-500">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Verified</CardTitle>
-            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Dealers</CardTitle>
+            <Shield className="h-5 w-5 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.verified}</div>
-            <p className="text-xs text-muted-foreground mt-1">Terverifikasi</p>
+            {loading ? (
+              <Skeleton className="h-9 w-20" />
+            ) : (
+              <div className="text-3xl font-bold">{stats.dealers}</div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">Dealer terdaftar</p>
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-cyan-500">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Today</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Sellers</CardTitle>
             <TrendingUp className="h-5 w-5 text-cyan-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.activeToday}</div>
-            <p className="text-xs text-muted-foreground mt-1">Login hari ini</p>
+            {loading ? (
+              <Skeleton className="h-9 w-20" />
+            ) : (
+              <div className="text-3xl font-bold">{stats.sellers}</div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">Penjual aktif</p>
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-amber-500">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">New This Month</CardTitle>
-            <UserPlus className="h-5 w-5 text-amber-500" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Verified</CardTitle>
+            <CheckCircle2 className="h-5 w-5 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.newThisMonth}</div>
-            <p className="text-xs text-muted-foreground mt-1">Pendaftaran baru</p>
+            {loading ? (
+              <Skeleton className="h-9 w-20" />
+            ) : (
+              <div className="text-3xl font-bold">{stats.verified}</div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">Terverifikasi (halaman ini)</p>
           </CardContent>
         </Card>
       </div>
@@ -256,10 +401,11 @@ export default function AdminUsers() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua Role</SelectItem>
-                <SelectItem value="user">User</SelectItem>
+                <SelectItem value="buyer">Buyer</SelectItem>
                 <SelectItem value="seller">Seller</SelectItem>
                 <SelectItem value="dealer">Dealer</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="inspector">Inspector</SelectItem>
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -289,8 +435,20 @@ export default function AdminUsers() {
                     <Skeleton className="h-3 w-48" />
                   </div>
                   <Skeleton className="h-6 w-20" />
+                  <Skeleton className="h-6 w-16" />
+                  <Skeleton className="h-4 w-24" />
                 </div>
               ))}
+            </div>
+          ) : users.length === 0 ? (
+            <div className="p-12 text-center">
+              <Users className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+              <h3 className="mt-4 text-lg font-medium">Tidak ada user</h3>
+              <p className="text-muted-foreground text-sm mt-1">
+                {searchQuery || roleFilter !== 'all' || statusFilter !== 'all'
+                  ? 'Coba ubah filter pencarian'
+                  : 'Belum ada user terdaftar'}
+              </p>
             </div>
           ) : (
             <Table>
@@ -300,19 +458,17 @@ export default function AdminUsers() {
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-center">Listings</TableHead>
-                  <TableHead className="text-center">Tokens</TableHead>
+                  <TableHead className="text-center">Favorites</TableHead>
                   <TableHead>Joined</TableHead>
-                  <TableHead>Last Login</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
+                {users.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-9 w-9">
-                          <AvatarImage src={user.avatar_url || undefined} />
                           <AvatarFallback className="bg-gradient-to-br from-violet-500 to-purple-600 text-white text-sm">
                             {user.full_name?.[0] || user.email[0].toUpperCase()}
                           </AvatarFallback>
@@ -325,7 +481,7 @@ export default function AdminUsers() {
                     </TableCell>
                     <TableCell>
                       <Badge className={getRoleBadge(user.role)}>
-                        {user.role}
+                        {ROLE_LABELS[user.role] || user.role}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -341,19 +497,20 @@ export default function AdminUsers() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-center font-mono">{user.listing_count}</TableCell>
-                    <TableCell className="text-center font-mono">{user.token_balance}</TableCell>
+                    <TableCell className="text-center font-mono">{user.listings_count}</TableCell>
+                    <TableCell className="text-center font-mono">{user.favorites_count}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {formatDate(user.created_at)}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(user.last_login)}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
+                          <Button variant="ghost" size="icon" disabled={updating === user.id}>
+                            {updating === user.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreHorizontal className="h-4 w-4" />
+                            )}
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -366,13 +523,22 @@ export default function AdminUsers() {
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <UserCheck className="h-4 w-4 mr-2" />
-                            Verify User
+                          <DropdownMenuItem onClick={() => openRoleDialog(user)}>
+                            <Shield className="h-4 w-4 mr-2" />
+                            Change Role
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Mail className="h-4 w-4 mr-2" />
-                            Send Email
+                          <DropdownMenuItem onClick={() => openVerifyDialog(user)}>
+                            {user.is_verified ? (
+                              <>
+                                <XCircle className="h-4 w-4 mr-2" />
+                                Unverify User
+                              </>
+                            ) : (
+                              <>
+                                <UserCheck className="h-4 w-4 mr-2" />
+                                Verify User
+                              </>
+                            )}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem className="text-destructive">
@@ -388,6 +554,40 @@ export default function AdminUsers() {
             </Table>
           )}
         </CardContent>
+        
+        {/* Pagination */}
+        {!loading && users.length > 0 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t">
+            <p className="text-sm text-muted-foreground">
+              Menampilkan {((pagination.page - 1) * pagination.limit) + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} dari {pagination.total} user
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePrevPage}
+                disabled={pagination.page <= 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-medium">{pagination.page}</span>
+                <span className="text-sm text-muted-foreground">/</span>
+                <span className="text-sm text-muted-foreground">{pagination.totalPages || 1}</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNextPage}
+                disabled={pagination.page >= pagination.totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* User Detail Dialog */}
@@ -403,16 +603,15 @@ export default function AdminUsers() {
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <Avatar className="h-16 w-16">
-                  <AvatarImage src={selectedUser.avatar_url || undefined} />
                   <AvatarFallback className="bg-gradient-to-br from-violet-500 to-purple-600 text-white text-xl">
                     {selectedUser.full_name?.[0] || selectedUser.email[0].toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <h3 className="font-semibold text-lg">{selectedUser.full_name}</h3>
+                  <h3 className="font-semibold text-lg">{selectedUser.full_name || 'No name'}</h3>
                   <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
                   <Badge className={getRoleBadge(selectedUser.role)}>
-                    {selectedUser.role}
+                    {ROLE_LABELS[selectedUser.role] || selectedUser.role}
                   </Badge>
                 </div>
               </div>
@@ -424,11 +623,11 @@ export default function AdminUsers() {
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
                   <p className="text-xs text-muted-foreground">Listings</p>
-                  <p className="font-medium">{selectedUser.listing_count}</p>
+                  <p className="font-medium">{selectedUser.listings_count}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground">Token Balance</p>
-                  <p className="font-medium">{selectedUser.token_balance}</p>
+                  <p className="text-xs text-muted-foreground">Favorites</p>
+                  <p className="font-medium">{selectedUser.favorites_count}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
                   <p className="text-xs text-muted-foreground">Joined</p>
@@ -439,14 +638,8 @@ export default function AdminUsers() {
               <div className="space-y-2">
                 <p className="text-sm font-medium">Verification Status</p>
                 <div className="flex gap-2">
-                  <Badge variant={selectedUser.email_verified ? 'default' : 'secondary'}>
-                    {selectedUser.email_verified ? '✓' : '✗'} Email
-                  </Badge>
-                  <Badge variant={selectedUser.phone_verified ? 'default' : 'secondary'}>
-                    {selectedUser.phone_verified ? '✓' : '✗'} Phone
-                  </Badge>
                   <Badge variant={selectedUser.is_verified ? 'default' : 'secondary'}>
-                    {selectedUser.is_verified ? '✓' : '✗'} KYC
+                    {selectedUser.is_verified ? '✓' : '✗'} KYC Verified
                   </Badge>
                 </div>
               </div>
@@ -456,7 +649,91 @@ export default function AdminUsers() {
             <Button variant="outline" onClick={() => setDetailDialog(false)}>
               Close
             </Button>
-            <Button>Save Changes</Button>
+            <Button onClick={() => {
+              setDetailDialog(false)
+              if (selectedUser) {
+                openRoleDialog(selectedUser)
+              }
+            }}>
+              Edit User
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Role Dialog */}
+      <Dialog open={editRoleDialog} onOpenChange={setEditRoleDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Change User Role</DialogTitle>
+            <DialogDescription>
+              Update role untuk {selectedUser?.full_name || selectedUser?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">New Role</label>
+              <Select value={newRole} onValueChange={setNewRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="buyer">Buyer</SelectItem>
+                  <SelectItem value="seller">Seller</SelectItem>
+                  <SelectItem value="dealer">Dealer</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="inspector">Inspector</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditRoleDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => selectedUser && updateUserRole(selectedUser.id, newRole)}
+              disabled={updating === selectedUser?.id || newRole === selectedUser?.role}
+            >
+              {updating === selectedUser?.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Update Role
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Verify/Unverify Dialog */}
+      <Dialog open={verifyDialog} onOpenChange={setVerifyDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedUser?.is_verified ? 'Unverify User' : 'Verify User'}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedUser?.is_verified
+                ? `Batalkan verifikasi untuk ${selectedUser?.full_name || selectedUser?.email}?`
+                : `Verifikasi ${selectedUser?.full_name || selectedUser?.email}?`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              {selectedUser?.is_verified
+                ? 'User akan kehilangan akses ke fitur yang memerlukan verifikasi.'
+                : 'User akan mendapat akses penuh ke fitur yang memerlukan verifikasi.'}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVerifyDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => selectedUser && updateUserVerification(selectedUser.id, !selectedUser.is_verified)}
+              disabled={updating === selectedUser?.id}
+              variant={selectedUser?.is_verified ? 'destructive' : 'default'}
+            >
+              {updating === selectedUser?.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {selectedUser?.is_verified ? 'Unverify' : 'Verify'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

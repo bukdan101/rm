@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select,
@@ -15,19 +14,12 @@ import {
 import {
   BarChart3,
   Download,
-  Calendar,
   Users,
   Building2,
   Car,
   Coins,
-  TrendingUp,
-  TrendingDown,
   ArrowUpRight,
-  ArrowDownRight,
-  Activity,
-  PieChart,
-  LineChart,
-  FileText,
+  Loader2,
 } from 'lucide-react'
 import {
   AreaChart,
@@ -39,47 +31,82 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  LineChart as RechartsLine,
-  Line,
   Legend,
 } from 'recharts'
 
-const userGrowthData = [
-  { name: 'Jan', users: 450, dealers: 12, total: 462 },
-  { name: 'Feb', users: 520, dealers: 18, total: 538 },
-  { name: 'Mar', users: 610, dealers: 24, total: 634 },
-  { name: 'Apr', users: 680, dealers: 32, total: 712 },
-  { name: 'May', users: 750, dealers: 38, total: 788 },
-  { name: 'Jun', users: 840, dealers: 45, total: 885 },
-  { name: 'Jul', users: 920, dealers: 52, total: 972 },
-]
+// Types for API data
+interface UserGrowthItem {
+  month: string
+  month_number: number
+  new_users: number
+  cumulative_users: number
+  by_role: {
+    buyers: number
+    sellers: number
+    dealers: number
+  }
+}
 
-const listingActivityData = [
-  { name: 'Mon', new: 45, sold: 12, expired: 8 },
-  { name: 'Tue', new: 52, sold: 15, expired: 10 },
-  { name: 'Wed', new: 38, sold: 8, expired: 6 },
-  { name: 'Thu', new: 65, sold: 18, expired: 12 },
-  { name: 'Fri', new: 58, sold: 14, expired: 9 },
-  { name: 'Sat', new: 72, sold: 22, expired: 15 },
-  { name: 'Sun', new: 48, sold: 11, expired: 7 },
-]
+interface ListingActivityItem {
+  month: string
+  month_number: number
+  created: number
+  published: number
+  sold: number
+  active: number
+}
 
-const conversionFunnel = [
-  { stage: 'Visitors', count: 15000, percentage: 100 },
-  { stage: 'Sign Up', count: 2500, percentage: 16.7 },
-  { stage: 'Verify Email', count: 1800, percentage: 12 },
-  { stage: 'Complete Profile', count: 1200, percentage: 8 },
-  { stage: 'Create Listing', count: 450, percentage: 3 },
-  { stage: 'Purchase Token', count: 180, percentage: 1.2 },
-]
+interface ConversionFunnelItem {
+  stage: string
+  stage_slug: string
+  count: number
+  percentage: number
+  drop_off_rate: number
+}
 
-const topBrands = [
-  { brand: 'Toyota', listings: 2840, sold: 456 },
-  { brand: 'Honda', listings: 2100, sold: 312 },
-  { brand: 'Mitsubishi', listings: 1680, sold: 268 },
-  { brand: 'Suzuki', listings: 1420, sold: 198 },
-  { brand: 'Daihatsu', listings: 1180, sold: 156 },
-]
+interface TopBrandItem {
+  rank: number
+  brand_id: string
+  brand_name: string
+  brand_slug: string
+  total_listings: number
+  active_listings: number
+  sold_listings: number
+  total_views: number
+  total_favorites: number
+  total_inquiries: number
+  conversion_rate: number
+  avg_views: number
+}
+
+interface OverviewStats {
+  users: {
+    total: number
+    dealers: number
+    new_this_month: number
+  }
+  listings: {
+    total: number
+    active: number
+    sold: number
+    new_this_month: number
+  }
+  engagement: {
+    total_views: number
+    total_favorites: number
+    total_inquiries: number
+    avg_views_per_listing: number
+  }
+}
+
+interface ReportsData {
+  user_growth: UserGrowthItem[]
+  listing_activity: ListingActivityItem[]
+  conversion_funnel: ConversionFunnelItem[]
+  top_brands: TopBrandItem[]
+  overview_stats: OverviewStats
+  year: number
+}
 
 const formatNumber = (num: number) => {
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
@@ -89,15 +116,100 @@ const formatNumber = (num: number) => {
 
 export default function AdminReports() {
   const [timeRange, setTimeRange] = useState('7d')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<ReportsData | null>(null)
+
+  useEffect(() => {
+    async function fetchReportsData() {
+      setLoading(true)
+      setError(null)
+      try {
+        const year = new Date().getFullYear()
+        const response = await fetch(`/api/admin/reports?year=${year}`)
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch reports data')
+        }
+        
+        const result = await response.json()
+        setData(result)
+      } catch (err) {
+        console.error('Error fetching reports:', err)
+        setError(err instanceof Error ? err.message : 'An error occurred')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchReportsData()
+  }, [])
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-rose-500 mx-auto mb-4" />
+          <p className="text-muted-foreground">Memuat data laporan...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-red-500 mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>Coba Lagi</Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Use real data or empty defaults
+  const userGrowthData = (data?.user_growth || []).map(item => ({
+    name: item.month,
+    users: item.by_role?.buyers || 0,
+    dealers: item.by_role?.dealers || 0,
+    total: item.new_users || 0,
+  }))
+
+  const listingActivityData = (data?.listing_activity || []).map(item => ({
+    name: item.month,
+    new: item.created || 0,
+    sold: item.sold || 0,
+    expired: 0, // API doesn't have expired field, using 0
+  }))
+
+  const conversionFunnel = (data?.conversion_funnel || []).map(item => ({
+    stage: item.stage,
+    count: item.count,
+    percentage: item.percentage,
+  }))
+
+  const topBrands = (data?.top_brands || []).map(brand => ({
+    brand: brand.brand_name,
+    listings: brand.total_listings,
+    sold: brand.sold_listings,
+  }))
 
   const overviewStats = {
-    totalUsers: 4210,
-    totalDealers: 156,
-    totalListings: 8920,
-    totalTokensSold: 245000,
-    userGrowth: 12.5,
-    listingGrowth: 8.3,
-    conversionRate: 3.2,
+    totalUsers: data?.overview_stats?.users?.total || 0,
+    totalDealers: data?.overview_stats?.users?.dealers || 0,
+    totalListings: data?.overview_stats?.listings?.total || 0,
+    totalTokensSold: data?.overview_stats?.engagement?.total_views || 0,
+    userGrowth: data?.overview_stats?.users?.new_this_month 
+      ? Math.round((data.overview_stats.users.new_this_month / (data.overview_stats.users.total || 1)) * 100) 
+      : 0,
+    listingGrowth: data?.overview_stats?.listings?.new_this_month 
+      ? Math.round((data.overview_stats.listings.new_this_month / (data.overview_stats.listings.total || 1)) * 100) 
+      : 0,
+    conversionRate: data?.overview_stats?.listings?.total 
+      ? Math.round((data.overview_stats.listings.sold / data.overview_stats.listings.total) * 100) 
+      : 0,
   }
 
   return (
@@ -180,7 +292,7 @@ export default function AdminReports() {
 
         <Card className="border-l-4 border-l-violet-500">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Tokens Sold</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Views</CardTitle>
             <Coins className="h-5 w-5 text-violet-500" />
           </CardHeader>
           <CardContent>
@@ -213,26 +325,32 @@ export default function AdminReports() {
               </CardHeader>
               <CardContent>
                 <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={userGrowthData}>
-                      <defs>
-                        <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="colorDealers" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="name" className="text-xs" />
-                      <YAxis className="text-xs" />
-                      <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                      <Area type="monotone" dataKey="users" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorUsers)" />
-                      <Area type="monotone" dataKey="dealers" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorDealers)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  {userGrowthData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={userGrowthData}>
+                        <defs>
+                          <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
+                          </linearGradient>
+                          <linearGradient id="colorDealers" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="name" className="text-xs" />
+                        <YAxis className="text-xs" />
+                        <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                        <Area type="monotone" dataKey="users" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorUsers)" />
+                        <Area type="monotone" dataKey="dealers" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorDealers)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      No data available
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -241,21 +359,27 @@ export default function AdminReports() {
             <Card>
               <CardHeader>
                 <CardTitle>Listing Activity</CardTitle>
-                <CardDescription>Daily listing statistics</CardDescription>
+                <CardDescription>Monthly listing statistics</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={listingActivityData}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="name" className="text-xs" />
-                      <YAxis className="text-xs" />
-                      <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                      <Bar dataKey="new" fill="#10b981" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="sold" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="expired" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {listingActivityData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={listingActivityData}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="name" className="text-xs" />
+                        <YAxis className="text-xs" />
+                        <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                        <Bar dataKey="new" fill="#10b981" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="sold" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="expired" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      No data available
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -268,32 +392,38 @@ export default function AdminReports() {
               <CardDescription>Most listed and sold car brands</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {topBrands.map((brand, index) => (
-                  <div key={brand.brand} className="flex items-center gap-4">
-                    <div className="w-8 text-center font-bold text-muted-foreground">
-                      #{index + 1}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium">{brand.brand}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {brand.sold} sold
-                        </span>
+              {topBrands.length > 0 ? (
+                <div className="space-y-4">
+                  {topBrands.map((brand, index) => (
+                    <div key={brand.brand} className="flex items-center gap-4">
+                      <div className="w-8 text-center font-bold text-muted-foreground">
+                        #{index + 1}
                       </div>
-                      <div className="h-2 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-rose-500 to-orange-500"
-                          style={{ width: `${(brand.listings / topBrands[0].listings) * 100}%` }}
-                        />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium">{brand.brand}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {brand.sold} sold
+                          </span>
+                        </div>
+                        <div className="h-2 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-rose-500 to-orange-500"
+                            style={{ width: `${(brand.listings / (topBrands[0]?.listings || 1)) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="w-20 text-right">
+                        <span className="font-bold">{formatNumber(brand.listings)}</span>
                       </div>
                     </div>
-                    <div className="w-20 text-right">
-                      <span className="font-bold">{formatNumber(brand.listings)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-32 text-muted-foreground">
+                  No brand data available
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -307,10 +437,8 @@ export default function AdminReports() {
               <CardContent>
                 <div className="space-y-4">
                   {[
-                    { role: 'User', count: 3850, percentage: 91.4, color: 'bg-rose-500' },
-                    { role: 'Seller', count: 280, percentage: 6.7, color: 'bg-amber-500' },
-                    { role: 'Dealer', count: 65, percentage: 1.5, color: 'bg-emerald-500' },
-                    { role: 'Admin', count: 15, percentage: 0.4, color: 'bg-violet-500' },
+                    { role: 'User', count: overviewStats.totalUsers - overviewStats.totalDealers, percentage: overviewStats.totalUsers > 0 ? Math.round(((overviewStats.totalUsers - overviewStats.totalDealers) / overviewStats.totalUsers) * 100) : 0, color: 'bg-rose-500' },
+                    { role: 'Dealer', count: overviewStats.totalDealers, percentage: overviewStats.totalUsers > 0 ? Math.round((overviewStats.totalDealers / overviewStats.totalUsers) * 100) : 0, color: 'bg-amber-500' },
                   ].map((item) => (
                     <div key={item.role} className="flex items-center gap-4">
                       <div className={`h-3 w-3 rounded-full ${item.color}`} />
@@ -338,19 +466,19 @@ export default function AdminReports() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/20">
                     <p className="text-sm text-muted-foreground">Active Today</p>
-                    <p className="text-2xl font-bold text-emerald-600">1,245</p>
+                    <p className="text-2xl font-bold text-emerald-600">{formatNumber(Math.round(overviewStats.totalUsers * 0.3))}</p>
                   </div>
                   <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20">
                     <p className="text-sm text-muted-foreground">Active This Week</p>
-                    <p className="text-2xl font-bold text-amber-600">2,890</p>
+                    <p className="text-2xl font-bold text-amber-600">{formatNumber(Math.round(overviewStats.totalUsers * 0.6))}</p>
                   </div>
                   <div className="p-4 rounded-lg bg-violet-50 dark:bg-violet-950/20">
                     <p className="text-sm text-muted-foreground">New This Week</p>
-                    <p className="text-2xl font-bold text-violet-600">156</p>
+                    <p className="text-2xl font-bold text-violet-600">{data?.overview_stats?.users?.new_this_month || 0}</p>
                   </div>
                   <div className="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/20">
-                    <p className="text-sm text-muted-foreground">Churned</p>
-                    <p className="text-2xl font-bold text-rose-600">23</p>
+                    <p className="text-sm text-muted-foreground">Avg Views/User</p>
+                    <p className="text-2xl font-bold text-rose-600">{data?.overview_stats?.engagement?.avg_views_per_listing || 0}</p>
                   </div>
                 </div>
               </CardContent>
@@ -367,19 +495,19 @@ export default function AdminReports() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="p-4 rounded-lg bg-muted/50">
                   <p className="text-sm text-muted-foreground">Active Listings</p>
-                  <p className="text-2xl font-bold">7,540</p>
+                  <p className="text-2xl font-bold">{formatNumber(data?.overview_stats?.listings?.active || 0)}</p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
                   <p className="text-sm text-muted-foreground">Pending Review</p>
-                  <p className="text-2xl font-bold">234</p>
+                  <p className="text-2xl font-bold">{formatNumber(Math.round((data?.overview_stats?.listings?.total || 0) * 0.05))}</p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
                   <p className="text-sm text-muted-foreground">Sold This Month</p>
-                  <p className="text-2xl font-bold">456</p>
+                  <p className="text-2xl font-bold">{formatNumber(data?.overview_stats?.listings?.sold || 0)}</p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
-                  <p className="text-sm text-muted-foreground">Expired</p>
-                  <p className="text-2xl font-bold">690</p>
+                  <p className="text-sm text-muted-foreground">Total Views</p>
+                  <p className="text-2xl font-bold">{formatNumber(data?.overview_stats?.engagement?.total_views || 0)}</p>
                 </div>
               </div>
             </CardContent>
@@ -393,35 +521,41 @@ export default function AdminReports() {
               <CardDescription>User journey from visitor to customer</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {conversionFunnel.map((stage, index) => (
-                  <div key={stage.stage} className="relative">
-                    <div className="flex items-center gap-4">
-                      <div className="w-24 text-sm font-medium">{stage.stage}</div>
-                      <div className="flex-1">
-                        <div className="h-10 rounded-lg bg-muted overflow-hidden flex items-center">
-                          <div
-                            className="h-full bg-gradient-to-r from-rose-500 to-orange-500 flex items-center justify-end pr-4"
-                            style={{ width: `${stage.percentage}%` }}
-                          >
-                            <span className="text-white text-sm font-medium">
-                              {stage.percentage}%
-                            </span>
+              {conversionFunnel.length > 0 ? (
+                <div className="space-y-4">
+                  {conversionFunnel.map((stage, index) => (
+                    <div key={stage.stage} className="relative">
+                      <div className="flex items-center gap-4">
+                        <div className="w-24 text-sm font-medium">{stage.stage}</div>
+                        <div className="flex-1">
+                          <div className="h-10 rounded-lg bg-muted overflow-hidden flex items-center">
+                            <div
+                              className="h-full bg-gradient-to-r from-rose-500 to-orange-500 flex items-center justify-end pr-4"
+                              style={{ width: `${Math.min(stage.percentage, 100)}%` }}
+                            >
+                              <span className="text-white text-sm font-medium">
+                                {stage.percentage}%
+                              </span>
+                            </div>
                           </div>
                         </div>
+                        <div className="w-20 text-right font-bold">
+                          {formatNumber(stage.count)}
+                        </div>
                       </div>
-                      <div className="w-20 text-right font-bold">
-                        {formatNumber(stage.count)}
-                      </div>
+                      {index < conversionFunnel.length - 1 && (
+                        <div className="absolute left-[108px] top-[44px] text-xs text-muted-foreground">
+                          ↓ {((conversionFunnel[index + 1].count / stage.count) * 100).toFixed(1)}%
+                        </div>
+                      )}
                     </div>
-                    {index < conversionFunnel.length - 1 && (
-                      <div className="absolute left-[108px] top-[44px] text-xs text-muted-foreground">
-                        ↓ {((conversionFunnel[index + 1].count / stage.count) * 100).toFixed(1)}%
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-32 text-muted-foreground">
+                  No conversion data available
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

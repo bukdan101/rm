@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -16,13 +16,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -44,10 +37,8 @@ import {
   TrendingUp,
   AlertCircle,
   FileText,
-  Users,
-  Calendar,
-  ArrowUpRight,
   Download,
+  RefreshCw,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -55,9 +46,17 @@ interface Payment {
   id: string
   invoice_number: string
   user_id: string
-  user_name: string
-  user_email: string
-  user_avatar: string | null
+  user?: {
+    full_name: string
+    email: string
+    avatar_url: string | null
+  }
+  dealer?: {
+    name: string
+  }
+  package?: {
+    name: string
+  }
   package_name: string
   package_type: 'user' | 'dealer'
   amount: number
@@ -72,69 +71,6 @@ interface Payment {
   created_at: string
 }
 
-const mockPayments: Payment[] = [
-  {
-    id: '1',
-    invoice_number: 'INV-20240320-0001',
-    user_id: 'u1',
-    user_name: 'John Doe',
-    user_email: 'john@example.com',
-    user_avatar: null,
-    package_name: 'Basic',
-    package_type: 'user',
-    amount: 100000,
-    credits_awarded: 110,
-    payment_method: 'bni_va',
-    va_number: '8808123456789012',
-    status: 'pending',
-    proof_url: null,
-    paid_at: null,
-    verified_at: null,
-    expires_at: '2024-03-21T10:00:00Z',
-    created_at: '2024-03-20T10:00:00Z',
-  },
-  {
-    id: '2',
-    invoice_number: 'INV-20240320-0002',
-    user_id: 'u2',
-    user_name: 'Auto Prima Jakarta',
-    user_email: 'finance@autoprima.com',
-    user_avatar: null,
-    package_name: 'Dealer Pro',
-    package_type: 'dealer',
-    amount: 500000,
-    credits_awarded: 850,
-    payment_method: 'bni_va',
-    va_number: '8808123456789013',
-    status: 'paid',
-    proof_url: 'https://picsum.photos/seed/proof1/800/600',
-    paid_at: '2024-03-20T11:30:00Z',
-    verified_at: null,
-    expires_at: '2024-03-21T09:00:00Z',
-    created_at: '2024-03-20T09:00:00Z',
-  },
-  {
-    id: '3',
-    invoice_number: 'INV-20240319-0003',
-    user_id: 'u3',
-    user_name: 'Jane Smith',
-    user_email: 'jane@example.com',
-    user_avatar: null,
-    package_name: 'Premium',
-    package_type: 'user',
-    amount: 500000,
-    credits_awarded: 575,
-    payment_method: 'bni_va',
-    va_number: '8808123456789014',
-    status: 'verified',
-    proof_url: 'https://picsum.photos/seed/proof2/800/600',
-    paid_at: '2024-03-19T14:00:00Z',
-    verified_at: '2024-03-19T15:30:00Z',
-    expires_at: '2024-03-20T08:00:00Z',
-    created_at: '2024-03-19T08:00:00Z',
-  },
-]
-
 export default function AdminPayments() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
@@ -142,18 +78,37 @@ export default function AdminPayments() {
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
   const [detailDialog, setDetailDialog] = useState(false)
   const [verifyDialog, setVerifyDialog] = useState(false)
+  const [rejectDialog, setRejectDialog] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 0
+  })
   const { toast } = useToast()
 
-  useEffect(() => {
-    fetchPayments()
-  }, [])
-
-  async function fetchPayments() {
+  const fetchPayments = useCallback(async () => {
     try {
       setLoading(true)
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setPayments(mockPayments)
+      const params = new URLSearchParams({
+        limit: pagination.limit.toString(),
+        offset: ((pagination.page - 1) * pagination.limit).toString()
+      })
+      
+      const response = await fetch(`/api/admin/payments?${params}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch payments')
+      }
+      
+      const data = await response.json()
+      setPayments(data.payments || [])
+      setPagination(prev => ({
+        ...prev,
+        total: data.total || 0,
+        totalPages: Math.ceil((data.total || 0) / prev.limit)
+      }))
     } catch (error) {
       console.error('Error fetching payments:', error)
       toast({
@@ -164,18 +119,28 @@ export default function AdminPayments() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [pagination.page, pagination.limit, toast])
 
-  const pendingPayments = payments.filter(p => p.status === 'paid' || p.status === 'pending')
-  const verifiedPayments = payments.filter(p => p.status === 'verified')
+  useEffect(() => {
+    fetchPayments()
+  }, [fetchPayments])
+
+  const filteredPayments = searchQuery
+    ? payments.filter(p => 
+        p.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.user?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.user?.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.dealer?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : payments
 
   const stats = {
     total: payments.length,
     pending: payments.filter(p => p.status === 'pending').length,
     paid: payments.filter(p => p.status === 'paid').length,
     verified: payments.filter(p => p.status === 'verified').length,
-    totalAmount: payments.filter(p => p.status === 'verified').reduce((sum, p) => sum + p.amount, 0),
-    pendingAmount: payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0),
+    totalAmount: payments.filter(p => p.status === 'verified').reduce((sum, p) => sum + (p.amount || 0), 0),
+    pendingAmount: payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + (p.amount || 0), 0),
   }
 
   const handleVerify = async () => {
@@ -183,13 +148,19 @@ export default function AdminPayments() {
 
     try {
       setProcessing(true)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const response = await fetch('/api/admin/payments', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payment_id: selectedPayment.id,
+          action: 'verify'
+        })
+      })
 
-      setPayments(prev => prev.map(p =>
-        p.id === selectedPayment.id
-          ? { ...p, status: 'verified' as const, verified_at: new Date().toISOString() }
-          : p
-      ))
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to verify payment')
+      }
 
       toast({
         title: 'Berhasil',
@@ -198,10 +169,49 @@ export default function AdminPayments() {
 
       setVerifyDialog(false)
       setSelectedPayment(null)
-    } catch (error) {
+      fetchPayments()
+    } catch (error: any) {
       toast({
         title: 'Error',
-        description: 'Gagal verifikasi pembayaran',
+        description: error.message || 'Gagal verifikasi pembayaran',
+        variant: 'destructive',
+      })
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const handleReject = async () => {
+    if (!selectedPayment) return
+
+    try {
+      setProcessing(true)
+      const response = await fetch('/api/admin/payments', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payment_id: selectedPayment.id,
+          action: 'reject'
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to reject payment')
+      }
+
+      toast({
+        title: 'Berhasil',
+        description: 'Pembayaran berhasil ditolak',
+      })
+
+      setRejectDialog(false)
+      setSelectedPayment(null)
+      fetchPayments()
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Gagal menolak pembayaran',
         variant: 'destructive',
       })
     } finally {
@@ -214,7 +224,7 @@ export default function AdminPayments() {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-    }).format(amount)
+    }).format(amount || 0)
   }
 
   const formatDate = (dateString: string | null) => {
@@ -245,6 +255,18 @@ export default function AdminPayments() {
     }
   }
 
+  const getUserName = (payment: Payment) => {
+    return payment.user?.full_name || payment.dealer?.name || 'Unknown'
+  }
+
+  const getUserEmail = (payment: Payment) => {
+    return payment.user?.email || '-'
+  }
+
+  const getUserAvatar = (payment: Payment) => {
+    return payment.user?.avatar_url || null
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -260,54 +282,71 @@ export default function AdminPayments() {
             Verifikasi pembayaran token
           </p>
         </div>
-        <Button variant="outline" className="gap-2">
-          <Download className="h-4 w-4" />
-          Export
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={fetchPayments}>
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-l-4 border-l-rose-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Payments</CardTitle>
-            <CreditCard className="h-5 w-5 text-rose-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.total}</div>
-          </CardContent>
-        </Card>
+        {loading ? (
+          <>
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardContent className="p-6">
+                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-10 w-16 mt-2" />
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        ) : (
+          <>
+            <Card className="border-l-4 border-l-rose-500">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Payments</CardTitle>
+                <CreditCard className="h-5 w-5 text-rose-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{pagination.total}</div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-l-4 border-l-amber-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Awaiting Verification</CardTitle>
-            <AlertCircle className="h-5 w-5 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.paid}</div>
-            <p className="text-sm text-muted-foreground mt-1">{formatCurrency(stats.pendingAmount)}</p>
-          </CardContent>
-        </Card>
+            <Card className="border-l-4 border-l-amber-500">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Awaiting Verification</CardTitle>
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{stats.paid}</div>
+                <p className="text-sm text-muted-foreground mt-1">{formatCurrency(stats.pendingAmount)}</p>
+              </CardContent>
+            </Card>
 
-        <Card className="border-l-4 border-l-emerald-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Verified</CardTitle>
-            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.verified}</div>
-          </CardContent>
-        </Card>
+            <Card className="border-l-4 border-l-emerald-500">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Verified</CardTitle>
+                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{stats.verified}</div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-l-4 border-l-violet-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
-            <DollarSign className="h-5 w-5 text-violet-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalAmount)}</div>
-          </CardContent>
-        </Card>
+            <Card className="border-l-4 border-l-violet-500">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
+                <DollarSign className="h-5 w-5 text-violet-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(stats.totalAmount)}</div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Tabs */}
@@ -332,7 +371,7 @@ export default function AdminPayments() {
                 ))}
               </CardContent>
             </Card>
-          ) : payments.filter(p => p.status === 'paid').length === 0 ? (
+          ) : filteredPayments.filter(p => p.status === 'paid').length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
                 <CheckCircle2 className="h-16 w-16 mx-auto mb-4 text-emerald-500 opacity-50" />
@@ -341,19 +380,25 @@ export default function AdminPayments() {
             </Card>
           ) : (
             <div className="space-y-4">
-              {payments.filter(p => p.status === 'paid').map((payment) => (
+              {filteredPayments.filter(p => p.status === 'paid').map((payment) => (
                 <Card key={payment.id} className="overflow-hidden">
                   <CardContent className="p-0">
                     <div className="flex flex-col md:flex-row">
                       <div className="p-4 md:w-48 shrink-0 bg-muted/50 flex items-center justify-center">
-                        <div className="relative w-32 h-20 rounded-lg overflow-hidden border bg-white">
-                          <Image
-                            src={payment.proof_url || ''}
-                            alt="Payment Proof"
-                            fill
-                            className="object-cover"
-                          />
-                        </div>
+                        {payment.proof_url ? (
+                          <div className="relative w-32 h-20 rounded-lg overflow-hidden border bg-white">
+                            <Image
+                              src={payment.proof_url}
+                              alt="Payment Proof"
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-32 h-20 rounded-lg border bg-muted flex items-center justify-center">
+                            <FileText className="h-8 w-8 text-muted-foreground" />
+                          </div>
+                        )}
                       </div>
                       <div className="flex-1 p-4">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -364,12 +409,12 @@ export default function AdminPayments() {
                             </div>
                             <div className="flex items-center gap-3">
                               <Avatar className="h-8 w-8">
-                                <AvatarImage src={payment.user_avatar || undefined} />
-                                <AvatarFallback>{payment.user_name[0]}</AvatarFallback>
+                                <AvatarImage src={getUserAvatar(payment) || undefined} />
+                                <AvatarFallback>{getUserName(payment)[0]}</AvatarFallback>
                               </Avatar>
                               <div>
-                                <p className="font-medium">{payment.user_name}</p>
-                                <p className="text-xs text-muted-foreground">{payment.user_email}</p>
+                                <p className="font-medium">{getUserName(payment)}</p>
+                                <p className="text-xs text-muted-foreground">{getUserEmail(payment)}</p>
                               </div>
                             </div>
                           </div>
@@ -427,58 +472,66 @@ export default function AdminPayments() {
                   />
                 </div>
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Package</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {payments.map((payment) => (
-                    <TableRow key={payment.id}>
-                      <TableCell className="font-mono text-sm">{payment.invoice_number}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-7 w-7">
-                            <AvatarImage src={payment.user_avatar || undefined} />
-                            <AvatarFallback>{payment.user_name[0]}</AvatarFallback>
-                          </Avatar>
-                          <span className="text-sm">{payment.user_name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="text-sm">{payment.package_name}</p>
-                          <p className="text-xs text-muted-foreground">{payment.credits_awarded} credits</p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(payment.amount)}</TableCell>
-                      <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDate(payment.created_at)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedPayment(payment)
-                            setDetailDialog(true)
-                          }}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+              {loading ? (
+                <div className="p-6">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full mb-2" />
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice</TableHead>
+                      <TableHead>User</TableHead>
+                      <TableHead>Package</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPayments.map((payment) => (
+                      <TableRow key={payment.id}>
+                        <TableCell className="font-mono text-sm">{payment.invoice_number}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-7 w-7">
+                              <AvatarImage src={getUserAvatar(payment) || undefined} />
+                              <AvatarFallback>{getUserName(payment)[0]}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm">{getUserName(payment)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="text-sm">{payment.package?.name || payment.package_name}</p>
+                            <p className="text-xs text-muted-foreground">{payment.credits_awarded} credits</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(payment.amount)}</TableCell>
+                        <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatDate(payment.created_at)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedPayment(payment)
+                              setDetailDialog(true)
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -495,7 +548,7 @@ export default function AdminPayments() {
               <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
                 <div>
                   <p className="font-mono text-lg">{selectedPayment.invoice_number}</p>
-                  <p className="text-sm text-muted-foreground">{selectedPayment.package_name}</p>
+                  <p className="text-sm text-muted-foreground">{selectedPayment.package?.name || selectedPayment.package_name}</p>
                 </div>
                 {getStatusBadge(selectedPayment.status)}
               </div>
@@ -514,7 +567,7 @@ export default function AdminPayments() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Payment Method:</span>
-                  <span className="font-medium">{selectedPayment.payment_method.toUpperCase()}</span>
+                  <span className="font-medium">{selectedPayment.payment_method?.toUpperCase()}</span>
                 </div>
                 {selectedPayment.va_number && (
                   <div className="flex justify-between">
@@ -568,7 +621,7 @@ export default function AdminPayments() {
               <div className="p-4 rounded-lg bg-muted/50">
                 <p className="font-mono text-sm">{selectedPayment.invoice_number}</p>
                 <p className="text-2xl font-bold mt-1">{formatCurrency(selectedPayment.amount)}</p>
-                <p className="text-sm text-muted-foreground">{selectedPayment.credits_awarded} credits untuk {selectedPayment.user_name}</p>
+                <p className="text-sm text-muted-foreground">{selectedPayment.credits_awarded} credits untuk {getUserName(selectedPayment)}</p>
               </div>
 
               {selectedPayment.proof_url && (
@@ -589,6 +642,36 @@ export default function AdminPayments() {
             <Button onClick={handleVerify} disabled={processing} className="bg-emerald-500 hover:bg-emerald-600">
               {processing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
               Verify Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={rejectDialog} onOpenChange={setRejectDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject Payment</DialogTitle>
+            <DialogDescription>Reject this payment submission</DialogDescription>
+          </DialogHeader>
+          {selectedPayment && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg bg-muted/50">
+                <p className="font-mono text-sm">{selectedPayment.invoice_number}</p>
+                <p className="text-2xl font-bold mt-1">{formatCurrency(selectedPayment.amount)}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800">
+                <p className="text-sm text-red-800 dark:text-red-200">
+                  Pembayaran akan ditandai sebagai dibatalkan dan tidak ada token yang diberikan.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialog(false)}>Cancel</Button>
+            <Button onClick={handleReject} disabled={processing} variant="destructive">
+              {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Reject Payment
             </Button>
           </DialogFooter>
         </DialogContent>

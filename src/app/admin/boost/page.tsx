@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -51,6 +51,7 @@ import {
   Check,
   Eye,
   TrendingUp,
+  RefreshCw,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -67,7 +68,9 @@ interface BoostFeature {
   is_active: boolean
   is_popular: boolean
   display_order: number
-  usage_count: number
+  active_listings_count?: number
+  total_usage_count?: number
+  total_credits_spent?: number
 }
 
 const ICON_OPTIONS = [
@@ -88,54 +91,6 @@ const COLOR_OPTIONS = [
   { value: 'emerald', label: 'Emerald', class: 'bg-emerald-500' },
   { value: 'rose', label: 'Rose', class: 'bg-rose-500' },
   { value: 'cyan', label: 'Cyan', class: 'bg-cyan-500' },
-]
-
-const defaultBoosts: BoostFeature[] = [
-  {
-    id: '1',
-    name: 'Highlight',
-    slug: 'highlight',
-    description: 'Tampilkan iklan Anda dengan background highlight yang menonjol',
-    credit_cost: 3,
-    duration_days: 7,
-    icon: 'Sparkles',
-    color: 'amber',
-    benefits: ['Background kuning highlight', 'Lebih mudah dilihat', 'Cocok untuk iklan prioritas'],
-    is_active: true,
-    is_popular: false,
-    display_order: 1,
-    usage_count: 1234,
-  },
-  {
-    id: '2',
-    name: 'Top Search',
-    slug: 'top-search',
-    description: 'Prioritaskan iklan Anda di hasil pencarian teratas',
-    credit_cost: 5,
-    duration_days: 7,
-    icon: 'ArrowUp',
-    color: 'blue',
-    benefits: ['Muncul di posisi teratas', 'Maksimal 10 iklan per halaman', 'Visibilitas meningkat 3x'],
-    is_active: true,
-    is_popular: true,
-    display_order: 2,
-    usage_count: 2567,
-  },
-  {
-    id: '3',
-    name: 'Featured',
-    slug: 'featured',
-    description: 'Tampilkan iklan di halaman utama sebagai iklan pilihan',
-    credit_cost: 10,
-    duration_days: 14,
-    icon: 'Star',
-    color: 'purple',
-    benefits: ['Muncul di halaman utama', 'Badge Featured eksklusif', 'Durasi lebih lama 14 hari', 'Eksposur maksimal'],
-    is_active: true,
-    is_popular: false,
-    display_order: 3,
-    usage_count: 890,
-  },
 ]
 
 const IconComponent = ({ name }: { name: string }) => {
@@ -169,16 +124,17 @@ export default function BoostFeaturesPage() {
     is_popular: false,
   })
 
-  useEffect(() => {
-    fetchBoosts()
-  }, [])
-
-  async function fetchBoosts() {
+  const fetchBoosts = useCallback(async () => {
     try {
       setLoading(true)
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setBoosts(defaultBoosts)
+      const response = await fetch('/api/admin/boost')
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch boost features')
+      }
+      
+      const data = await response.json()
+      setBoosts(data.boosts || [])
     } catch (error) {
       console.error('Error fetching boosts:', error)
       toast({
@@ -189,13 +145,17 @@ export default function BoostFeaturesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
+
+  useEffect(() => {
+    fetchBoosts()
+  }, [fetchBoosts])
 
   const stats = {
     totalBoosts: boosts.length,
     activeBoosts: boosts.filter(b => b.is_active).length,
-    totalUsage: boosts.reduce((sum, b) => sum + b.usage_count, 0),
-    totalRevenue: boosts.reduce((sum, b) => sum + (b.usage_count * b.credit_cost * 1000), 0),
+    totalUsage: boosts.reduce((sum, b) => sum + (b.total_usage_count || 0), 0),
+    totalRevenue: boosts.reduce((sum, b) => sum + (b.total_credits_spent || 0) * 1000, 0),
   }
 
   const openCreate = () => {
@@ -223,9 +183,9 @@ export default function BoostFeaturesPage() {
       description: boost.description || '',
       credit_cost: boost.credit_cost,
       duration_days: boost.duration_days,
-      icon: boost.icon,
-      color: boost.color,
-      benefits: boost.benefits.join('\n'),
+      icon: boost.icon || 'Sparkles',
+      color: boost.color || 'amber',
+      benefits: Array.isArray(boost.benefits) ? boost.benefits.join('\n') : '',
       is_active: boost.is_active,
       is_popular: boost.is_popular,
     })
@@ -247,28 +207,46 @@ export default function BoostFeaturesPage() {
       const benefits = form.benefits.split('\n').filter(b => b.trim())
 
       if (editing) {
-        setBoosts(prev => prev.map(b =>
-          b.id === editing.id
-            ? { ...b, ...form, benefits }
-            : b
-        ))
-      } else {
-        const newBoost: BoostFeature = {
-          id: Date.now().toString(),
-          ...form,
-          benefits,
-          display_order: boosts.length + 1,
-          usage_count: 0,
+        const response = await fetch('/api/admin/boost', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editing.id,
+            ...form,
+            benefits
+          })
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to update boost')
         }
-        setBoosts(prev => [...prev, newBoost])
+
+        toast({
+          title: 'Berhasil',
+          description: 'Boost berhasil diupdate',
+        })
+      } else {
+        const response = await fetch('/api/admin/boost', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...form,
+            benefits
+          })
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to create boost')
+        }
+
+        toast({
+          title: 'Berhasil',
+          description: 'Boost berhasil ditambahkan',
+        })
       }
 
-      toast({
-        title: 'Berhasil',
-        description: editing ? 'Boost berhasil diupdate' : 'Boost berhasil ditambahkan',
-      })
-
       setDialogOpen(false)
+      fetchBoosts()
     } catch (error) {
       toast({
         title: 'Error',
@@ -285,12 +263,20 @@ export default function BoostFeaturesPage() {
 
     try {
       setProcessing(true)
-      setBoosts(prev => prev.filter(b => b.id !== deleteDialog.boost!.id))
+      const response = await fetch(`/api/admin/boost?id=${deleteDialog.boost.id}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete boost')
+      }
+
       toast({
         title: 'Berhasil',
         description: 'Boost berhasil dihapus',
       })
       setDeleteDialog({ open: false, boost: null })
+      fetchBoosts()
     } catch (error) {
       toast({
         title: 'Error',
@@ -302,10 +288,31 @@ export default function BoostFeaturesPage() {
     }
   }
 
-  const toggleActive = (boost: BoostFeature) => {
-    setBoosts(prev => prev.map(b =>
-      b.id === boost.id ? { ...b, is_active: !b.is_active } : b
-    ))
+  const toggleActive = async (boost: BoostFeature) => {
+    try {
+      const response = await fetch('/api/admin/boost', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: boost.id,
+          is_active: !boost.is_active
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update boost')
+      }
+
+      setBoosts(prev => prev.map(b =>
+        b.id === boost.id ? { ...b, is_active: !b.is_active } : b
+      ))
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Gagal mengubah status boost',
+        variant: 'destructive',
+      })
+    }
   }
 
   const formatCurrency = (amount: number) => {
@@ -313,7 +320,7 @@ export default function BoostFeaturesPage() {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-    }).format(amount)
+    }).format(amount || 0)
   }
 
   return (
@@ -331,53 +338,74 @@ export default function BoostFeaturesPage() {
             Kelola fitur boost untuk meningkatkan visibilitas iklan
           </p>
         </div>
-        <Button onClick={openCreate} className="gap-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700">
-          <Plus className="h-4 w-4" />
-          Add Boost
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchBoosts} className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+          <Button onClick={openCreate} className="gap-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700">
+            <Plus className="h-4 w-4" />
+            Add Boost
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-l-4 border-l-amber-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Boosts</CardTitle>
-            <Zap className="h-5 w-5 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.totalBoosts}</div>
-          </CardContent>
-        </Card>
+        {loading ? (
+          <>
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardContent className="p-6">
+                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-10 w-16 mt-2" />
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        ) : (
+          <>
+            <Card className="border-l-4 border-l-amber-500">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Boosts</CardTitle>
+                <Zap className="h-5 w-5 text-amber-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{stats.totalBoosts}</div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-l-4 border-l-emerald-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active</CardTitle>
-            <Check className="h-5 w-5 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.activeBoosts}</div>
-          </CardContent>
-        </Card>
+            <Card className="border-l-4 border-l-emerald-500">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Active</CardTitle>
+                <Check className="h-5 w-5 text-emerald-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{stats.activeBoosts}</div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-l-4 border-l-blue-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Usage</CardTitle>
-            <Eye className="h-5 w-5 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.totalUsage.toLocaleString()}</div>
-          </CardContent>
-        </Card>
+            <Card className="border-l-4 border-l-blue-500">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Usage</CardTitle>
+                <Eye className="h-5 w-5 text-blue-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{stats.totalUsage.toLocaleString()}</div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-l-4 border-l-purple-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Revenue</CardTitle>
-            <Coins className="h-5 w-5 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>
-          </CardContent>
-        </Card>
+            <Card className="border-l-4 border-l-purple-500">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Revenue</CardTitle>
+                <Coins className="h-5 w-5 text-purple-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Boost Cards Grid */}
@@ -394,9 +422,17 @@ export default function BoostFeaturesPage() {
             </Card>
           ))}
         </div>
+      ) : boosts.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <Zap className="h-16 w-16 mx-auto mb-4 opacity-50" />
+            <p className="font-medium">Belum ada boost feature</p>
+            <p className="text-sm mt-1">Klik "Add Boost" untuk membuat fitur boost pertama</p>
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {boosts.sort((a, b) => a.display_order - b.display_order).map((boost) => (
+          {boosts.sort((a, b) => (a.display_order || 0) - (b.display_order || 0)).map((boost) => (
             <Card 
               key={boost.id}
               className={`relative overflow-hidden transition-all hover:shadow-lg ${
@@ -412,8 +448,8 @@ export default function BoostFeaturesPage() {
               )}
               <CardHeader className={boost.is_popular ? 'pt-8' : ''}>
                 <div className="flex items-start justify-between">
-                  <div className={`h-12 w-12 rounded-xl bg-${boost.color}-100 dark:bg-${boost.color}-900/30 flex items-center justify-center`}>
-                    <IconComponent name={boost.icon} />
+                  <div className={`h-12 w-12 rounded-xl bg-${boost.color || 'amber'}-100 dark:bg-${boost.color || 'amber'}-900/30 flex items-center justify-center`}>
+                    <IconComponent name={boost.icon || 'Sparkles'} />
                   </div>
                   <Switch
                     checked={boost.is_active}
@@ -436,21 +472,23 @@ export default function BoostFeaturesPage() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Benefits:</p>
-                  <ul className="space-y-1">
-                    {boost.benefits.map((benefit, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-sm">
-                        <Check className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span className="text-muted-foreground">{benefit}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {Array.isArray(boost.benefits) && boost.benefits.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Benefits:</p>
+                    <ul className="space-y-1">
+                      {boost.benefits.map((benefit, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm">
+                          <Check className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                          <span className="text-muted-foreground">{benefit}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 <div className="pt-2 border-t flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">
-                    {boost.usage_count.toLocaleString()} used
+                    {(boost.total_usage_count || 0).toLocaleString()} used
                   </span>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="sm" onClick={() => openEdit(boost)}>
@@ -506,7 +544,7 @@ export default function BoostFeaturesPage() {
                   onChange={(e) => setForm(f => ({
                     ...f,
                     name: e.target.value,
-                    slug: f.slug || e.target.value.toLowerCase().replace(/\s+/g, '-')
+                    slug: editing ? f.slug : e.target.value.toLowerCase().replace(/\s+/g, '-')
                   }))}
                   placeholder="Highlight"
                 />

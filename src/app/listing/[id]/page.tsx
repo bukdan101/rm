@@ -5,113 +5,96 @@ import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { ImageGallery } from '@/components/listing/ImageGallery';
-import { SellerCard } from '@/components/listing/SellerCard';
-import { ProductSpecs } from '@/components/listing/ProductSpecs';
-import { ReviewSection } from '@/components/listing/ReviewSection';
-import { RelatedProducts } from '@/components/listing/RelatedProducts';
-import { SocialShareButtons } from '@/components/listing/SocialShareButtons';
-import { AdBanner } from '@/components/ads/AdBanner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { 
-  MapPin, Eye, Clock, Heart, Flag, 
-  Gavel, Timer, ShoppingCart, Sparkles, Tag, CheckCircle, AlertTriangle,
-  MessageCircle, Shield, Phone, Package
+  MapPin, Eye, Clock, Heart, 
+  Sparkles, CheckCircle, AlertTriangle,
+  MessageCircle, Shield, Phone, Package,
+  Calendar, Gauge, Fuel, Settings2, Store,
+  ChevronLeft, ChevronRight, Share2, ZoomIn, Star
 } from 'lucide-react';
-import { formatDistanceToNow, differenceInSeconds } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
+import { cn, formatPrice, formatRelativeTime } from '@/lib/utils';
 
-// ===== Types =====
+// Types matching database schema
 interface ListingImage {
   id: string;
-  imageUrl: string;
-  isPrimary: boolean;
-  sortOrder: number;
+  image_url: string;
+  is_primary: boolean;
+  display_order: number;
 }
 
-interface Category {
+interface Brand {
   id: string;
   name: string;
   slug: string;
+  logo_url?: string;
 }
 
-interface Seller {
-  userId: string;
-  name: string;
-  avatarUrl: string | null;
-  city: string | null;
-  province: string | null;
-  isVerified: boolean;
-  averageRating: number;
-  totalReviews: number;
-  totalListings: number;
-  soldCount: number;
-  phone: string | null;
-  createdAt: string;
-}
-
-interface Auction {
+interface Model {
   id: string;
-  startingPrice: number;
-  currentPrice: number;
-  minIncrement: number;
-  endsAt: string;
+  name: string;
+  slug: string;
+  body_type?: string;
+}
+
+interface UserProfile {
+  id: string;
+  name?: string;
+  phone?: string;
+  avatar_url?: string;
+  role?: string;
+}
+
+interface Inspection {
+  id: string;
+  overall_grade: string;
+  inspection_score: number;
   status: string;
-  totalBids: number;
-  buyNowPrice: number | null;
 }
 
 interface Listing {
   id: string;
   title: string;
   description: string | null;
-  price: number;
-  priceType: string;
-  listingType: string;
-  condition: string;
-  status: string;
-  city: string | null;
-  province: string | null;
-  viewCount: number;
-  favoriteCount: number;
-  isFeatured: boolean;
-  createdAt: string;
-  userId: string;
-  year: number;
+  price_cash: number;
+  price_negotiable: boolean;
   mileage: number;
+  condition: string;
   transmission: string;
   fuel: string;
-  phone?: string;
-  whatsapp?: string;
-  images: ListingImage[];
-  category: Category | null;
-  profile: Seller;
-  auction: Auction | null;
-  boosts: Array<{ boostType: string }>;
-  brand?: { name: string };
-  model?: { name: string };
+  body_type: string;
+  city: string | null;
+  province: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  status: string;
+  view_count: number;
+  favorite_count: number;
+  created_at: string;
+  user_id: string;
+  year: number;
+  brand?: Brand;
+  model?: Model;
+  user?: UserProfile;
+  images?: ListingImage[];
+  inspection?: Inspection | null;
 }
 
-const conditionConfig: Record<string, { label: string; color: string; description: string }> = {
-  new: { label: 'Baru', color: 'bg-emerald-500', description: 'Barang baru, belum pernah dipakai' },
-  like_new: { label: 'Seperti Baru', color: 'bg-blue-500', description: 'Bekas tapi masih sangat bagus' },
-  good: { label: 'Bagus', color: 'bg-amber-500', description: 'Kondisi baik, ada tanda pemakaian wajar' },
-  fair: { label: 'Cukup', color: 'bg-gray-500', description: 'Masih berfungsi dengan baik' },
-};
-
-const priceTypeLabels: Record<string, { label: string; icon: React.ReactNode }> = {
-  fixed: { label: 'Harga Pas', icon: <Tag className="h-4 w-4" /> },
-  negotiable: { label: 'Bisa Nego', icon: <Sparkles className="h-4 w-4" /> },
-  auction: { label: 'Lelang', icon: <Gavel className="h-4 w-4" /> },
+const conditionConfig: Record<string, { label: string; color: string }> = {
+  new: { label: 'Baru', color: 'bg-emerald-500 text-white' },
+  like_new: { label: 'Seperti Baru', color: 'bg-blue-500 text-white' },
+  good: { label: 'Bagus', color: 'bg-amber-500 text-white' },
+  fair: { label: 'Cukup', color: 'bg-gray-500 text-white' },
 };
 
 export default function ListingDetailPage() {
@@ -123,118 +106,22 @@ export default function ListingDetailPage() {
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [bidAmount, setBidAmount] = useState('');
-  const [bidding, setBidding] = useState(false);
-  const [timeLeft, setTimeLeft] = useState('');
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [showZoom, setShowZoom] = useState(false);
   const [activeTab, setActiveTab] = useState('deskripsi');
 
-  // Fetch listing data
   useEffect(() => {
-    if (listingId) {
-      fetchListing();
-    }
+    if (listingId) fetchListing();
   }, [listingId]);
-
-  // Auction timer
-  useEffect(() => {
-    if (!listing?.auction || listing.auction.status !== 'active') return;
-
-    const updateTimer = () => {
-      const now = new Date();
-      const end = new Date(listing.auction!.endsAt);
-      const diff = differenceInSeconds(end, now);
-
-      if (diff <= 0) {
-        setTimeLeft('Lelang Berakhir');
-        return;
-      }
-
-      const days = Math.floor(diff / 86400);
-      const hours = Math.floor((diff % 86400) / 3600);
-      const minutes = Math.floor((diff % 3600) / 60);
-      const seconds = diff % 60;
-
-      if (days > 0) {
-        setTimeLeft(`${days}h ${hours}j ${minutes}m`);
-      } else if (hours > 0) {
-        setTimeLeft(`${hours}j ${minutes}m ${seconds}d`);
-      } else {
-        setTimeLeft(`${minutes}m ${seconds}d`);
-      }
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [listing?.auction]);
 
   const fetchListing = async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/listings/${listingId}`);
-      if (!response.ok) throw new Error('Listing not found');
       const data = await response.json();
       
-      // Transform data to match our interface
-      const transformedListing: Listing = {
-        id: data.listing.id,
-        title: data.listing.title || 'Untitled',
-        description: data.listing.description,
-        price: data.listing.price_cash || 0,
-        priceType: data.listing.price_negotiable ? 'negotiable' : 'fixed',
-        listingType: 'sale',
-        condition: data.listing.condition || 'good',
-        status: data.listing.status || 'active',
-        city: data.listing.city,
-        province: data.listing.province,
-        viewCount: data.listing.view_count || 0,
-        favoriteCount: data.listing.favorite_count || 0,
-        isFeatured: false,
-        createdAt: data.listing.created_at,
-        userId: data.listing.user_id,
-        year: data.listing.year || 0,
-        mileage: data.listing.mileage || 0,
-        transmission: data.listing.transmission || '',
-        fuel: data.listing.fuel || '',
-        phone: data.listing.phone,
-        whatsapp: data.listing.whatsapp,
-        images: (data.listing.images || []).map((img: any) => ({
-          id: img.id,
-          imageUrl: img.image_url,
-          isPrimary: img.is_primary,
-          sortOrder: img.display_order || 0,
-        })),
-        category: data.listing.brand ? {
-          id: data.listing.brand.id,
-          name: data.listing.brand.name,
-          slug: data.listing.brand.slug || data.listing.brand.id,
-        } : null,
-        profile: {
-          userId: data.listing.user?.id || '',
-          name: data.listing.user?.name || 'Penjual',
-          avatarUrl: data.listing.user?.avatar_url,
-          city: data.listing.city,
-          province: data.listing.province,
-          isVerified: false,
-          averageRating: 4.5,
-          totalReviews: 12,
-          totalListings: 5,
-          soldCount: 3,
-          phone: data.listing.user?.phone || data.listing.phone,
-          createdAt: data.listing.created_at,
-        },
-        auction: null,
-        boosts: [],
-        brand: data.listing.brand,
-        model: data.listing.model,
-      };
-      
-      setListing(transformedListing);
-      setIsSaved(false);
-      
-      if (transformedListing.auction) {
-        setBidAmount(String(transformedListing.auction.currentPrice + transformedListing.auction.minIncrement));
+      if (data.success && data.listing) {
+        setListing(data.listing);
       }
     } catch (err) {
       console.error('Failed to fetch listing:', err);
@@ -243,85 +130,33 @@ export default function ListingDetailPage() {
     }
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(price);
-  };
-
   const handleSave = async () => {
     if (!user) {
       toast.error('Silakan login terlebih dahulu');
       router.push('/auth');
       return;
     }
-    setSaving(true);
-    // Toggle save state
     setIsSaved(!isSaved);
     toast.success(isSaved ? 'Dihapus dari wishlist' : 'Disimpan ke wishlist');
-    setSaving(false);
   };
 
   const handleWhatsApp = () => {
-    const sellerPhone = listing?.phone || listing?.whatsapp || listing?.profile?.phone;
-    if (!sellerPhone) {
+    const phone = listing?.whatsapp || listing?.phone || listing?.user?.phone;
+    if (!phone) {
       toast.error('Nomor WhatsApp tidak tersedia');
       return;
     }
 
-    let phone = sellerPhone.replace(/\D/g, '');
-    if (phone.startsWith('0')) phone = '62' + phone.substring(1);
-    else if (!phone.startsWith('62')) phone = '62' + phone;
+    let cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.substring(1);
+    else if (!cleanPhone.startsWith('62')) cleanPhone = '62' + cleanPhone;
 
     const message = encodeURIComponent(
-      `Halo kak, saya tertarik dengan mobil "${listing?.title}" yang dijual seharga ${formatPrice(listing?.price || 0)}. Apakah masih tersedia? Terima kasih 🙏`
+      `Halo kak, saya tertarik dengan mobil "${listing?.title}" yang dijual seharga ${formatPrice(listing?.price_cash || 0)}. Apakah masih tersedia? Terima kasih`
     );
-    window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+    window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
   };
 
-  const handleBid = async () => {
-    if (!user) {
-      toast.error('Silakan login terlebih dahulu');
-      router.push('/auth');
-      return;
-    }
-
-    if (!listing?.auction) return;
-
-    const amount = parseInt(bidAmount);
-    const minBid = listing.auction.currentPrice + listing.auction.minIncrement;
-
-    if (amount < minBid) {
-      toast.error(`Bid minimal adalah ${formatPrice(minBid)}`);
-      return;
-    }
-
-    setBidding(true);
-    try {
-      const res = await fetch(`/api/listings/${listingId}/bid`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount }),
-      });
-
-      if (res.ok) {
-        toast.success(`Bid ${formatPrice(amount)} berhasil!`);
-        fetchListing();
-      } else {
-        const error = await res.json();
-        toast.error(error.message || 'Gagal mengajukan bid');
-      }
-    } catch (error) {
-      toast.error('Terjadi kesalahan');
-    } finally {
-      setBidding(false);
-    }
-  };
-
-  // Loading state
   if (loading) {
     return (
       <MainLayout>
@@ -329,11 +164,6 @@ export default function ListingDetailPage() {
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-4">
               <Skeleton className="aspect-video w-full rounded-xl" />
-              <div className="flex gap-2">
-                {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="w-20 h-20 rounded-lg" />
-                ))}
-              </div>
               <Skeleton className="h-10 w-3/4" />
               <Skeleton className="h-32 w-full" />
             </div>
@@ -347,51 +177,41 @@ export default function ListingDetailPage() {
     );
   }
 
-  // Not found
   if (!listing) {
     return (
       <MainLayout>
         <div className="container mx-auto px-4 py-12 text-center">
-          <div className="max-w-md mx-auto">
-            <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-muted flex items-center justify-center">
-              <Package className="h-12 w-12 text-muted-foreground" />
-            </div>
-            <h1 className="text-2xl font-bold mb-2">Iklan tidak ditemukan</h1>
-            <p className="text-muted-foreground mb-6">Iklan yang Anda cari mungkin sudah tidak tersedia.</p>
-            <Button onClick={() => router.push('/')}>Kembali ke Beranda</Button>
-          </div>
+          <Package className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+          <h1 className="text-2xl font-bold mb-2">Iklan tidak ditemukan</h1>
+          <p className="text-muted-foreground mb-6">Iklan yang Anda cari mungkin sudah tidak tersedia.</p>
+          <Button onClick={() => router.push('/')}>Kembali ke Beranda</Button>
         </div>
       </MainLayout>
     );
   }
 
-  const condition = listing.condition || 'good';
-  const conditionData = conditionConfig[condition] || conditionConfig.good;
-  const priceTypeData = priceTypeLabels[listing.priceType] || priceTypeLabels.fixed;
-  const location = listing.city || listing.province || 'Indonesia';
-  const isOwnListing = listing.userId === user?.id;
-  const isAuction = listing.priceType === 'auction' && listing.auction;
+  const conditionData = conditionConfig[listing.condition] || conditionConfig.good;
+  const location = [listing.city, listing.province].filter(Boolean).join(', ') || 'Indonesia';
+  const isOwnListing = listing.user_id === user?.id;
+  const images = listing.images || [];
+  const currentImage = images[currentImageIndex];
 
   return (
     <MainLayout>
-      {/* Inline Ad Banner - 2 Grid Layout */}
-      <div className="w-full">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
-          <div className="lg:col-span-2">
-            <AdBanner position="listing-top" showPlaceholder={false} />
-          </div>
-          <div className="lg:col-span-1">
-            <AdBanner position="listing-top-sidebar" showPlaceholder={false} />
-          </div>
-        </div>
-      </div>
-
-      <div className="container mx-auto px-4 py-6">
+      <div className="container mx-auto px-4 py-4 sm:py-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
           <Link href="/" className="hover:text-primary">Beranda</Link>
           <span>/</span>
           <Link href="/marketplace" className="hover:text-primary">Marketplace</Link>
+          {listing.brand && (
+            <>
+              <span>/</span>
+              <Link href={`/marketplace?brand=${listing.brand.slug}`} className="hover:text-primary">
+                {listing.brand.name}
+              </Link>
+            </>
+          )}
           <span>/</span>
           <span className="text-foreground truncate">{listing.title}</span>
         </div>
@@ -399,52 +219,133 @@ export default function ListingDetailPage() {
         {/* Status Banner */}
         {listing.status !== 'active' && (
           <div className="mb-4 flex items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-950">
-            <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400 shrink-0" />
+            <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0" />
             <div>
               <p className="font-semibold text-orange-800 dark:text-orange-200">
-                {listing.status === 'pending_review' ? 'Menunggu Review' : 
-                 listing.status === 'rejected' ? 'Ditolak' : listing.status}
+                {listing.status === 'sold' ? 'Terjual' : listing.status}
               </p>
-              <p className="text-sm text-orange-600 dark:text-orange-400">
-                Iklan ini belum aktif dan tidak terlihat oleh publik.
+              <p className="text-sm text-orange-600">
+                {listing.status === 'sold' ? 'Mobil ini sudah terjual.' : 'Iklan ini belum aktif.'}
               </p>
             </div>
           </div>
         )}
 
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* ===== Left Column ===== */}
+          {/* Left Column */}
           <div className="lg:col-span-2 space-y-6">
             {/* Image Gallery */}
-            <ImageGallery 
-              images={listing.images || []} 
-              title={listing.title} 
-              isPremium={listing.isFeatured}
-            />
+            <div className="relative aspect-[16/10] bg-muted rounded-xl overflow-hidden group">
+              {images.length > 0 ? (
+                <Image
+                  src={currentImage?.image_url || '/placeholder-car.jpg'}
+                  alt={listing.title}
+                  fill
+                  className="object-cover"
+                  priority
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <Package className="h-20 w-20 text-muted-foreground/30" />
+                </div>
+              )}
+
+              {images.length > 1 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white opacity-0 group-hover:opacity-100"
+                    onClick={() => setCurrentImageIndex(i => i > 0 ? i - 1 : images.length - 1)}
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white opacity-0 group-hover:opacity-100"
+                    onClick={() => setCurrentImageIndex(i => i < images.length - 1 ? i + 1 : 0)}
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </Button>
+                </>
+              )}
+
+              {images.length > 0 && (
+                <div className="absolute bottom-3 left-3">
+                  <Badge variant="secondary" className="bg-black/60 text-white border-0">
+                    {currentImageIndex + 1} / {images.length}
+                  </Badge>
+                </div>
+              )}
+
+              {images.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-3 right-3 bg-black/40 hover:bg-black/60 text-white opacity-0 group-hover:opacity-100"
+                  onClick={() => setShowZoom(true)}
+                >
+                  <ZoomIn className="h-5 w-5" />
+                </Button>
+              )}
+
+              {listing.inspection && (
+                <div className="absolute top-3 left-3">
+                  <Badge className="bg-green-500 text-white">
+                    <Shield className="h-3 w-3 mr-1" />
+                    Grade {listing.inspection.overall_grade}
+                  </Badge>
+                </div>
+              )}
+            </div>
+
+            {/* Thumbnails */}
+            {images.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {images.map((img, index) => (
+                  <button
+                    key={img.id}
+                    onClick={() => setCurrentImageIndex(index)}
+                    className={cn(
+                      "relative w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden shrink-0 border-2 transition-all",
+                      currentImageIndex === index
+                        ? "border-primary ring-2 ring-primary/30"
+                        : "border-transparent hover:border-muted-foreground/30"
+                    )}
+                  >
+                    <Image src={img.image_url} alt="" fill className="object-cover" />
+                    {img.is_primary && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-primary/80 text-[8px] text-white text-center py-0.5">
+                        Utama
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Title & Badges */}
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <h1 className="text-2xl md:text-3xl font-bold mb-3">{listing.title}</h1>
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-3">{listing.title}</h1>
                   <div className="flex flex-wrap gap-2">
-                    {listing.category && (
-                      <Link href={`/marketplace?brand=${listing.category.slug}`}>
+                    {listing.brand && (
+                      <Link href={`/marketplace?brand=${listing.brand.slug}`}>
                         <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80">
-                          {listing.category.name}
+                          {listing.brand.name}
                         </Badge>
                       </Link>
                     )}
-                    <Badge className={cn("text-white border-0", conditionData.color)}>
-                      {conditionData.label}
-                    </Badge>
-                    <Badge variant="outline" className="gap-1">
-                      {priceTypeData.icon}
-                      {priceTypeData.label}
-                    </Badge>
-                    {listing.isFeatured && (
-                      <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white border-0">
-                        ✨ Premium
+                    {listing.model && (
+                      <Badge variant="outline">{listing.model.name}</Badge>
+                    )}
+                    <Badge className={conditionData.color}>{conditionData.label}</Badge>
+                    {listing.price_negotiable && (
+                      <Badge variant="outline" className="gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        Bisa Nego
                       </Badge>
                     )}
                   </div>
@@ -453,13 +354,14 @@ export default function ListingDetailPage() {
                   <Button 
                     variant="outline" 
                     size="icon" 
-                    onClick={handleSave} 
-                    disabled={saving}
+                    onClick={handleSave}
                     className={cn(isSaved && "text-red-500 border-red-200 bg-red-50")}
                   >
                     <Heart className={cn("h-5 w-5", isSaved && "fill-red-500")} />
                   </Button>
-                  <SocialShareButtons title={listing.title} variant="compact" />
+                  <Button variant="outline" size="icon">
+                    <Share2 className="h-5 w-5" />
+                  </Button>
                 </div>
               </div>
 
@@ -471,49 +373,35 @@ export default function ListingDetailPage() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Eye className="h-4 w-4" />
-                  {listing.viewCount} dilihat
+                  {listing.view_count} dilihat
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Clock className="h-4 w-4" />
-                  {formatDistanceToNow(new Date(listing.createdAt), { addSuffix: true, locale: id })}
+                  {formatDistanceToNow(new Date(listing.created_at), { addSuffix: true, locale: id })}
                 </span>
               </div>
             </div>
 
             <Separator />
 
-            {/* ===== TABS ===== */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            {/* Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="w-full grid grid-cols-4 h-12 bg-muted/70 rounded-xl p-1">
-                {[
-                  { value: 'deskripsi', label: '📝 Deskripsi' },
-                  { value: 'spesifikasi', label: '📋 Spesifikasi' },
-                  { value: 'ulasan', label: '⭐ Ulasan' },
-                  { value: 'chat', label: '💬 Chat' },
-                ].map((tab) => (
+                {['deskripsi', 'spesifikasi', 'ulasan', 'kontak'].map((tab) => (
                   <TabsTrigger
-                    key={tab.value}
-                    value={tab.value}
-                    className={cn(
-                      "rounded-lg font-semibold text-sm transition-all duration-300",
-                      "data-[state=active]:shadow-lg",
-                      "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground",
-                      "hover:bg-accent/50"
-                    )}
+                    key={tab}
+                    value={tab}
+                    className="rounded-lg font-semibold text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
                   >
-                    {tab.label}
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
                   </TabsTrigger>
                 ))}
               </TabsList>
 
-              {/* Deskripsi Tab */}
-              <TabsContent value="deskripsi" className="mt-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
-                <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-card to-muted/30">
+              <TabsContent value="deskripsi" className="mt-6">
+                <Card>
                   <CardContent className="p-6">
-                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Tag className="h-5 w-5 text-primary" />
-                      Deskripsi
-                    </h2>
+                    <h2 className="text-lg font-semibold mb-4">Deskripsi</h2>
                     <p className="text-muted-foreground whitespace-pre-wrap leading-relaxed">
                       {listing.description || 'Tidak ada deskripsi tersedia.'}
                     </p>
@@ -521,266 +409,212 @@ export default function ListingDetailPage() {
                 </Card>
               </TabsContent>
 
-              {/* Spesifikasi Tab */}
-              <TabsContent value="spesifikasi" className="mt-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
-                <ProductSpecs
-                  condition={condition}
-                  priceType={listing.priceType}
-                  location={location}
-                  viewCount={listing.viewCount}
-                  createdAt={listing.createdAt}
-                  isFeatured={listing.isFeatured}
-                  category={listing.category?.name || listing.brand?.name || 'Lainnya'}
-                />
+              <TabsContent value="spesifikasi" className="mt-6">
+                <Card>
+                  <CardContent className="p-6">
+                    <h2 className="text-lg font-semibold mb-4">Spesifikasi Kendaraan</h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <Calendar className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Tahun</p>
+                          <p className="font-semibold">{listing.year}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <Gauge className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">KM</p>
+                          <p className="font-semibold">{listing.mileage?.toLocaleString('id-ID')} km</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <Fuel className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Bahan Bakar</p>
+                          <p className="font-semibold capitalize">{listing.fuel}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <Settings2 className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Transmisi</p>
+                          <p className="font-semibold capitalize">{listing.transmission}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <Store className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Kondisi</p>
+                          <p className="font-semibold">{conditionData.label}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <MapPin className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Lokasi</p>
+                          <p className="font-semibold truncate">{listing.city || listing.province || '-'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </TabsContent>
 
-              {/* Ulasan Tab */}
-              <TabsContent value="ulasan" className="mt-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
-                <ReviewSection sellerId={listing.userId} />
+              <TabsContent value="ulasan" className="mt-6">
+                <Card>
+                  <CardContent className="p-6 text-center">
+                    <Star className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
+                    <p className="text-muted-foreground">Fitur ulasan akan segera hadir</p>
+                  </CardContent>
+                </Card>
               </TabsContent>
 
-              {/* Chat Tab */}
-              <TabsContent value="chat" className="mt-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
-                <Card className="border-0 shadow-lg overflow-hidden">
+              <TabsContent value="kontak" className="mt-6">
+                <Card>
                   <CardContent className="p-6 space-y-4">
                     <h2 className="text-lg font-semibold flex items-center gap-2">
                       <MessageCircle className="h-5 w-5 text-primary" />
                       Hubungi Penjual
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                      Langsung hubungi penjual via WhatsApp atau chat internal platform.
+                      Langsung hubungi penjual via WhatsApp atau telepon.
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Button
                         onClick={handleWhatsApp}
-                        className="h-14 text-base gap-3 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                        className="h-14 text-base gap-3 bg-emerald-600 hover:bg-emerald-700 text-white"
                       >
                         <svg viewBox="0 0 24 24" className="h-6 w-6 fill-current">
                           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                         </svg>
                         Chat WhatsApp
                       </Button>
-                      {!isOwnListing && (
+                      {(listing.phone || listing.user?.phone) && (
                         <Button
                           variant="outline"
-                          className="h-14 text-base gap-3 border-2 hover:shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                          onClick={() => toast.info('Fitur chat internal akan segera hadir!')}
+                          className="h-14 text-base gap-3 border-2"
+                          onClick={() => window.open(`tel:${listing.phone || listing.user?.phone}`)}
                         >
-                          <MessageCircle className="h-5 w-5" />
-                          Chat Internal
+                          <Phone className="h-5 w-5" />
+                          Telepon
                         </Button>
                       )}
                     </div>
-                    {(listing.phone || listing.profile?.phone) && (
-                      <Button
-                        variant="ghost"
-                        className="w-full gap-2 text-muted-foreground"
-                        onClick={() => window.open(`tel:${listing.phone || listing.profile?.phone}`)}
-                      >
-                        <Phone className="h-4 w-4" />
-                        Hubungi via Telepon
-                      </Button>
-                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
             </Tabs>
-
-            {/* Ad Banner - Landscape (800x150) */}
-            <div className="w-full">
-              <AdBanner position="listing-bottom" showPlaceholder={false} />
-            </div>
-
-            {/* Related Products */}
-            {listing.category && (
-              <RelatedProducts
-                categoryId={listing.category.id}
-                currentListingId={listing.id}
-                categoryName={listing.category.name}
-              />
-            )}
           </div>
 
-          {/* ===== Right Column - Price & Actions ===== */}
+          {/* Right Column */}
           <div className="space-y-4">
             {/* Price Card */}
             <Card className="sticky top-4 shadow-xl border-2 overflow-hidden">
               <div className="h-1 bg-gradient-to-r from-primary via-primary/60 to-primary" />
-              <CardContent className="p-6">
-                {isAuction ? (
-                  /* Auction Section */
-                  <div className="space-y-5">
-                    <div className="flex items-center gap-2 text-primary">
-                      <Gavel className="h-5 w-5" />
-                      <span className="font-semibold">Lelang Aktif</span>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Harga Saat Ini</p>
-                      <p className="text-3xl font-bold text-primary">
-                        {formatPrice(listing.auction!.currentPrice)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 p-3 bg-orange-50 dark:bg-orange-950 rounded-lg border border-orange-200 dark:border-orange-800">
-                      <Timer className="h-5 w-5 text-orange-600" />
-                      <span className="font-semibold text-orange-600">{timeLeft}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div className="p-3 bg-muted rounded-lg">
-                        <p className="text-muted-foreground">Total Bid</p>
-                        <p className="font-bold text-lg">{listing.auction!.totalBids || 0}</p>
-                      </div>
-                      <div className="p-3 bg-muted rounded-lg">
-                        <p className="text-muted-foreground">Min. Kenaikan</p>
-                        <p className="font-bold text-lg">{formatPrice(listing.auction!.minIncrement)}</p>
-                      </div>
-                    </div>
-                    {listing.auction!.status === 'active' && !isOwnListing && (
-                      <div className="space-y-3">
-                        <Input
-                          type="number"
-                          placeholder={`Min ${formatPrice(listing.auction!.currentPrice + listing.auction!.minIncrement)}`}
-                          value={bidAmount}
-                          onChange={(e) => setBidAmount(e.target.value)}
-                          className="text-lg font-medium"
-                        />
-                        <Button
-                          className="w-full h-12 text-lg"
-                          onClick={handleBid}
-                          disabled={bidding}
-                        >
-                          <Gavel className="h-5 w-5 mr-2" />
-                          {bidding ? 'Memproses...' : 'Ajukan Bid'}
-                        </Button>
-                      </div>
-                    )}
-                    {listing.auction!.buyNowPrice && listing.auction!.status === 'active' && !isOwnListing && (
-                      <>
-                        <div className="relative">
-                          <Separator />
-                          <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-3 text-sm text-muted-foreground">
-                            atau
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-2">Beli Langsung</p>
-                          <p className="text-xl font-bold mb-3">
-                            {formatPrice(listing.auction!.buyNowPrice)}
-                          </p>
-                          <Button variant="outline" className="w-full gap-2">
-                            <ShoppingCart className="h-4 w-4" />
-                            Beli Sekarang
-                          </Button>
-                        </div>
-                      </>
+              <CardContent className="p-4 sm:p-6">
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-2xl sm:text-3xl font-bold text-primary">
+                      {formatPrice(listing.price_cash)}
+                    </p>
+                    {listing.price_negotiable && (
+                      <Badge variant="outline" className="mt-2 gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        Harga masih bisa nego
+                      </Badge>
                     )}
                   </div>
-                ) : (
-                  /* Fixed/Negotiable Price Section */
-                  <div className="space-y-5">
-                    <div>
-                      <p className="text-3xl font-bold text-primary">
-                        {formatPrice(listing.price)}
-                      </p>
-                      {listing.priceType === 'negotiable' && (
-                        <Badge variant="outline" className="mt-2 gap-1">
-                          <Sparkles className="h-3 w-3" />
-                          Harga masih bisa nego
-                        </Badge>
-                      )}
-                    </div>
-                    {!isOwnListing && (
-                      <div className="space-y-3">
-                        {/* Beli via Escrow */}
-                        <Button className="w-full h-12 text-lg gap-2 shadow-lg">
-                          <Shield className="h-5 w-5" />
-                          Beli via Rekening Bersama
-                        </Button>
-                        <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1">
-                          <Shield className="h-3 w-3 text-emerald-500" />
-                          Pembayaran aman dengan sistem escrow
+
+                  {listing.user && (
+                    <div className="flex items-center gap-3 py-3 border-y">
+                      <Avatar>
+                        <AvatarImage src={listing.user.avatar_url} />
+                        <AvatarFallback>{listing.user.name?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{listing.user.name || 'Penjual'}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Bergabung {formatRelativeTime(listing.created_at)}
                         </p>
+                      </div>
+                    </div>
+                  )}
 
-                        <div className="relative">
-                          <Separator />
-                          <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-3 text-sm text-muted-foreground">
-                            atau
-                          </span>
-                        </div>
-
-                        {/* WhatsApp */}
+                  {!isOwnListing && (
+                    <div className="space-y-3">
+                      <Button
+                        onClick={handleWhatsApp}
+                        className="w-full h-12 gap-3 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
+                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                        </svg>
+                        Hubungi via WhatsApp
+                      </Button>
+                      {(listing.phone || listing.user?.phone) && (
                         <Button
                           variant="outline"
-                          className="w-full h-12 gap-3 border-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950 shadow-sm hover:shadow-lg transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                          onClick={handleWhatsApp}
+                          className="w-full h-12 gap-2"
+                          onClick={() => window.open(`tel:${listing.phone || listing.user?.phone}`)}
                         >
-                          <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                          </svg>
-                          Hubungi via WhatsApp
+                          <Phone className="h-5 w-5" />
+                          Hubungi via Telepon
                         </Button>
-                      </div>
-                    )}
-                    
-                    {/* Owner Actions */}
-                    {isOwnListing && (
-                      <div className="space-y-2">
-                        <Link href={`/listing/${listing.id}/edit`} className="block">
-                          <Button variant="outline" className="w-full">
-                            Edit Iklan
-                          </Button>
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  )}
+
+                  {isOwnListing && (
+                    <Link href={`/listing/${listing.id}/edit`} className="block">
+                      <Button variant="outline" className="w-full">Edit Iklan</Button>
+                    </Link>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
-            {/* Seller Card */}
-            <SellerCard
-              seller={{
-                userId: listing.profile.userId,
-                name: listing.profile.name,
-                avatarUrl: listing.profile.avatarUrl,
-                city: listing.profile.city,
-                province: listing.profile.province,
-                isVerified: listing.profile.isVerified,
-                averageRating: listing.profile.averageRating,
-                totalReviews: listing.profile.totalReviews,
-                totalListings: listing.profile.totalListings,
-                soldCount: listing.profile.soldCount,
-                phone: listing.profile.phone,
-                createdAt: listing.profile.createdAt,
-              }}
-              isOwnListing={isOwnListing}
-              onChat={handleWhatsApp}
-              onCall={() => window.open(`tel:${listing.profile.phone}`)}
-            />
-
-            {/* Ad Banners - Stacked vertically in sidebar */}
-            <div className="space-y-4">
-              <AdBanner position="listing-bottom-sidebar" showPlaceholder={false} />
-            </div>
+            {/* Inspection Card */}
+            {listing.inspection && (
+              <Card className="border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center">
+                      <Shield className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-semibold">Terverifikasi Inspeksi</p>
+                      <p className="text-sm text-muted-foreground">
+                        Grade {listing.inspection.overall_grade} - Score {listing.inspection.inspection_score}/100
+                      </p>
+                    </div>
+                  </div>
+                  <Link href={`/listing/${listing.id}/inspection`}>
+                    <Button variant="outline" className="w-full mt-3">Lihat Detail Inspeksi</Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Security Notice */}
             <Card className="border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950 dark:to-emerald-900/30">
               <CardContent className="p-4 space-y-3">
                 <h4 className="font-semibold flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
                   <Shield className="h-5 w-5" />
-                  Transaksi Aman
+                  Tips Transaksi Aman
                 </h4>
                 <ul className="text-xs text-emerald-700 dark:text-emerald-400 space-y-1.5">
                   <li className="flex items-start gap-2">
                     <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                    Gunakan Rekening Bersama (escrow) untuk keamanan
+                    COD atau gunakan rekening bersama
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                    Dana ditahan hingga barang diterima pembeli
+                    Periksa kondisi kendaraan sebelum membayar
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                    Jangan transfer langsung ke rekening pribadi
+                    Jangan transfer ke rekening pribadi
                   </li>
                 </ul>
               </CardContent>
@@ -788,6 +622,48 @@ export default function ListingDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Zoom Modal */}
+      {showZoom && images.length > 0 && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
+          onClick={() => setShowZoom(false)}
+        >
+          <div className="relative w-full h-full max-w-5xl max-h-[80vh] m-4">
+            <Image
+              src={currentImage?.image_url || ''}
+              alt={listing.title}
+              fill
+              className="object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          {images.length > 1 && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+              <Button
+                variant="ghost"
+                className="text-white hover:bg-white/20"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentImageIndex(i => i > 0 ? i - 1 : images.length - 1);
+                }}
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </Button>
+              <Button
+                variant="ghost"
+                className="text-white hover:bg-white/20"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentImageIndex(i => i < images.length - 1 ? i + 1 : 0);
+                }}
+              >
+                <ChevronRight className="h-6 w-6" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </MainLayout>
   );
 }

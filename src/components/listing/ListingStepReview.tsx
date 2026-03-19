@@ -20,7 +20,13 @@ import { cn } from '@/lib/utils'
 import type { Brand, CarModel, CarColor, City, Province, FuelType, TransmissionType, BodyType, VehicleCondition, TransactionType } from '@/types/marketplace'
 import type { PhotoItem } from './ListingStepPhotos'
 import type { MarketplaceType } from '@/components/marketplace/MarketplaceSelection'
-import { MARKETPLACE_OPTIONS } from '@/components/marketplace/MarketplaceSelection'
+
+// Local marketplace options
+const MARKETPLACE_OPTIONS = [
+  { id: 'marketplace_umum', name: 'Marketplace Umum', description: 'Jual via WhatsApp', tokenCost: 3 },
+  { id: 'dealer_marketplace', name: 'Dealer Marketplace', description: 'Sistem Bidding', tokenCost: 5 },
+  { id: 'chat_platform', name: 'Chat Platform', description: 'Tawar via Chat', tokenCost: 4 },
+] as const
 
 interface ListingStepReviewProps {
   data: {

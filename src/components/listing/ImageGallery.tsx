@@ -16,9 +16,9 @@ import {
 
 interface ListingImage {
   id: string
-  imageUrl: string
-  isPrimary: boolean
-  sortOrder: number
+  image_url: string
+  is_primary: boolean
+  display_order: number
 }
 
 interface ImageGalleryProps {
@@ -32,11 +32,11 @@ export function ImageGallery({ images, title, isPremium }: ImageGalleryProps) {
   const [isZoomed, setIsZoomed] = useState(false)
   const [imageError, setImageError] = useState<string | null>(null)
 
-  // Sort images by sortOrder
-  const sortedImages = [...(images || [])].sort((a, b) => a.sortOrder - b.sortOrder)
+  // Sort images by display_order
+  const sortedImages = [...(images || [])].sort((a, b) => a.display_order - b.display_order)
   
   // Get primary image or first image
-  const primaryImage = sortedImages.find(img => img.isPrimary) || sortedImages[0]
+  const primaryImage = sortedImages.find(img => img.is_primary) || sortedImages[0]
   
   const handlePrevious = () => {
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : sortedImages.length - 1))
@@ -65,7 +65,7 @@ export function ImageGallery({ images, title, isPremium }: ImageGalleryProps) {
       <div className="relative aspect-[16/10] bg-muted rounded-xl overflow-hidden group">
         {/* Main Image */}
         <Image
-          src={currentImage?.imageUrl || '/placeholder-car.jpg'}
+          src={currentImage?.image_url || '/placeholder-car.jpg'}
           alt={`${title} - Gambar ${currentIndex + 1}`}
           fill
           className="object-cover transition-transform duration-500"
@@ -138,12 +138,12 @@ export function ImageGallery({ images, title, isPremium }: ImageGalleryProps) {
               )}
             >
               <Image
-                src={img.imageUrl}
+                src={img.image_url}
                 alt=""
                 fill
                 className="object-cover"
               />
-              {img.isPrimary && (
+              {img.is_primary && (
                 <div className="absolute bottom-0 left-0 right-0 bg-primary/80 text-[8px] text-white text-center py-0.5">
                   Utama
                 </div>
@@ -158,7 +158,7 @@ export function ImageGallery({ images, title, isPremium }: ImageGalleryProps) {
         <DialogContent className="max-w-5xl p-0 bg-black/95 border-none">
           <div className="relative aspect-[16/10] w-full">
             <Image
-              src={currentImage?.imageUrl || '/placeholder-car.jpg'}
+              src={currentImage?.image_url || '/placeholder-car.jpg'}
               alt={title}
               fill
               className="object-contain"

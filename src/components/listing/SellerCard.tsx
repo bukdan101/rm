@@ -25,18 +25,18 @@ import { toast } from 'sonner'
 
 interface SellerCardProps {
   seller: {
-    userId: string
+    id: string
     name: string
-    avatarUrl: string | null
+    avatar_url: string | null
     city: string | null
     province: string | null
-    isVerified: boolean
-    averageRating: number
-    totalReviews: number
-    totalListings: number
-    soldCount: number
+    is_verified: boolean
+    average_rating: number
+    total_reviews: number
+    total_listings: number
+    sold_count: number
     phone: string | null
-    createdAt: string
+    created_at: string
   }
   isOwnListing: boolean
   onChat: () => void
@@ -48,7 +48,7 @@ export function SellerCard({ seller, isOwnListing, onChat, onCall }: SellerCardP
 
   const location = [seller.city, seller.province].filter(Boolean).join(', ') || 'Indonesia'
   
-  const sellerSince = formatRelativeTime(seller.createdAt)
+  const sellerSince = formatRelativeTime(seller.created_at)
   
   const renderStars = (rating: number) => {
     return (
@@ -65,7 +65,7 @@ export function SellerCard({ seller, isOwnListing, onChat, onCall }: SellerCardP
           />
         ))}
         <span className="text-sm text-muted-foreground ml-1">
-          ({seller.totalReviews})
+          ({seller.total_reviews})
         </span>
       </div>
     )
@@ -77,9 +77,9 @@ export function SellerCard({ seller, isOwnListing, onChat, onCall }: SellerCardP
       <CardContent className="p-4">
         {/* Seller Header */}
         <div className="flex items-start gap-3 mb-4">
-          <Link href={`/user/${seller.userId}`}>
+          <Link href={`/user/${seller.id}`}>
             <Avatar className="h-12 w-12 border-2 hover:border-primary transition-colors cursor-pointer">
-              <AvatarImage src={seller.avatarUrl || undefined} alt={seller.name} />
+              <AvatarImage src={seller.avatar_url || undefined} alt={seller.name} />
               <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                 {seller.name?.[0]?.toUpperCase() || 'U'}
               </AvatarFallback>
@@ -89,12 +89,12 @@ export function SellerCard({ seller, isOwnListing, onChat, onCall }: SellerCardP
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <Link 
-                href={`/user/${seller.userId}`}
+                href={`/user/${seller.id}`}
                 className="font-semibold hover:text-primary transition-colors truncate"
               >
                 {seller.name || 'Penjual'}
               </Link>
-              {seller.isVerified && (
+              {seller.is_verified && (
                 <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Terverifikasi
@@ -114,7 +114,7 @@ export function SellerCard({ seller, isOwnListing, onChat, onCall }: SellerCardP
           <div className="text-center p-2 bg-muted/50 rounded-lg">
             <div className="flex items-center justify-center gap-1 text-amber-500 mb-0.5">
               <Star className="h-4 w-4 fill-amber-400" />
-              <span className="font-bold text-sm">{seller.averageRating?.toFixed(1) || '0.0'}</span>
+              <span className="font-bold text-sm">{seller.average_rating?.toFixed(1) || '0.0'}</span>
             </div>
             <p className="text-xs text-muted-foreground">Rating</p>
           </div>
@@ -122,7 +122,7 @@ export function SellerCard({ seller, isOwnListing, onChat, onCall }: SellerCardP
           <div className="text-center p-2 bg-muted/50 rounded-lg">
             <div className="flex items-center justify-center gap-1 text-primary mb-0.5">
               <Package className="h-4 w-4" />
-              <span className="font-bold text-sm">{seller.totalListings || 0}</span>
+              <span className="font-bold text-sm">{seller.total_listings || 0}</span>
             </div>
             <p className="text-xs text-muted-foreground">Iklan</p>
           </div>
@@ -130,16 +130,16 @@ export function SellerCard({ seller, isOwnListing, onChat, onCall }: SellerCardP
           <div className="text-center p-2 bg-muted/50 rounded-lg">
             <div className="flex items-center justify-center gap-1 text-emerald-500 mb-0.5">
               <Store className="h-4 w-4" />
-              <span className="font-bold text-sm">{seller.soldCount || 0}</span>
+              <span className="font-bold text-sm">{seller.sold_count || 0}</span>
             </div>
             <p className="text-xs text-muted-foreground">Terjual</p>
           </div>
         </div>
 
         {/* Rating Display */}
-        {seller.totalReviews > 0 && (
+        {seller.total_reviews > 0 && (
           <div className="mb-4">
-            {renderStars(seller.averageRating)}
+            {renderStars(seller.average_rating)}
           </div>
         )}
 
@@ -183,7 +183,7 @@ export function SellerCard({ seller, isOwnListing, onChat, onCall }: SellerCardP
 
         {/* View Profile Link */}
         <Link 
-          href={`/user/${seller.userId}`}
+          href={`/user/${seller.id}`}
           className="block text-center text-sm text-primary hover:underline mt-3"
         >
           Lihat Profil Lengkap →

@@ -81,47 +81,70 @@ export async function GET(
   try {
     const { id } = await params
     
+    // First get the basic listing data
     const { data: listing, error } = await supabaseAdmin
       .from('car_listings')
-      .select(`
-        id,
-        listing_number,
-        title,
-        description,
-        year,
-        price_cash,
-        price_negotiable,
-        mileage,
-        condition,
-        transmission,
-        fuel,
-        body_type,
-        city,
-        province,
-        phone,
-        whatsapp,
-        visibility,
-        status,
-        view_count,
-        favorite_count,
-        inquiry_count,
-        created_at,
-        updated_at,
-        user_id,
-        brands:brand_id (id, name),
-        car_models:model_id (id, name),
-        car_colors:exterior_color_id (id, name),
-        profiles:user_id (id, name, phone, avatar_url, role)
-      `)
+      .select('*')
       .eq('id', id)
       .is('deleted_at', null)
       .single()
     
     if (error || !listing) {
+      console.error('Listing fetch error:', error)
       return NextResponse.json({
         success: false,
         error: 'Listing tidak ditemukan'
       }, { status: 404 })
+    }
+    
+    // Get brand
+    let brand = null
+    if (listing.brand_id) {
+      const { data: brandData } = await supabaseAdmin
+        .from('brands')
+        .select('id, name, slug, logo_url')
+        .eq('id', listing.brand_id)
+        .single()
+      brand = brandData
+    }
+    
+    // Get model
+    let model = null
+    if (listing.model_id) {
+      const { data: modelData } = await supabaseAdmin
+        .from('car_models')
+        .select('id, name, slug, body_type')
+        .eq('id', listing.model_id)
+        .single()
+      model = modelData
+    }
+    
+    // Get color
+    let color = null
+    if (listing.exterior_color_id) {
+      const { data: colorData } = await supabaseAdmin
+        .from('car_colors')
+        .select('id, name')
+        .eq('id', listing.exterior_color_id)
+        .single()
+      color = colorData
+    }
+    
+    // Get user/profile
+    let userProfile = null
+    if (listing.user_id) {
+      const { data: profileData } = await supabaseAdmin
+        .from('profiles')
+        .select('id, full_name, phone, avatar_url, role')
+        .eq('id', listing.user_id)
+        .single()
+      userProfile = profileData ? {
+        id: profileData.id,
+        name: profileData.full_name,
+        phone: profileData.phone,
+        avatar_url: profileData.avatar_url,
+        role: profileData.role
+      } : null
     }
     
     // Get images
@@ -148,19 +171,13 @@ export async function GET(
     // Transform data
     const transformedListing = {
       ...listing,
-      brand: listing.brands,
-      model: listing.car_models,
-      color: listing.car_colors,
-      user: listing.profiles,
+      brand,
+      model,
+      color,
+      user: userProfile,
       images: images || [],
       inspection: inspection || null,
     }
-    
-    // Remove nested objects
-    delete transformedListing.brands
-    delete transformedListing.car_models
-    delete transformedListing.car_colors
-    delete transformedListing.profiles
     
     return NextResponse.json({
       success: true,

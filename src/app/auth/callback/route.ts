@@ -6,7 +6,8 @@ export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
   const origin = requestUrl.origin
-  const redirect = requestUrl.searchParams.get('redirect') || '/'
+  // Default redirect to dashboard after login
+  const redirect = requestUrl.searchParams.get('redirect') || '/dashboard'
 
   if (code) {
     const supabase = await createClient()
@@ -26,13 +27,13 @@ export async function GET(request: NextRequest) {
         // Check if profile exists
         const { data: existingProfile } = await supabase
           .from('profiles')
-          .select('id')
+          .select('id, role')
           .eq('id', user.id)
           .single()
 
         // Create profile if doesn't exist
         if (!existingProfile) {
-          const { error: profileError } = await supabase
+          const { data: newProfile, error: profileError } = await supabase
             .from('profiles')
             .insert({
               id: user.id,
@@ -45,9 +46,24 @@ export async function GET(request: NextRequest) {
               role: 'buyer',
               is_verified: user.email_confirmed_at ? true : false,
             })
+            .select()
+            .single()
 
           if (profileError) {
             console.error('Error creating profile:', profileError)
+          }
+          
+          // Redirect new users to onboarding
+          if (!profileError && newProfile) {
+            return NextResponse.redirect(`${origin}/onboarding`)
+          }
+        } else {
+          // Redirect based on role
+          const role = existingProfile.role
+          if (role === 'admin') {
+            return NextResponse.redirect(`${origin}/admin`)
+          } else if (role === 'dealer') {
+            return NextResponse.redirect(`${origin}/dealer/dashboard`)
           }
         }
       }

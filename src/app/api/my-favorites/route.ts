@@ -30,12 +30,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user's favorites with listing details
+    // Get user's favorites with listing details from car_favorites table
     const { data: favorites, error } = await supabase
-      .from('favorites')
+      .from('car_favorites')
       .select(`
         id,
-        listing_id,
+        car_listing_id,
+        notes,
         created_at,
         listing:car_listings(
           id,
@@ -60,9 +61,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, favorites: [] })
     }
 
+    // Transform data to match expected format
+    const transformedFavorites = favorites?.map(fav => ({
+      id: fav.id,
+      listing_id: fav.car_listing_id,
+      created_at: fav.created_at,
+      listing: fav.listing
+    })) || []
+
     return NextResponse.json({
       success: true,
-      favorites: favorites || [],
+      favorites: transformedFavorites,
     })
   } catch (error) {
     console.error('My favorites error:', error)

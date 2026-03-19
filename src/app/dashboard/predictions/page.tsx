@@ -23,8 +23,8 @@ import {
 
 interface Prediction {
   id: string
-  brand: { name: string }
-  model: { name: string }
+  brand: { name: string } | null
+  model: { name: string } | null
   variant: { name: string } | null
   year: number
   predicted_price_min: number
@@ -34,7 +34,7 @@ interface Prediction {
   inspection_score: number | null
   status: string
   created_at: string
-  expires_at: string
+  expires_at: string | null
   listing_created: boolean
 }
 
@@ -60,9 +60,11 @@ function formatShortCurrency(amount: number) {
 function PredictionCard({ prediction }: { prediction: Prediction }) {
   const hoursLeft = prediction.expires_at
     ? Math.max(0, Math.ceil((new Date(prediction.expires_at).getTime() - Date.now()) / (1000 * 60 * 60)))
-    : 0
+    : null
 
-  const isExpired = hoursLeft <= 0
+  const isExpired = hoursLeft !== null && hoursLeft <= 0
+  const isSample = prediction.status === 'sample'
+  const isCompleted = prediction.status === 'completed'
 
   return (
     <Card className={`overflow-hidden ${isExpired ? 'opacity-70' : ''}`}>
@@ -77,19 +79,35 @@ function PredictionCard({ prediction }: { prediction: Prediction }) {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h3 className="font-semibold">
-                  {prediction.brand?.name} {prediction.model?.name} {prediction.year}
+                  {prediction.brand?.name || 'Unknown'} {prediction.model?.name || ''} {prediction.year}
                 </h3>
                 {prediction.variant?.name && (
                   <p className="text-sm text-muted-foreground">{prediction.variant.name}</p>
                 )}
               </div>
-              {isExpired ? (
-                <Badge variant="destructive">Expired</Badge>
-              ) : (
-                <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
-                  {hoursLeft}h tersisa
-                </Badge>
-              )}
+              <div className="flex flex-col items-end gap-1">
+                {isSample && (
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    Estimasi Dasar
+                  </Badge>
+                )}
+                {isCompleted && (
+                  <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                    <Shield className="h-3 w-3 mr-1" />
+                    AI Analisis
+                  </Badge>
+                )}
+                {isExpired && (
+                  <Badge variant="destructive">Expired</Badge>
+                )}
+                {hoursLeft !== null && !isExpired && !isSample && (
+                  <Badge variant="outline" className="text-amber-600">
+                    <Clock className="h-3 w-3 mr-1" />
+                    {hoursLeft}h tersisa
+                  </Badge>
+                )}
+              </div>
             </div>
 
             {/* Price Range */}
@@ -98,6 +116,17 @@ function PredictionCard({ prediction }: { prediction: Prediction }) {
               <p className="text-lg font-bold text-primary">
                 {formatShortCurrency(prediction.predicted_price_min)} - {formatShortCurrency(prediction.predicted_price_max)}
               </p>
+            </div>
+
+            {/* Confidence Score */}
+            <div className="flex items-center gap-2 mt-1">
+              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className={`h-full rounded-full ${isSample ? 'bg-blue-500' : 'bg-emerald-500'}`}
+                  style={{ width: `${prediction.confidence_score}%` }}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground">{prediction.confidence_score}% akurasi</span>
             </div>
 
             {/* Inspection Result */}
@@ -111,8 +140,23 @@ function PredictionCard({ prediction }: { prediction: Prediction }) {
             )}
 
             {/* Actions */}
-            <div className="flex gap-2 mt-3">
-              {isExpired ? (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {isSample ? (
+                <>
+                  <Link href={`/dashboard/listings/${prediction.id.replace('listing-', '')}/inspection`}>
+                    <Button variant="outline" size="sm">
+                      <Shield className="h-4 w-4 mr-1" />
+                      Inspeksi 160 Titik (GRATIS)
+                    </Button>
+                  </Link>
+                  <Link href={`/listing/${prediction.id.replace('listing-', '')}`}>
+                    <Button variant="ghost" size="sm">
+                      <Eye className="h-4 w-4 mr-1" />
+                      Lihat Iklan
+                    </Button>
+                  </Link>
+                </>
+              ) : isExpired ? (
                 <Link href="/prediction">
                   <Button variant="outline" size="sm">
                     <RefreshCw className="h-4 w-4 mr-1" />
@@ -120,7 +164,15 @@ function PredictionCard({ prediction }: { prediction: Prediction }) {
                   </Button>
                 </Link>
               ) : prediction.listing_created ? (
-                <Badge variant="secondary">Sudah dijadikan iklan</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="bg-emerald-50 text-emerald-700">Sudah dijadikan iklan</Badge>
+                  <Link href={`/listing/${prediction.id.replace('listing-', '')}`}>
+                    <Button variant="ghost" size="sm">
+                      <Eye className="h-4 w-4 mr-1" />
+                      Lihat
+                    </Button>
+                  </Link>
+                </div>
               ) : (
                 <>
                   <Link href={`/dashboard/listings/create?prediction=${prediction.id}`}>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useSyncExternalStore } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { TokenWidget, TokenBadge } from '@/components/dashboard/TokenWidget'
 import { useAuth } from '@/hooks/useAuth'
 import { useActiveOffers, useNotifications } from '@/hooks/useNotifications'
+import { useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Car,
@@ -45,11 +46,6 @@ import {
   Zap,
   ClipboardCheck,
 } from 'lucide-react'
-
-// Simple mounted check without useEffect
-const emptySubscribe = () => () => {}
-const getSnapshot = () => true
-const getServerSnapshot = () => false
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -150,6 +146,7 @@ const dealerMenuItems = [
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const { user, profile, signOut, loading } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -159,9 +156,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   // Fetch notifications for messages badge
   const { unreadCount: unreadNotifications } = useNotifications({ pollingInterval: 30000 })
   
-  // Use useSyncExternalStore instead of useEffect for mounted state
-  const mounted = useSyncExternalStore(emptySubscribe, getSnapshot, getServerSnapshot)
-
   const isDealer = profile?.role === 'dealer'
   const isAdmin = profile?.role === 'admin'
   
@@ -218,7 +212,26 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     )
   }
 
-  if (!mounted) {
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/auth?redirect=' + encodeURIComponent(pathname))
+    }
+  }, [loading, user, router, pathname])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center">
+        <div className="animate-pulse flex flex-col items-center gap-4">
+          <div className="h-12 w-12 rounded-full bg-muted" />
+          <div className="h-4 w-32 bg-muted rounded" />
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render anything if not authenticated
+  if (!user) {
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center">
         <div className="animate-pulse flex flex-col items-center gap-4">

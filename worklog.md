@@ -1073,3 +1073,39 @@ Implemented comprehensive token deduction logic for listing creation and updates
 - **KYC Integration**: Required for dealer marketplace visibility
 - **Error Handling**: User-friendly messages for all error cases
 - **Lint Status**: All files pass lint with no errors
+
+---
+## Task ID: predictions-api-update
+### Work Task
+Update the dashboard predictions page to fetch real data from the database.
+
+### Work Summary
+Updated the predictions API and page to fetch real data from database tables:
+
+**1. Updated `/src/app/api/my-predictions/route.ts`:**
+- Changed from fetching non-existent `predictions` table to real data sources
+- Fetches AI price analysis from `ai_price_analysis` table joined with `car_inspections` and `car_listings`
+- For listings without inspections, creates sample predictions based on listing price
+- Only returns predictions for the current user's own listings
+- Prediction status types:
+  - `completed`: From AI analysis with inspection data
+  - `sample`: Generated from listing price without inspection
+
+**2. Updated `/src/app/dashboard/predictions/page.tsx`:**
+- Updated Prediction interface to allow nullable brand/model/variant
+- Enhanced PredictionCard component with:
+  - Visual distinction between "Estimasi Dasar" (sample) and "AI Analisis" (completed) predictions
+  - Confidence score progress bar
+  - Different action buttons based on prediction type:
+    - Sample predictions: Link to inspection page and view listing
+    - Completed predictions: View listing details
+- Fixed handling of null expires_at values
+- Improved badge styling with appropriate colors for different prediction statuses
+
+**Stage Summary:**
+- **API Updated**: Fetches from `ai_price_analysis` and `car_listings` tables
+- **Two Prediction Types**: Completed (from AI analysis) and Sample (from listing price)
+- **Visual Distinction**: Blue badges for sample, green for AI analysis
+- **Confidence Display**: Progress bar showing accuracy percentage
+- **User Experience**: Clear CTAs for improving predictions via inspection
+- **Lint Status**: All files pass lint with no errors

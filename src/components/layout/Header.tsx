@@ -11,12 +11,33 @@ import {
   Menu,
   X,
   Phone,
-  Shield
+  Shield,
+  Loader2
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useAuth } from '@/hooks/useAuth'
+import { useRouter } from 'next/navigation'
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { user, profile, loading } = useAuth()
+  const router = useRouter()
+  
+  // Handle Jual Mobil button click
+  const handleJualMobil = () => {
+    if (loading) return
+    
+    if (!user) {
+      // Not logged in - redirect to auth
+      router.push('/auth?redirect=/listing/create')
+    } else if (!profile?.full_name && !profile?.phone) {
+      // New user without complete profile - redirect to onboarding
+      router.push('/onboarding?redirect=/listing/create')
+    } else {
+      // Authenticated - go to listing creation
+      router.push('/listing/create')
+    }
+  }
 
   return (
     <>
@@ -88,16 +109,33 @@ export function Header() {
               <Button variant="ghost" size="icon" className="hidden sm:flex">
                 <Heart className="w-5 h-5 text-gray-600" />
               </Button>
-              <Link href="/auth">
-                <Button variant="ghost" size="icon" className="hidden sm:flex">
-                  <User className="w-5 h-5 text-gray-600" />
-                </Button>
-              </Link>
-              <Link href="/listing/create" className="hidden sm:block">
-                <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90">
-                  Jual Mobil
-                </Button>
-              </Link>
+              
+              {user ? (
+                <Link href="/dashboard">
+                  <Button variant="ghost" size="icon" className="hidden sm:flex">
+                    <User className="w-5 h-5 text-gray-600" />
+                  </Button>
+                </Link>
+              ) : (
+                <Link href="/auth">
+                  <Button variant="ghost" size="icon" className="hidden sm:flex">
+                    <User className="w-5 h-5 text-gray-600" />
+                  </Button>
+                </Link>
+              )}
+              
+              <Button 
+                onClick={handleJualMobil}
+                className="hidden sm:flex bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90"
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  'Jual Mobil'
+                )}
+              </Button>
+              
               <Button
                 variant="ghost"
                 size="icon"
@@ -138,14 +176,26 @@ export function Header() {
                 Inspeksi
               </Link>
               <hr />
-              <Link href="/auth" className="block py-2 text-gray-600 hover:text-purple-600">
-                Masuk / Daftar
-              </Link>
-              <Link href="/listing/create" className="block">
-                <Button className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90">
-                  Jual Mobil
-                </Button>
-              </Link>
+              {user ? (
+                <Link href="/dashboard" className="block py-2 text-gray-600 hover:text-purple-600">
+                  Dashboard
+                </Link>
+              ) : (
+                <Link href="/auth" className="block py-2 text-gray-600 hover:text-purple-600">
+                  Masuk / Daftar
+                </Link>
+              )}
+              <Button 
+                onClick={handleJualMobil}
+                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90"
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  'Jual Mobil'
+                )}
+              </Button>
             </nav>
           </div>
         )}

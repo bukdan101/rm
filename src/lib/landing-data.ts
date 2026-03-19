@@ -17,19 +17,73 @@ export interface LandingData {
   activeAuctions: any[]
 }
 
-// Default categories for cars
-const defaultCategories = [
-  { id: '1', name: 'Sedan', icon: '🚗', count: 1250, slug: 'sedan' },
-  { id: '2', name: 'SUV', icon: '🚙', count: 890, slug: 'suv' },
-  { id: '3', name: 'MPV', icon: '🚐', count: 650, slug: 'mpv' },
-  { id: '4', name: 'Hatchback', icon: '🚘', count: 420, slug: 'hatchback' },
-  { id: '5', name: 'Pickup', icon: '🛻', count: 380, slug: 'pickup' },
-  { id: '6', name: 'Van', icon: '🚚', count: 150, slug: 'van' },
-  { id: '7', name: 'Coupe', icon: '🏎️', count: 95, slug: 'coupe' },
-  { id: '8', name: 'Electric', icon: '⚡', count: 220, slug: 'electric' },
-  { id: '9', name: 'Hybrid', icon: '🔋', count: 180, slug: 'hybrid' },
-  { id: '10', name: 'LCGC', icon: '🚗', count: 320, slug: 'lcgc' },
+// Body type icons mapping
+const bodyTypeIcons: Record<string, string> = {
+  'sedan': '🚗',
+  'suv': '🚙',
+  'mpv': '🚐',
+  'hatchback': '🚘',
+  'pickup': '🛻',
+  'van': '🚚',
+  'coupe': '🏎️',
+  'electric': '⚡',
+  'hybrid': '🔋',
+  'lcgc': '🚗',
+}
+
+// Default categories for fallback (only used when database is unavailable)
+const fallbackCategories = [
+  { id: '1', name: 'Sedan', icon: '🚗', count: 0, slug: 'sedan' },
+  { id: '2', name: 'SUV', icon: '🚙', count: 0, slug: 'suv' },
+  { id: '3', name: 'MPV', icon: '🚐', count: 0, slug: 'mpv' },
+  { id: '4', name: 'Hatchback', icon: '🚘', count: 0, slug: 'hatchback' },
+  { id: '5', name: 'Pickup', icon: '🛻', count: 0, slug: 'pickup' },
+  { id: '6', name: 'Van', icon: '🚚', count: 0, slug: 'van' },
 ]
+
+// Fetch categories with counts from database
+async function getCategoriesFromDB() {
+  try {
+    // Get count of listings by body_type
+    const { data: listingsData, error } = await supabase
+      .from('car_listings')
+      .select('body_type')
+      .eq('status', 'active')
+
+    if (error) {
+      console.error('Error fetching categories:', error)
+      return null
+    }
+
+    if (!listingsData || listingsData.length === 0) {
+      return fallbackCategories
+    }
+
+    // Count by body_type
+    const bodyTypeCounts: Record<string, number> = {}
+    listingsData.forEach((listing: { body_type: string }) => {
+      const bodyType = listing.body_type || 'sedan'
+      bodyTypeCounts[bodyType] = (bodyTypeCounts[bodyType] || 0) + 1
+    })
+
+    // Convert to categories array
+    const categories = Object.entries(bodyTypeCounts).map(([bodyType, count], index) => ({
+      id: String(index + 1),
+      name: bodyType.charAt(0).toUpperCase() + bodyType.slice(1),
+      icon: bodyTypeIcons[bodyType] || '🚗',
+      count,
+      slug: bodyType.toLowerCase(),
+    }))
+
+    // Sort by count descending
+    categories.sort((a, b) => b.count - a.count)
+
+    return categories.length > 0 ? categories : fallbackCategories
+  } catch (error) {
+    console.error('Error in getCategoriesFromDB:', error)
+    return fallbackCategories
+  }
+}
 
 export async function getLandingData(): Promise<LandingData> {
   try {
@@ -46,20 +100,32 @@ export async function getLandingData(): Promise<LandingData> {
       .order('created_at', { ascending: false })
       .limit(50)
 
-    // If database error, log and return mock data
+    // If database error, throw to trigger fallback
     if (listingsError) {
-      console.log('Database error:', listingsError)
-      return getMockData()
+      console.error('Database error:', listingsError)
+      throw listingsError
     }
 
-    // If no data, return mock data
+    // If no data, return empty state with categories
     if (!listingsData || listingsData.length === 0) {
-      console.log('No listings in database, using mock data')
-      return getMockData()
+      console.log('No listings in database, returning empty state')
+      const categories = await getCategoriesFromDB()
+      return {
+        categories: categories || fallbackCategories,
+        featuredListings: [],
+        premiumBoostedListings: [],
+        highlightedListingIds: [],
+        latestListings: [],
+        popularListings: [],
+        activeAuctions: []
+      }
     }
 
     const listings = listingsData as CarListing[]
     console.log(`Loaded ${listings.length} listings from database`)
+
+    // Get categories from database
+    const categories = await getCategoriesFromDB()
 
     // Get featured listings (with higher prices as featured)
     const featuredListings = [...listings]
@@ -84,7 +150,7 @@ export async function getLandingData(): Promise<LandingData> {
     const activeAuctions: any[] = []
 
     return {
-      categories: defaultCategories,
+      categories: categories || fallbackCategories,
       featuredListings,
       premiumBoostedListings,
       highlightedListingIds,
@@ -94,57 +160,88 @@ export async function getLandingData(): Promise<LandingData> {
     }
   } catch (error) {
     console.error('Error in getLandingData:', error)
-    return getMockData()
+    return getEmptyState()
   }
 }
 
-// Mock data for fallback
-function getMockData(): LandingData {
-  const mockListings: CarListing[] = [
-    {
-      id: 'mock-1',
-      listing_number: 'CL-001',
-      brand_id: '1',
-      model_id: '1',
-      title: 'Toyota Avanza 2022 Veloz',
-      description: 'Mobil keluarga terbaru dengan fitur lengkap',
-      price_cash: 225000000,
-      year: 2022,
-      mileage: 15000,
-      fuel: 'bensin',
-      transmission: 'automatic',
-      body_type: 'mpv',
-      transaction_type: 'jual',
-      condition: 'bekas',
-      status: 'active',
-      city: 'Jakarta Selatan',
-      province: 'DKI Jakarta',
-      view_count: 245,
-      price_negotiable: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      brand: { id: '1', name: 'Toyota', slug: 'toyota', logo_url: null, country: null, is_popular: true, display_order: 0, created_at: '' },
-      model: { id: '1', brand_id: '1', name: 'Avanza', slug: 'avanza', body_type: 'mpv', is_popular: true, display_order: 0, created_at: '' },
-      images: [{
-        id: 'img-1',
-        car_listing_id: 'mock-1',
-        image_url: 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=800&q=80',
-        thumbnail_url: null,
-        caption: null,
-        is_primary: true,
-        display_order: 0,
-        created_at: ''
-      }]
-    }
-  ]
-
+// Empty state for error cases
+function getEmptyState(): LandingData {
   return {
-    categories: defaultCategories,
-    featuredListings: mockListings,
-    premiumBoostedListings: mockListings.slice(0, 4),
-    highlightedListingIds: mockListings.slice(0, 4).map(l => l.id),
-    latestListings: mockListings,
-    popularListings: mockListings,
+    categories: fallbackCategories,
+    featuredListings: [],
+    premiumBoostedListings: [],
+    highlightedListingIds: [],
+    latestListings: [],
+    popularListings: [],
     activeAuctions: []
+  }
+}
+
+// Get featured listings only
+export async function getFeaturedaListings(): Promise<CarListing[]> {
+  try {
+    const { data, error } = await supabase
+      .from('car_listings')
+      .select(`
+        *,
+        brand:brands!car_listings_brand_id_fkey(id, name, slug, logo_url, country, is_popular, display_order, created_at),
+        model:car_models!car_listings_model_id_fkey(id, brand_id, name, slug, body_type, is_popular, display_order, created_at),
+        images:car_images(id, car_listing_id, image_url, thumbnail_url, caption, is_primary, display_order, created_at)
+      `)
+      .eq('status', 'active')
+      .eq('is_featured', true)
+      .limit(10)
+
+    if (error) throw error
+    return (data as CarListing[]) || []
+  } catch (error) {
+    console.error('Error fetching featured listings:', error)
+    return []
+  }
+}
+
+// Get popular listings only
+export async function getPopularListings(): Promise<CarListing[]> {
+  try {
+    const { data, error } = await supabase
+      .from('car_listings')
+      .select(`
+        *,
+        brand:brands!car_listings_brand_id_fkey(id, name, slug, logo_url, country, is_popular, display_order, created_at),
+        model:car_models!car_listings_model_id_fkey(id, brand_id, name, slug, body_type, is_popular, display_order, created_at),
+        images:car_images(id, car_listing_id, image_url, thumbnail_url, caption, is_primary, display_order, created_at)
+      `)
+      .eq('status', 'active')
+      .order('view_count', { ascending: false })
+      .limit(10)
+
+    if (error) throw error
+    return (data as CarListing[]) || []
+  } catch (error) {
+    console.error('Error fetching popular listings:', error)
+    return []
+  }
+}
+
+// Get listings by body type
+export async function getListingsByBodyType(bodyType: string): Promise<CarListing[]> {
+  try {
+    const { data, error } = await supabase
+      .from('car_listings')
+      .select(`
+        *,
+        brand:brands!car_listings_brand_id_fkey(id, name, slug, logo_url, country, is_popular, display_order, created_at),
+        model:car_models!car_listings_model_id_fkey(id, brand_id, name, slug, body_type, is_popular, display_order, created_at),
+        images:car_images(id, car_listing_id, image_url, thumbnail_url, caption, is_primary, display_order, created_at)
+      `)
+      .eq('status', 'active')
+      .eq('body_type', bodyType)
+      .limit(20)
+
+    if (error) throw error
+    return (data as CarListing[]) || []
+  } catch (error) {
+    console.error('Error fetching listings by body type:', error)
+    return []
   }
 }

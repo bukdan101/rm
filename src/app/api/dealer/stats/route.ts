@@ -1,61 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {}
-          },
-        },
-      }
-    )
-
+    const supabase = await createClient()
+    
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Unauthorized - Silakan login terlebih dahulu' 
+      }, { status: 401 })
     }
 
     // Get dealer info
-    const { data: dealer } = await supabase
+    const { data: dealer, error: dealerError } = await supabase
       .from('dealers')
-      .select('id')
+      .select('id, name, status')
       .eq('owner_id', user.id)
       .single()
 
-    if (!dealer) {
-      // Return mock stats for non-dealer users
-      return NextResponse.json({
-        success: true,
-        stats: {
-          totalInventory: 24,
-          activeListings: 18,
-          soldThisMonth: 8,
-          totalViews: 12450,
-          totalInquiries: 156,
-          avgRating: 4.8,
-          totalReviews: 156,
-          monthlyRevenue: 1250000000,
-          dealerMarketplaceListings: 12,
-          publicMarketplaceListings: 18,
-          pendingInquiries: 12,
-          salesData: [3, 5, 4, 8, 6, 9, 7, 10, 8, 12, 9, 8],
-        },
-      })
+    if (dealerError || !dealer) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Dealer tidak ditemukan - Silakan daftar sebagai dealer terlebih dahulu',
+        isDealer: false
+      }, { status: 404 })
+    }
+
+    // Check if dealer is verified
+    if (dealer.status !== 'verified' && dealer.status !== 'active') {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Dealer belum terverifikasi',
+        dealerStatus: dealer.status
+      }, { status: 403 })
     }
 
     // Get total inventory count
@@ -70,6 +50,13 @@ export async function GET(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('dealer_id', dealer.id)
       .eq('status', 'active')
+
+    // Get pending listings
+    const { count: pendingListings } = await supabase
+      .from('car_listings')
+      .select('*', { count: 'exact', head: true })
+      .eq('dealer_id', dealer.id)
+      .eq('status', 'pending')
 
     // Get sold this month
     const firstDayOfMonth = new Date()
@@ -96,50 +83,103 @@ export async function GET(request: NextRequest) {
       .from('car_listings')
       .select('*', { count: 'exact', head: true })
       .eq('dealer_id', dealer.id)
-      .eq('dealer_marketplace_active', true)
+      .eq('visibility', 'dealer_only')
 
     // Get public marketplace listings
     const { count: publicMarketplaceListings } = await supabase
       .from('car_listings')
       .select('*', { count: 'exact', head: true })
       .eq('dealer_id', dealer.id)
-      .eq('public_marketplace_active', true)
+      .eq('visibility', 'public')
+
+    // Get total inquiries (from conversations)
+    const { count: totalInquiries } = await supabase
+      .from('conversations')
+      .select('*', { count: 'exact', head: true })
+      .eq('seller_id', user.id)
+
+    // Get pending inquiries
+    const { count: pendingInquiries } = await supabase
+      .from('conversations')
+      .select('*', { count: 'exact', head: true })
+      .eq('seller_id', user.id)
+      .eq('status', 'pending')
+
+    // Get dealer offers received
+    const { count: totalOffers } = await supabase
+      .from('dealer_offers')
+      .select('*', { count: 'exact', head: true })
+      .eq('dealer_id', dealer.id)
+
+    // Calculate monthly revenue from sold cars
+    const { data: soldCars } = await supabase
+      .from('car_listings')
+      .select('price_cash')
+      .eq('dealer_id', dealer.id)
+      .eq('status', 'sold')
+      .gte('updated_at', firstDayOfMonth.toISOString())
+
+    const monthlyRevenue = soldCars?.reduce((sum, car) => sum + (car.price_cash || 0), 0) || 0
+
+    // Get sales data for last 12 months
+    const salesData: number[] = []
+    for (let i = 11; i >= 0; i--) {
+      const monthStart = new Date()
+      monthStart.setMonth(monthStart.getMonth() - i)
+      monthStart.setDate(1)
+      monthStart.setHours(0, 0, 0, 0)
+      
+      const monthEnd = new Date(monthStart)
+      monthEnd.setMonth(monthEnd.getMonth() + 1)
+      
+      const { count: monthSales } = await supabase
+        .from('car_listings')
+        .select('*', { count: 'exact', head: true })
+        .eq('dealer_id', dealer.id)
+        .eq('status', 'sold')
+        .gte('updated_at', monthStart.toISOString())
+        .lt('updated_at', monthEnd.toISOString())
+      
+      salesData.push(monthSales || 0)
+    }
+
+    // Get dealer rating
+    const { data: reviews } = await supabase
+      .from('dealer_reviews')
+      .select('rating')
+      .eq('dealer_id', dealer.id)
+
+    const totalReviews = reviews?.length || 0
+    const avgRating = reviews && reviews.length > 0 
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length 
+      : 0
 
     return NextResponse.json({
       success: true,
       stats: {
+        dealerId: dealer.id,
+        dealerName: dealer.name,
         totalInventory: totalInventory || 0,
         activeListings: activeListings || 0,
+        pendingListings: pendingListings || 0,
         soldThisMonth: soldThisMonth || 0,
-        totalViews: totalViews,
-        totalInquiries: 156,
-        avgRating: 4.8,
-        totalReviews: 156,
-        monthlyRevenue: 1250000000,
+        totalViews,
+        totalInquiries: totalInquiries || 0,
+        pendingInquiries: pendingInquiries || 0,
+        totalOffers: totalOffers || 0,
+        avgRating: Math.round(avgRating * 10) / 10,
+        totalReviews,
+        monthlyRevenue,
         dealerMarketplaceListings: dealerMarketplaceListings || 0,
         publicMarketplaceListings: publicMarketplaceListings || 0,
-        pendingInquiries: 12,
-        salesData: [3, 5, 4, 8, 6, 9, 7, 10, 8, 12, 9, 8],
+        salesData,
       },
     })
   } catch (error) {
     console.error('Dealer stats error:', error)
-    return NextResponse.json({
-      success: true,
-      stats: {
-        totalInventory: 24,
-        activeListings: 18,
-        soldThisMonth: 8,
-        totalViews: 12450,
-        totalInquiries: 156,
-        avgRating: 4.8,
-        totalReviews: 156,
-        monthlyRevenue: 1250000000,
-        dealerMarketplaceListings: 12,
-        publicMarketplaceListings: 18,
-        pendingInquiries: 12,
-        salesData: [3, 5, 4, 8, 6, 9, 7, 10, 8, 12, 9, 8],
-      },
-    })
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Terjadi kesalahan server' 
+    }, { status: 500 })
   }
 }

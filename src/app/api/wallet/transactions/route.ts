@@ -8,7 +8,10 @@ export async function GET(request: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
-      return NextResponse.json({ transactions: [], balance: 0 })
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Unauthorized - Silakan login terlebih dahulu' 
+      }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -16,37 +19,47 @@ export async function GET(request: Request) {
     const type = searchParams.get('type') // 'purchase', 'usage', 'bonus', etc.
 
     // Get user's wallet
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('id, balance')
+    const { data: wallet, error: walletError } = await supabase
+      .from('user_credits')
+      .select('id, balance, total_earned, total_spent')
       .eq('user_id', user.id)
       .single()
 
-    if (!wallet) {
+    if (walletError || !wallet) {
       // Create wallet if not exists
-      const { data: newWallet } = await supabase
-        .from('wallets')
+      const { data: newWallet, error: createError } = await supabase
+        .from('user_credits')
         .insert({
           user_id: user.id,
           balance: 0,
           total_earned: 0,
           total_spent: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         })
         .select()
         .single()
 
+      if (createError) {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Gagal membuat dompet pengguna' 
+        }, { status: 500 })
+      }
+
       return NextResponse.json({
+        success: true,
         transactions: [],
         balance: 0,
-        walletId: newWallet?.id,
+        walletId: newWallet.id,
       })
     }
 
     // Build query for transactions
     let query = supabase
-      .from('wallet_transactions')
+      .from('credit_transactions')
       .select('*')
-      .eq('wallet_id', wallet.id)
+      .eq('user_credit_id', wallet.id)
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -54,14 +67,14 @@ export async function GET(request: Request) {
       query = query.eq('type', type)
     }
 
-    const { data: transactions, error } = await query
+    const { data: transactions, error: txError } = await query
 
-    if (error) {
-      console.error('Error fetching transactions:', error)
+    if (txError) {
+      console.error('Error fetching transactions:', txError)
       return NextResponse.json({ 
-        transactions: [], 
-        balance: wallet.balance || 0 
-      })
+        success: false, 
+        error: 'Gagal mengambil data transaksi' 
+      }, { status: 500 })
     }
 
     // Transform for frontend
@@ -79,12 +92,18 @@ export async function GET(request: Request) {
     }))
 
     return NextResponse.json({
+      success: true,
       transactions: transformedTransactions,
       balance: wallet.balance || 0,
+      totalEarned: wallet.total_earned || 0,
+      totalSpent: wallet.total_spent || 0,
       walletId: wallet.id,
     })
   } catch (error) {
     console.error('Server error:', error)
-    return NextResponse.json({ transactions: [], balance: 0 })
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Terjadi kesalahan server' 
+    }, { status: 500 })
   }
 }

@@ -1,44 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
 
 // GET - Fetch user wallet/credits balance
 export async function GET(request: NextRequest) {
   try {
-    // Get user ID from query or auth
-    const userId = request.headers.get('x-user-id')
-
-    if (!userId) {
-      // Try to get from auth header
-      const authHeader = request.headers.get('authorization')
-      if (!authHeader?.startsWith('Bearer ')) {
-        return NextResponse.json({
-          success: true,
-          credits: {
-            balance: 0,
-            total_earned: 0,
-            total_spent: 0
-          }
-        })
-      }
+    const supabase = await createClient()
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Unauthorized - Silakan login terlebih dahulu' 
+      }, { status: 401 })
     }
 
-    // For now, return a mock balance for demo
-    // In production, fetch from user_credits table
+    // Get user credits from database
     const { data: userCredit, error } = await supabase
       .from('user_credits')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .maybeSingle()
 
     if (error) {
       console.error('Error fetching user credits:', error)
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Gagal mengambil data kredit' 
+      }, { status: 500 })
     }
 
-    // If no credit record exists, return default
+    // If no credit record exists, create one
     if (!userCredit) {
+      const { data: newCredit, error: createError } = await supabase
+        .from('user_credits')
+        .insert({
+          user_id: user.id,
+          balance: 0,
+          total_earned: 0,
+          total_spent: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single()
+
+      if (createError) {
+        console.error('Error creating user credits:', createError)
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Gagal membuat data kredit' 
+        }, { status: 500 })
+      }
+
       return NextResponse.json({
         success: true,
         credits: {
+          id: newCredit.id,
           balance: 0,
           total_earned: 0,
           total_spent: 0
@@ -49,6 +67,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       credits: {
+        id: userCredit.id,
         balance: userCredit.balance || 0,
         total_earned: userCredit.total_earned || 0,
         total_spent: userCredit.total_spent || 0
@@ -56,26 +75,33 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Wallet API error:', error)
-    return NextResponse.json({
-      success: true,
-      credits: {
-        balance: 0,
-        total_earned: 0,
-        total_spent: 0
-      }
-    })
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Terjadi kesalahan server' 
+    }, { status: 500 })
   }
 }
 
 // POST - Add credits to wallet (after purchase)
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { userId, amount, packageId, paymentMethod, transactionId } = body
+    const supabase = await createClient()
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Unauthorized - Silakan login terlebih dahulu' 
+      }, { status: 401 })
+    }
 
-    if (!userId || !amount) {
+    const body = await request.json()
+    const { amount, packageId, paymentMethod, transactionId } = body
+
+    if (!amount || amount <= 0) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: 'Jumlah kredit tidak valid' },
         { status: 400 }
       )
     }
@@ -84,11 +110,15 @@ export async function POST(request: NextRequest) {
     const { data: existingCredit, error: fetchError } = await supabase
       .from('user_credits')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .maybeSingle()
 
     if (fetchError) {
       console.error('Error checking existing credits:', fetchError)
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Gagal memeriksa saldo' 
+      }, { status: 500 })
     }
 
     let newBalance = amount
@@ -115,7 +145,7 @@ export async function POST(request: NextRequest) {
       const { data, error } = await supabase
         .from('user_credits')
         .insert({
-          user_id: userId,
+          user_id: user.id,
           balance: amount,
           total_earned: amount,
           total_spent: 0,
@@ -138,19 +168,110 @@ export async function POST(request: NextRequest) {
         amount: amount,
         balance_before: existingCredit?.balance || 0,
         balance_after: newBalance,
-        description: `Purchase via ${paymentMethod}`,
+        description: `Pembelian via ${paymentMethod || 'manual'} - Package: ${packageId || 'N/A'}`,
         reference_id: transactionId || packageId
       })
 
     return NextResponse.json({
       success: true,
       credits: result,
-      message: 'Credits added successfully'
+      message: 'Kredit berhasil ditambahkan'
     })
   } catch (error) {
     console.error('Error adding credits:', error)
     return NextResponse.json(
-      { success: false, error: 'Failed to add credits' },
+      { success: false, error: 'Gagal menambahkan kredit' },
+      { status: 500 }
+    )
+  }
+}
+
+// PUT - Deduct credits (for internal use)
+export async function PUT(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Unauthorized' 
+      }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { amount, description, referenceId, referenceType } = body
+
+    if (!amount || amount <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'Jumlah kredit tidak valid' },
+        { status: 400 }
+      )
+    }
+
+    // Get current balance
+    const { data: existingCredit, error: fetchError } = await supabase
+      .from('user_credits')
+      .select('*')
+      .eq('user_id', user.id)
+      .single()
+
+    if (fetchError || !existingCredit) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Data kredit tidak ditemukan' 
+      }, { status: 404 })
+    }
+
+    if (existingCredit.balance < amount) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Saldo tidak mencukupi',
+        currentBalance: existingCredit.balance,
+        requestedAmount: amount
+      }, { status: 400 })
+    }
+
+    const newBalance = existingCredit.balance - amount
+
+    // Update balance
+    const { data: result, error: updateError } = await supabase
+      .from('user_credits')
+      .update({
+        balance: newBalance,
+        total_spent: existingCredit.total_spent + amount,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', existingCredit.id)
+      .select()
+      .single()
+
+    if (updateError) throw updateError
+
+    // Record transaction
+    await supabase
+      .from('credit_transactions')
+      .insert({
+        user_credit_id: existingCredit.id,
+        type: 'usage',
+        amount: -amount, // Negative for deduction
+        balance_before: existingCredit.balance,
+        balance_after: newBalance,
+        description: description || 'Penggunaan kredit',
+        reference_id: referenceId,
+        reference_type: referenceType
+      })
+
+    return NextResponse.json({
+      success: true,
+      credits: result,
+      message: 'Kredit berhasil dikurangi'
+    })
+  } catch (error) {
+    console.error('Error deducting credits:', error)
+    return NextResponse.json(
+      { success: false, error: 'Gagal mengurangi kredit' },
       { status: 500 }
     )
   }

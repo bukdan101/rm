@@ -14,7 +14,7 @@ interface AuthState {
 }
 
 interface UseAuthReturn extends AuthState {
-  signInWithGoogle: () => Promise<{ error: Error | null }>
+  signInWithGoogle: (redirectPath?: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<{ error: Error | null }>
   refreshProfile: () => Promise<void>
   isAdmin: boolean
@@ -150,12 +150,16 @@ export function useAuth(): UseAuthReturn {
   }, [fetchProfile])
 
   // Sign in with Google
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithGoogle = useCallback(async (redirectPath?: string) => {
     try {
+      const callbackUrl = redirectPath 
+        ? `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`
+        : `${window.location.origin}/auth/callback`
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: callbackUrl,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',

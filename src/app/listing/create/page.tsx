@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { useAuth } from '@/hooks/useAuth'
 import { 
   Shield, 
   CheckCircle, 
@@ -47,32 +48,44 @@ const LISTING_CREDIT_COST = 1
 
 export default function CreateListingPage() {
   const router = useRouter()
+  const { user, profile, loading: authLoading } = useAuth()
   
   // State
-  const [loading, setLoading] = useState(true)
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const [kycStatus, setKycStatus] = useState<KycStatus>('not_submitted')
   const [kycData, setKycData] = useState<KycData | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   // Credit state
   const [credits, setCredits] = useState<UserCredits | null>(null)
   const [creditLoading, setCreditLoading] = useState(true)
   
-  // Mock user ID for demo (in production, get from auth)
+  // Check auth and redirect if needed
   useEffect(() => {
-    // For demo, create a mock user ID
-    const mockUserId = 'demo-user-' + uuidv4().slice(0, 8)
-    setUserId(mockUserId)
-  }, [])
-
+    if (authLoading) return
+    
+    if (!user) {
+      // Not logged in - redirect to auth with callback
+      router.push(`/auth?redirect=/listing/create`)
+      return
+    }
+    
+    // Check if user needs onboarding (new user without complete profile)
+    if (!profile?.full_name && !profile?.phone) {
+      router.push(`/onboarding?redirect=/listing/create`)
+      return
+    }
+    
+    setCheckingAuth(false)
+  }, [user, profile, authLoading, router])
+  
   // Check KYC status
   useEffect(() => {
     async function checkKycStatus() {
-      if (!userId) return
+      if (!user?.id || checkingAuth) return
       
       try {
-        const res = await fetch(`/api/kyc?user_id=${userId}`)
+        const res = await fetch(`/api/kyc?user_id=${user.id}`)
         const data = await res.json()
         
         if (data.success && data.kyc) {
@@ -84,17 +97,17 @@ export default function CreateListingPage() {
       } catch (error) {
         console.error('Error checking KYC status:', error)
         setKycStatus('not_submitted')
-      } finally {
-        setLoading(false)
       }
     }
     
     checkKycStatus()
-  }, [userId])
+  }, [user?.id, checkingAuth])
   
   // Fetch credits
   useEffect(() => {
     async function fetchCredits() {
+      if (!user?.id || checkingAuth) return
+      
       try {
         setCreditLoading(true)
         const res = await fetch('/api/credits/balance')
@@ -111,7 +124,7 @@ export default function CreateListingPage() {
     }
     
     fetchCredits()
-  }, [])
+  }, [user?.id, checkingAuth])
 
   // Handle KYC submit
   const handleKycSubmit = async (data: unknown) => {
@@ -119,7 +132,7 @@ export default function CreateListingPage() {
       const res = await fetch('/api/kyc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, user_id: userId })
+        body: JSON.stringify({ ...data, user_id: user?.id })
       })
       
       const result = await res.json()
@@ -174,7 +187,7 @@ export default function CreateListingPage() {
         body: JSON.stringify({
           id: listingId,
           listing_number: listingNumber,
-          user_id: userId,
+          user_id: user?.id,
           ...data,
           status: 'pending'
         })
@@ -214,12 +227,11 @@ export default function CreateListingPage() {
   }
   
   // Check if user can post
-  const canPost = kycStatus === 'approved' && (credits?.balance || 0) >= LISTING_CREDIT_COST
   const hasKyc = kycStatus === 'approved'
   const hasCredits = (credits?.balance || 0) >= LISTING_CREDIT_COST
 
   // Loading state
-  if (loading || creditLoading) {
+  if (authLoading || checkingAuth || creditLoading) {
     return (
       <MainLayout>
         <div className="container mx-auto px-4 py-8">
@@ -405,7 +417,7 @@ export default function CreateListingPage() {
             </Card>
             
             <ListingForm
-              userId={userId || ''}
+              userId={user?.id || ''}
               onSubmit={handleListingSubmit}
               isSubmitting={isSubmitting}
               disabled={!hasCredits}
@@ -417,7 +429,7 @@ export default function CreateListingPage() {
             {/* KYC Form */}
             <div className="lg:col-span-2">
               <KYCForm
-                userId={userId || ''}
+                userId={user?.id || ''}
                 existingKyc={kycData}
                 onSubmit={handleKycSubmit}
               />

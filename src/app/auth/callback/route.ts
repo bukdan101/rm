@@ -6,8 +6,8 @@ export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
   const origin = requestUrl.origin
-  // Default redirect to dashboard after login
-  const redirect = requestUrl.searchParams.get('redirect') || '/dashboard'
+  // Get redirect from URL (passed from OAuth callback)
+  const redirectParam = requestUrl.searchParams.get('redirect')
 
   if (code) {
     const supabase = await createClient()
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         // Check if profile exists
         const { data: existingProfile } = await supabase
           .from('profiles')
-          .select('id, role')
+          .select('id, role, full_name, phone')
           .eq('id', user.id)
           .single()
 
@@ -53,12 +53,20 @@ export async function GET(request: NextRequest) {
             console.error('Error creating profile:', profileError)
           }
           
-          // Redirect new users to onboarding
+          // Redirect new users to onboarding (preserve original redirect if any)
           if (!profileError && newProfile) {
-            return NextResponse.redirect(`${origin}/onboarding`)
+            const onboardingRedirect = redirectParam 
+              ? `/onboarding?redirect=${encodeURIComponent(redirectParam)}`
+              : '/onboarding'
+            return NextResponse.redirect(`${origin}${onboardingRedirect}`)
           }
         } else {
-          // Redirect based on role
+          // If there's a specific redirect, use it (e.g., /listing/create)
+          if (redirectParam) {
+            return NextResponse.redirect(`${origin}${redirectParam}`)
+          }
+          
+          // Otherwise, redirect based on role
           const role = existingProfile.role
           if (role === 'admin') {
             return NextResponse.redirect(`${origin}/admin`)
@@ -73,6 +81,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // URL to redirect to after sign in process completes
-  return NextResponse.redirect(`${origin}${redirect}`)
+  // Default redirect to dashboard after sign in
+  return NextResponse.redirect(`${origin}/dashboard`)
 }

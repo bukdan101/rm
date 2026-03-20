@@ -1,564 +1,621 @@
-import { notFound } from 'next/navigation'
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
-import { supabase } from '@/lib/supabase'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  MapPin, Calendar, Gauge, Fuel, Cog, Car, Users, Palette,
-  Phone, MessageCircle, Heart, Share2, Shield, CheckCircle,
-  AlertTriangle, Clock, Eye, Star, ChevronLeft, ChevronRight,
-  FileText, Settings, Zap, Thermometer, Camera, Wrench,
-  Building2, User, ExternalLink
-} from 'lucide-react'
-import { InspectionReport } from '@/components/listing/InspectionReport'
+import { MainLayout } from '@/components/layout/MainLayout'
 import { ImageGallery } from '@/components/listing/ImageGallery'
+import { SellerCard } from '@/components/listing/SellerCard'
+import { ProductSpecs } from '@/components/listing/ProductSpecs'
+import { ReviewSection } from '@/components/listing/ReviewSection'
+import { RelatedProducts } from '@/components/listing/RelatedProducts'
+import { SocialShareButtons } from '@/components/listing/SocialShareButtons'
+import { AdBanner } from '@/components/ads/AdBanner'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { toast } from 'sonner'
+import {
+  MapPin, Eye, Clock, Heart, Shield, Phone, Package, Tag, Sparkles,
+  CheckCircle, AlertTriangle, MessageCircle
+} from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
+import { id } from 'date-fns/locale'
+import { cn } from '@/lib/utils'
 
-interface PageProps {
-  params: Promise<{ slug: string }>
+// ===== Types =====
+interface ListingImage {
+  id: string
+  image_url: string
+  is_primary: boolean
+  display_order: number
 }
 
-async function getListingData(slug: string) {
-  try {
-    // Fetch listing by slug or id
-    const { data: listing, error } = await supabase
-      .from('car_listings')
-      .select(`
-        *,
-        brand:brands ( id, name, slug, logo_url ),
-        model:car_models ( id, name, slug, body_type ),
-        variant:car_variants ( id, name, transmission, fuel_type ),
-        exterior_color:car_colors!car_listings_exterior_color_id_fkey ( id, name, hex_code ),
-        interior_color:car_colors!car_listings_interior_color_id_fkey ( id, name, hex_code ),
-        images:car_images ( id, image_url, is_primary, display_order ),
-        documents:car_documents ( * ),
-        features:car_features ( * ),
-        rental_prices:car_rental_prices ( * )
-      `)
-      .or(`slug.eq.${slug},id.eq.${slug}`)
-      .is('deleted_at', null)
-      .single()
+interface Brand {
+  id: string
+  name: string
+  slug: string
+  logo_url?: string
+}
 
-    if (error || !listing) {
-      return null
+interface Model {
+  id: string
+  name: string
+  slug: string
+  body_type?: string
+}
+
+interface Variant {
+  id: string
+  name: string
+  transmission?: string
+  fuel_type?: string
+}
+
+interface Color {
+  id: string
+  name: string
+  hex_code?: string
+}
+
+interface Seller {
+  id: string
+  full_name?: string
+  phone?: string
+  avatar_url?: string
+  is_verified?: boolean
+  city?: string
+  province?: string
+}
+
+interface Dealer {
+  id: string
+  name: string
+  slug: string
+  logo_url?: string
+  phone?: string
+  whatsapp?: string
+  verified?: boolean
+  rating?: number
+  review_count?: number
+  subscription_tier?: string
+  address?: string
+}
+
+interface Inspection {
+  id: string
+  inspector_name?: string
+  overall_score?: number
+  risk_level?: string
+  accident_free?: boolean
+  flood_free?: boolean
+  fire_free?: boolean
+  status: string
+  stats?: {
+    total: number
+    passed: number
+    needRepair: number
+    notRelated: number
+    passedPercentage: number
+  }
+}
+
+interface Listing {
+  id: string
+  slug?: string
+  title: string
+  description?: string
+  price_cash: number
+  price_credit?: number
+  price_negotiable?: boolean
+  mileage?: number
+  condition: string
+  transmission?: string
+  fuel?: string
+  body_type?: string
+  city?: string
+  province?: string
+  phone?: string
+  whatsapp?: string
+  status: string
+  view_count: number
+  favorite_count?: number
+  is_featured?: boolean
+  created_at: string
+  year?: number
+  engine_capacity?: number
+  seat_count?: number
+  user_id?: string
+  seller_id?: string
+  dealer_id?: string
+  brand?: Brand
+  model?: Model
+  variant?: Variant
+  exterior_color?: Color
+  interior_color?: Color
+  images?: ListingImage[]
+  seller?: Seller
+  dealer?: Dealer
+  inspection?: Inspection | null
+  features?: Record<string, boolean>
+  documents?: {
+    license_plate?: string
+    stnk_status?: string
+    bpkb_status?: string
+    sell_with_plate?: boolean
+  }
+}
+
+const conditionConfig: Record<string, { label: string; color: string; description: string }> = {
+  baru: { label: 'Baru', color: 'bg-emerald-500 text-white', description: 'Kendaraan baru, belum pernah dipakai' },
+  like_new: { label: 'Seperti Baru', color: 'bg-blue-500 text-white', description: 'Bekas tapi masih sangat bagus' },
+  good: { label: 'Bagus', color: 'bg-amber-500 text-white', description: 'Kondisi baik, ada tanda pemakaian wajar' },
+  fair: { label: 'Cukup', color: 'bg-gray-500 text-white', description: 'Masih berfungsi dengan baik' },
+  bekas: { label: 'Bekas', color: 'bg-amber-500 text-white', description: 'Kendaraan bekas' },
+}
+
+export default function ListingDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const slug = params.slug as string
+
+  const [listing, setListing] = useState<Listing | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [isSaved, setIsSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState('deskripsi')
+
+  useEffect(() => {
+    if (slug) {
+      fetchListing()
     }
+  }, [slug])
 
-    // Get seller info
-    let seller = null
-    if (listing.seller_id) {
-      const { data: sellerData } = await supabase
-        .from('profiles')
-        .select('id, full_name, phone, avatar_url, is_verified, city, province')
-        .eq('id', listing.seller_id)
-        .single()
-      seller = sellerData
-    }
+  const fetchListing = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch(`/api/listings/${slug}`)
+      const data = await response.json()
 
-    // Get dealer info
-    let dealer = null
-    if (listing.dealer_id) {
-      const { data: dealerData } = await supabase
-        .from('dealers')
-        .select(`
-          id, name, slug, logo_url, cover_url, description,
-          phone, whatsapp, email, website, instagram,
-          address, verified, rating, review_count, subscription_tier
-        `)
-        .eq('id', listing.dealer_id)
-        .single()
-      dealer = dealerData
-    }
-
-    // Get inspection data
-    const { data: inspection } = await supabase
-      .from('car_inspections')
-      .select(`
-        id,
-        inspector_name,
-        inspection_place,
-        inspection_date,
-        total_points,
-        passed_points,
-        accident_free,
-        flood_free,
-        fire_free,
-        risk_level,
-        overall_score,
-        status,
-        created_at,
-        results:inspection_results(
-          id,
-          status,
-          notes,
-          image_url,
-          item:inspection_items(id, category, name, description, display_order)
-        )
-      `)
-      .eq('car_listing_id', listing.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    // Group inspection by category
-    let inspectionByCategory = null
-    if (inspection && inspection.results) {
-      const grouped: Record<string, any[]> = {}
-      for (const result of inspection.results) {
-        const category = result.item?.category || 'Lainnya'
-        if (!grouped[category]) {
-          grouped[category] = []
-        }
-        grouped[category].push(result)
+      if (data.success && data.listing) {
+        setListing(data.listing)
+        setIsSaved(data.listing.isSaved || false)
+      } else {
+        setListing(null)
       }
-      inspectionByCategory = grouped
+    } catch (err) {
+      console.error('Failed to fetch listing:', err)
+      setListing(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatPrice = (price: number | null | undefined) => {
+    if (!price) return 'N/A'
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(price)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setIsSaved(!isSaved)
+    toast.success(isSaved ? 'Dihapus dari wishlist' : 'Disimpan ke wishlist')
+    setSaving(false)
+  }
+
+  const handleWhatsApp = () => {
+    const phone = listing?.whatsapp || listing?.phone || listing?.seller?.phone || listing?.dealer?.phone
+    if (!phone) {
+      toast.error('Nomor WhatsApp tidak tersedia')
+      return
     }
 
-    // Calculate stats
-    let inspectionStats = null
-    if (inspection && inspection.results) {
-      const total = inspection.results.length
-      const passed = inspection.results.filter((r: any) => r.status === 'baik' || r.status === 'istimewa').length
-      const needRepair = inspection.results.filter((r: any) => r.status === 'perlu_perbaikan').length
-      const notRelated = inspection.results.filter((r: any) => r.status === 'tidak_berkaitan').length
+    let cleanPhone = phone.replace(/\D/g, '')
+    if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.substring(1)
+    else if (!cleanPhone.startsWith('62')) cleanPhone = '62' + cleanPhone
 
-      inspectionStats = {
-        total,
-        passed,
-        needRepair,
-        notRelated,
-        passedPercentage: total > 0 ? Math.round((passed / total) * 100) : 0
-      }
-    }
-
-    return {
-      listing,
-      seller,
-      dealer,
-      inspection: inspection ? {
-        ...inspection,
-        results_by_category: inspectionByCategory,
-        stats: inspectionStats
-      } : null
-    }
-  } catch (error) {
-    console.error('Error fetching listing:', error)
-    return null
-  }
-}
-
-function formatPrice(price: number | null) {
-  if (!price) return 'N/A'
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(price)
-}
-
-function formatMileage(km: number | null) {
-  if (!km) return 'N/A'
-  return new Intl.NumberFormat('id-ID').format(km) + ' km'
-}
-
-function getConditionLabel(condition: string) {
-  const labels: Record<string, string> = {
-    'baru': 'Baru',
-    'bekas': 'Bekas',
-    'sedang': 'Bekas',
-    'istimewa': 'Istimewa'
-  }
-  return labels[condition] || condition
-}
-
-function getFuelLabel(fuel: string) {
-  const labels: Record<string, string> = {
-    'bensin': 'Bensin',
-    'diesel': 'Diesel',
-    'electric': 'Listrik',
-    'hybrid': 'Hybrid',
-    'petrol_hybrid': 'Hybrid Bensin'
-  }
-  return labels[fuel] || fuel
-}
-
-function getTransmissionLabel(trans: string) {
-  const labels: Record<string, string> = {
-    'automatic': 'Otomatis',
-    'manual': 'Manual'
-  }
-  return labels[trans] || trans
-}
-
-export default async function ListingDetailPage({ params }: PageProps) {
-  const { slug } = await params
-  const data = await getListingData(slug)
-
-  if (!data) {
-    notFound()
+    const message = encodeURIComponent(
+      `Halo kak, saya tertarik dengan mobil "${listing?.title}" yang dijual seharga ${formatPrice(listing?.price_cash)}. Apakah masih tersedia? Terima kasih 🙏`
+    )
+    window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank')
   }
 
-  const { listing, seller, dealer, inspection } = data
+  // Loading state
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="container mx-auto px-4 py-6">
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2 space-y-4">
+              <Skeleton className="aspect-video w-full rounded-xl" />
+              <div className="flex gap-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="w-20 h-20 rounded-lg" />
+                ))}
+              </div>
+              <Skeleton className="h-10 w-3/4" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+            <div className="space-y-4">
+              <Skeleton className="h-64 w-full rounded-xl" />
+              <Skeleton className="h-48 w-full rounded-xl" />
+            </div>
+          </div>
+        </div>
+      </MainLayout>
+    )
+  }
 
+  // Not found
+  if (!listing) {
+    return (
+      <MainLayout>
+        <div className="container mx-auto px-4 py-12 text-center">
+          <div className="max-w-md mx-auto">
+            <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-muted flex items-center justify-center">
+              <Package className="h-12 w-12 text-muted-foreground" />
+            </div>
+            <h1 className="text-2xl font-bold mb-2">Iklan tidak ditemukan</h1>
+            <p className="text-muted-foreground mb-6">Iklan yang Anda cari mungkin sudah tidak tersedia.</p>
+            <Button onClick={() => router.push('/marketplace')}>Kembali ke Marketplace</Button>
+          </div>
+        </div>
+      </MainLayout>
+    )
+  }
+
+  const conditionData = conditionConfig[listing.condition] || conditionConfig.bekas
+  const location = [listing.city, listing.province].filter(Boolean).join(', ') || 'Indonesia'
   const title = `${listing.brand?.name || ''} ${listing.model?.name || ''} ${listing.year || ''} ${listing.variant?.name || ''}`.trim()
-  const primaryImage = listing.images?.find((img: any) => img.is_primary)?.image_url || listing.images?.[0]?.image_url
-  const displaySeller = dealer || seller
 
-  // Sort images by display_order
-  const sortedImages = listing.images?.sort((a: any, b: any) => (a.display_order || 0) - (b.display_order || 0)) || []
+  // Sort images
+  const sortedImages = listing.images?.sort((a, b) => (a.display_order || 0) - (b.display_order || 0)) || []
+
+  // Seller data
+  const sellerData = {
+    id: listing.seller?.id || listing.dealer?.id || '',
+    name: listing.dealer?.name || listing.seller?.full_name || 'Penjual',
+    avatar_url: listing.dealer?.logo_url || listing.seller?.avatar_url || null,
+    city: listing.dealer?.address || listing.seller?.city || listing.city || null,
+    province: listing.seller?.province || listing.province || null,
+    is_verified: listing.dealer?.verified || listing.seller?.is_verified || false,
+    average_rating: listing.dealer?.rating || 0,
+    total_reviews: listing.dealer?.review_count || 0,
+    total_listings: 1,
+    sold_count: 0,
+    phone: listing.dealer?.phone || listing.dealer?.whatsapp || listing.seller?.phone || listing.phone || null,
+    created_at: listing.created_at,
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Breadcrumb */}
-      <div className="bg-background border-b">
-        <div className="container mx-auto px-4 py-3">
-          <nav className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Link href="/" className="hover:text-foreground">Beranda</Link>
-            <span>/</span>
-            <Link href="/marketplace" className="hover:text-foreground">Marketplace</Link>
-            <span>/</span>
-            <span className="text-foreground font-medium truncate">{title}</span>
-          </nav>
+    <MainLayout>
+      {/* Inline Ad Banner */}
+      <div className="w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+          <div className="lg:col-span-2">
+            <AdBanner position="home-inline" showPlaceholder={false} />
+          </div>
+          <div className="lg:col-span-1">
+            <AdBanner position="home-inline-sidebar" showPlaceholder={false} />
+          </div>
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-6">
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Left Column - Main Content */}
-          <div className="flex-1 space-y-6">
-            {/* Image Gallery */}
-            <Card className="overflow-hidden">
-              <CardContent className="p-0">
-                <ImageGallery images={sortedImages} title={title} />
-              </CardContent>
-            </Card>
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+          <Link href="/" className="hover:text-foreground">Beranda</Link>
+          <span>/</span>
+          <Link href="/marketplace" className="hover:text-foreground">Marketplace</Link>
+          {listing.brand && (
+            <>
+              <span>/</span>
+              <Link href={`/marketplace?brand=${listing.brand.slug}`} className="hover:text-foreground">
+                {listing.brand.name}
+              </Link>
+            </>
+          )}
+          <span>/</span>
+          <span className="text-foreground font-medium truncate">{title}</span>
+        </div>
 
-            {/* Vehicle Info Card */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-xl">{title}</CardTitle>
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      {listing.condition && (
-                        <Badge variant={listing.condition === 'baru' ? 'default' : 'secondary'}>
-                          {getConditionLabel(listing.condition)}
+        {/* Status Banner */}
+        {listing.status !== 'active' && (
+          <div className="mb-4 flex items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-950">
+            <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400 shrink-0" />
+            <div>
+              <p className="font-semibold text-orange-800 dark:text-orange-200">
+                {listing.status === 'sold' ? 'Terjual' : listing.status === 'pending' ? 'Menunggu Review' : listing.status}
+              </p>
+              <p className="text-sm text-orange-600 dark:text-orange-400">
+                {listing.status === 'sold' ? 'Mobil ini sudah terjual.' : 'Iklan ini belum aktif.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Left Column */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Image Gallery */}
+            <ImageGallery
+              images={sortedImages}
+              title={title}
+              isPremium={listing.is_featured}
+            />
+
+            {/* Title & Badges */}
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-3">{listing.title}</h1>
+                  <div className="flex flex-wrap gap-2">
+                    {listing.brand && (
+                      <Link href={`/marketplace?brand=${listing.brand.slug}`}>
+                        <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80">
+                          {listing.brand.name}
                         </Badge>
-                      )}
-                      {listing.transaction_type && (
-                        <Badge variant="outline">
-                          {listing.transaction_type === 'jual' ? 'Dijual' : listing.transaction_type === 'rental' ? 'Disewakan' : 'Dibeli'}
-                        </Badge>
-                      )}
-                      {inspection && (
-                        <Badge className="bg-green-500 text-white gap-1">
-                          <Shield className="h-3 w-3" />
-                          Terinspeksi
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="icon">
-                      <Heart className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="icon">
-                      <Share2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Price */}
-                <div className="space-y-2">
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-3xl font-bold text-primary">
-                      {formatPrice(listing.price_cash)}
-                    </span>
+                      </Link>
+                    )}
+                    {listing.model && (
+                      <Badge variant="outline">{listing.model.name}</Badge>
+                    )}
+                    <Badge className={conditionData.color}>{conditionData.label}</Badge>
                     {listing.price_negotiable && (
-                      <Badge variant="outline" className="text-xs">Nego</Badge>
+                      <Badge variant="outline" className="gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        Bisa Nego
+                      </Badge>
+                    )}
+                    {listing.is_featured && (
+                      <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white border-0">
+                        ✨ Premium
+                      </Badge>
+                    )}
+                    {listing.inspection && (
+                      <Badge className="bg-green-500 text-white gap-1">
+                        <Shield className="h-3 w-3" />
+                        Terinspeksi
+                      </Badge>
                     )}
                   </div>
-                  {listing.price_credit && (
-                    <p className="text-sm text-muted-foreground">
-                      Kredit mulai <span className="font-semibold text-foreground">{formatPrice(listing.price_credit)}/bulan</span>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleSave}
+                    disabled={saving}
+                    className={cn(isSaved && "text-red-500 border-red-200 bg-red-50")}
+                  >
+                    <Heart className={cn("h-5 w-5", isSaved && "fill-red-500")} />
+                  </Button>
+                  <SocialShareButtons title={title} variant="compact" />
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-primary" />
+                  {location}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Eye className="h-4 w-4" />
+                  {listing.view_count} dilihat
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Clock className="h-4 w-4" />
+                  {formatDistanceToNow(new Date(listing.created_at), { addSuffix: true, locale: id })}
+                </span>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="w-full grid grid-cols-4 h-12 bg-muted/70 rounded-xl p-1">
+                {[
+                  { value: 'deskripsi', label: 'Deskripsi' },
+                  { value: 'spesifikasi', label: 'Spesifikasi' },
+                  { value: 'ulasan', label: 'Ulasan' },
+                  { value: 'chat', label: 'Chat' },
+                ].map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="rounded-lg font-semibold text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  >
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              {/* Deskripsi Tab */}
+              <TabsContent value="deskripsi" className="mt-6">
+                <Card className="overflow-hidden border-0 shadow-lg">
+                  <CardContent className="p-6">
+                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                      <Tag className="h-5 w-5 text-primary" />
+                      Deskripsi
+                    </h2>
+                    <p className="text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                      {listing.description || 'Tidak ada deskripsi tersedia.'}
                     </p>
-                  )}
-                </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
-                {/* Specs Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="flex flex-col items-center p-3 rounded-lg bg-muted/50">
-                    <Calendar className="h-5 w-5 text-primary mb-1" />
-                    <span className="text-xs text-muted-foreground">Tahun</span>
-                    <span className="font-semibold">{listing.year || '-'}</span>
-                  </div>
-                  <div className="flex flex-col items-center p-3 rounded-lg bg-muted/50">
-                    <Gauge className="h-5 w-5 text-primary mb-1" />
-                    <span className="text-xs text-muted-foreground">Kilometer</span>
-                    <span className="font-semibold text-sm">{formatMileage(listing.mileage)}</span>
-                  </div>
-                  <div className="flex flex-col items-center p-3 rounded-lg bg-muted/50">
-                    <Fuel className="h-5 w-5 text-primary mb-1" />
-                    <span className="text-xs text-muted-foreground">Bahan Bakar</span>
-                    <span className="font-semibold text-sm">{getFuelLabel(listing.fuel)}</span>
-                  </div>
-                  <div className="flex flex-col items-center p-3 rounded-lg bg-muted/50">
-                    <Cog className="h-5 w-5 text-primary mb-1" />
-                    <span className="text-xs text-muted-foreground">Transmisi</span>
-                    <span className="font-semibold text-sm">{getTransmissionLabel(listing.transmission)}</span>
-                  </div>
-                </div>
+              {/* Spesifikasi Tab */}
+              <TabsContent value="spesifikasi" className="mt-6">
+                <ProductSpecs
+                  condition={listing.condition}
+                  priceType="fixed"
+                  location={location}
+                  viewCount={listing.view_count}
+                  createdAt={listing.created_at}
+                  isFeatured={listing.is_featured || false}
+                  category={listing.brand?.name || 'Mobil'}
+                  year={listing.year}
+                  mileage={listing.mileage}
+                  fuel={listing.fuel}
+                  transmission={listing.transmission}
+                  bodyType={listing.model?.body_type}
+                  seatCount={listing.seat_count}
+                  color={listing.exterior_color?.name}
+                  engineCapacity={listing.engine_capacity}
+                  features={listing.features}
+                  documents={listing.documents}
+                />
+              </TabsContent>
 
-                {/* Additional Specs */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Car className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Tipe:</span>
-                    <span className="font-medium">{listing.model?.body_type || '-'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Kursi:</span>
-                    <span className="font-medium">{listing.seat_count || '-'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Palette className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Warna:</span>
-                    <span className="font-medium">{listing.exterior_color?.name || '-'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Lokasi:</span>
-                    <span className="font-medium">{listing.city || '-'}</span>
-                  </div>
-                </div>
+              {/* Ulasan Tab */}
+              <TabsContent value="ulasan" className="mt-6">
+                <ReviewSection
+                  sellerId={listing.seller_id || listing.dealer_id || ''}
+                  sellerRating={listing.dealer?.rating}
+                  totalReviews={listing.dealer?.review_count}
+                />
+              </TabsContent>
 
-                {/* Engine Specs */}
-                {listing.engine_capacity && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Kapasitas Mesin:</span>
-                      <span className="font-medium">{listing.engine_capacity} cc</span>
-                    </div>
-                  </div>
-                )}
-
-                <Separator />
-
-                {/* Description */}
-                <div>
-                  <h3 className="font-semibold mb-2">Deskripsi</h3>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {listing.description || 'Tidak ada deskripsi'}
-                  </p>
-                </div>
-
-                {/* Features */}
-                {listing.features && Object.values(listing.features).some(v => v === true) && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h3 className="font-semibold mb-3">Fitur Utama</h3>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {listing.features.sunroof && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                            <span>Sunroof</span>
-                          </div>
-                        )}
-                        {listing.features.cruise_control && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                            <span>Cruise Control</span>
-                          </div>
-                        )}
-                        {listing.features.rear_camera && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                            <span>Kamera Mundur</span>
-                          </div>
-                        )}
-                        {listing.features.keyless_start && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                            <span>Keyless Start</span>
-                          </div>
-                        )}
-                        {listing.features.service_book && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                            <span>Buku Servis</span>
-                          </div>
-                        )}
-                        {listing.features.airbag && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                            <span>Airbag</span>
-                          </div>
-                        )}
-                        {listing.features.abs && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                            <span>ABS</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Documents */}
-                {listing.documents && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h3 className="font-semibold mb-3">Dokumen Kendaraan</h3>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
-                          <FileText className="h-4 w-4 text-primary" />
-                          <div className="text-sm">
-                            <span className="text-muted-foreground">Nomor Polisi:</span>
-                            <p className="font-medium">{listing.documents.license_plate || '-'}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
-                          <Shield className="h-4 w-4 text-primary" />
-                          <div className="text-sm">
-                            <span className="text-muted-foreground">STNK:</span>
-                            <p className="font-medium">{listing.documents.stnk_status || '-'}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
-                          <FileText className="h-4 w-4 text-primary" />
-                          <div className="text-sm">
-                            <span className="text-muted-foreground">BPKB:</span>
-                            <p className="font-medium">{listing.documents.bpkb_status || '-'}</p>
-                          </div>
-                        </div>
-                      </div>
-                      {listing.documents.sell_with_plate && (
-                        <Badge variant="outline" className="mt-2">Jual Bersama Polisi</Badge>
+              {/* Chat Tab */}
+              <TabsContent value="chat" className="mt-6">
+                <Card className="border-0 shadow-lg overflow-hidden">
+                  <CardContent className="p-6 space-y-4">
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                      <MessageCircle className="h-5 w-5 text-primary" />
+                      Hubungi Penjual
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Langsung hubungi penjual via WhatsApp atau telepon.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Button
+                        onClick={handleWhatsApp}
+                        className="h-14 text-base gap-3 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-6 w-6 fill-current">
+                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                        </svg>
+                        Chat WhatsApp
+                      </Button>
+                      {(listing.phone || listing.seller?.phone || listing.dealer?.phone) && (
+                        <Button
+                          variant="outline"
+                          className="h-14 text-base gap-3 border-2"
+                          onClick={() => window.open(`tel:${listing.phone || listing.seller?.phone || listing.dealer?.phone}`)}
+                        >
+                          <Phone className="h-5 w-5" />
+                          Telepon
+                        </Button>
                       )}
                     </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
 
-            {/* Inspection Report */}
-            {inspection && (
-              <InspectionReport inspection={inspection} />
+            {/* Ad Banner */}
+            <div className="w-full">
+              <AdBanner position="home-center" showPlaceholder={false} />
+            </div>
+
+            {/* Related Products */}
+            {listing.brand && (
+              <RelatedProducts
+                brandId={listing.brand.id}
+                currentListingId={listing.id}
+                brandName={`Mobil ${listing.brand.name}`}
+              />
             )}
           </div>
 
-          {/* Right Column - Sidebar */}
-          <aside className="w-full lg:w-96 shrink-0 space-y-6">
-            {/* Seller Card */}
-            <Card className="sticky top-24">
-              <CardContent className="pt-6 space-y-4">
-                {/* Seller Info */}
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-14 w-14">
-                    <AvatarImage src={dealer?.logo_url || seller?.avatar_url || undefined} />
-                    <AvatarFallback className="bg-primary/10 text-primary">
-                      {dealer ? <Building2 className="h-6 w-6" /> : <User className="h-6 w-6" />}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold truncate">
-                        {dealer?.name || seller?.full_name || 'Penjual'}
-                      </h3>
-                      {(dealer?.verified || seller?.is_verified) && (
-                        <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
-                      )}
-                    </div>
-                    {dealer && (
-                      <Badge variant="outline" className="mt-1 text-xs">
-                        {dealer.subscription_tier || 'Dealer'}
+          {/* Right Column */}
+          <div className="space-y-4">
+            {/* Price Card */}
+            <Card className="sticky top-4 shadow-xl border-2 overflow-hidden">
+              <div className="h-1 bg-gradient-to-r from-primary via-primary/60 to-primary" />
+              <CardContent className="p-6">
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Harga</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-primary">
+                      {formatPrice(listing.price_cash)}
+                    </p>
+                    {listing.price_credit && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Kredit mulai <span className="font-semibold text-foreground">{formatPrice(listing.price_credit)}/bulan</span>
+                      </p>
+                    )}
+                    {listing.price_negotiable && (
+                      <Badge variant="outline" className="mt-2 gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        Harga masih bisa nego
                       </Badge>
                     )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      <MapPin className="h-3 w-3 inline mr-1" />
-                      {dealer?.address || seller?.city || listing.city}
-                      {seller?.province ? `, ${seller.province}` : ''}
-                    </p>
                   </div>
-                </div>
 
-                {/* Dealer Stats */}
-                {dealer && (
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="flex items-center gap-1">
-                      <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                      <span className="font-medium">{dealer.rating?.toFixed(1) || '-'}</span>
-                      <span className="text-muted-foreground">({dealer.review_count || 0})</span>
-                    </div>
-                  </div>
-                )}
-
-                <Separator />
-
-                {/* Price Display */}
-                <div className="text-center py-2">
-                  <p className="text-sm text-muted-foreground">Harga</p>
-                  <p className="text-2xl font-bold text-primary">{formatPrice(listing.price_cash)}</p>
-                  {listing.price_credit && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Kredit {formatPrice(listing.price_credit)}/bln
-                    </p>
-                  )}
-                </div>
-
-                <Separator />
-
-                {/* Contact Buttons */}
-                <div className="space-y-2">
-                  <Button className="w-full bg-green-500 hover:bg-green-600 text-white gap-2">
-                    <MessageCircle className="h-4 w-4" />
-                    WhatsApp
-                  </Button>
-                  <Button variant="outline" className="w-full gap-2">
-                    <Phone className="h-4 w-4" />
-                    Telepon
-                  </Button>
-                  {dealer?.slug && (
-                    <Button variant="outline" className="w-full gap-2" asChild>
-                      <Link href={`/dealer/${dealer.slug}`}>
-                        <ExternalLink className="h-4 w-4" />
-                        Lihat Showroom
-                      </Link>
+                  <div className="space-y-3">
+                    <Button
+                      onClick={handleWhatsApp}
+                      className="w-full h-12 gap-3 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                      </svg>
+                      Hubungi via WhatsApp
                     </Button>
-                  )}
-                </div>
+                    {(listing.phone || listing.seller?.phone || listing.dealer?.phone) && (
+                      <Button
+                        variant="outline"
+                        className="w-full h-12 gap-2"
+                        onClick={() => window.open(`tel:${listing.phone || listing.seller?.phone || listing.dealer?.phone}`)}
+                      >
+                        <Phone className="h-5 w-5" />
+                        Hubungi via Telepon
+                      </Button>
+                    )}
+                  </div>
 
-                {/* Quick Info */}
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span>ID Iklan:</span>
-                    <span className="font-mono">{listing.id.slice(0, 8)}...</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Diposting:</span>
-                    <span>{new Date(listing.created_at).toLocaleDateString('id-ID')}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Dilihat:</span>
-                    <span>{listing.view_count || 0}x</span>
+                  {/* Quick Info */}
+                  <div className="text-xs text-muted-foreground space-y-1 pt-3 border-t">
+                    <div className="flex items-center justify-between">
+                      <span>ID Iklan:</span>
+                      <span className="font-mono">{listing.id.slice(0, 8)}...</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Diposting:</span>
+                      <span>{new Date(listing.created_at).toLocaleDateString('id-ID')}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Dilihat:</span>
+                      <span>{listing.view_count}x</span>
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
+            {/* Seller Card */}
+            <SellerCard
+              seller={sellerData}
+              isOwnListing={false}
+              onChat={handleWhatsApp}
+              onCall={() => window.open(`tel:${sellerData.phone}`)}
+            />
+
             {/* Inspection Summary Card */}
-            {inspection && (
+            {listing.inspection && (
               <Card>
                 <CardContent className="pt-6">
                   <h3 className="font-semibold mb-4 flex items-center gap-2">
@@ -566,36 +623,26 @@ export default async function ListingDetailPage({ params }: PageProps) {
                     Ringkasan Inspeksi
                   </h3>
 
-                  {/* Stats */}
                   <div className="grid grid-cols-3 gap-2 mb-4">
                     <div className="text-center p-2 rounded-lg bg-green-50 dark:bg-green-950/30">
-                      <p className="text-xl font-bold text-green-600">{inspection.stats?.passed || 0}</p>
+                      <p className="text-xl font-bold text-green-600">{listing.inspection.stats?.passed || 0}</p>
                       <p className="text-xs text-muted-foreground">Lulus</p>
                     </div>
                     <div className="text-center p-2 rounded-lg bg-yellow-50 dark:bg-yellow-950/30">
-                      <p className="text-xl font-bold text-yellow-600">{inspection.stats?.needRepair || 0}</p>
+                      <p className="text-xl font-bold text-yellow-600">{listing.inspection.stats?.needRepair || 0}</p>
                       <p className="text-xs text-muted-foreground">Perbaikan</p>
                     </div>
                     <div className="text-center p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
-                      <p className="text-xl font-bold text-gray-600">{inspection.stats?.notRelated || 0}</p>
+                      <p className="text-xl font-bold text-gray-600">{listing.inspection.stats?.notRelated || 0}</p>
                       <p className="text-xs text-muted-foreground">N/A</p>
                     </div>
-                  </div>
-
-                  {/* Risk Level */}
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <span className="text-sm text-muted-foreground">Level Risiko</span>
-                    <Badge variant={inspection.risk_level === 'low' ? 'default' : 'secondary'}
-                           className={inspection.risk_level === 'low' ? 'bg-green-500 text-white' : ''}>
-                      {inspection.risk_level === 'low' ? 'Rendah' : inspection.risk_level === 'medium' ? 'Sedang' : 'Tinggi'}
-                    </Badge>
                   </div>
 
                   {/* Safety Checks */}
                   <div className="space-y-2 mt-4">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Bebas Tabrakan</span>
-                      {inspection.accident_free ? (
+                      {listing.inspection.accident_free ? (
                         <CheckCircle className="h-4 w-4 text-green-500" />
                       ) : (
                         <AlertTriangle className="h-4 w-4 text-yellow-500" />
@@ -603,7 +650,7 @@ export default async function ListingDetailPage({ params }: PageProps) {
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Bebas Banjir</span>
-                      {inspection.flood_free ? (
+                      {listing.inspection.flood_free ? (
                         <CheckCircle className="h-4 w-4 text-green-500" />
                       ) : (
                         <AlertTriangle className="h-4 w-4 text-yellow-500" />
@@ -611,35 +658,46 @@ export default async function ListingDetailPage({ params }: PageProps) {
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Bebas Kebakaran</span>
-                      {inspection.fire_free ? (
+                      {listing.inspection.fire_free ? (
                         <CheckCircle className="h-4 w-4 text-green-500" />
                       ) : (
                         <AlertTriangle className="h-4 w-4 text-yellow-500" />
                       )}
                     </div>
                   </div>
-
-                  <p className="text-xs text-muted-foreground mt-4 text-center">
-                    Inspeksi oleh: {inspection.inspector_name || 'Verified Inspector'}
-                  </p>
                 </CardContent>
               </Card>
             )}
 
-            {/* View Stats */}
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Eye className="h-4 w-4" />
-                    <span>{listing.view_count || 0} orang melihat iklan ini</span>
-                  </div>
-                </div>
+            {/* Security Notice */}
+            <Card className="border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950 dark:to-emerald-900/30">
+              <CardContent className="p-4 space-y-3">
+                <h4 className="font-semibold flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+                  <Shield className="h-5 w-5" />
+                  Tips Transaksi Aman
+                </h4>
+                <ul className="text-xs text-emerald-700 dark:text-emerald-400 space-y-1.5">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    COD atau gunakan rekening bersama
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    Periksa kondisi kendaraan sebelum membayar
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    Jangan transfer ke rekening pribadi
+                  </li>
+                </ul>
               </CardContent>
             </Card>
-          </aside>
+
+            {/* Ad Banner Sidebar */}
+            <AdBanner position="home-center-sidebar" showPlaceholder={false} />
+          </div>
         </div>
       </div>
-    </div>
+    </MainLayout>
   )
 }

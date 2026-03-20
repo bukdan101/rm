@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,25 +17,23 @@ import {
   MessageCircle,
   Shield,
   Clock,
-  Store,
-  User
+  Store
 } from 'lucide-react'
-import { toast } from 'sonner'
 
 interface SellerCardProps {
   seller: {
     id: string
     name: string
-    avatar_url: string | null
-    city: string | null
-    province: string | null
-    is_verified: boolean
-    average_rating: number
-    total_reviews: number
-    total_listings: number
-    sold_count: number
-    phone: string | null
-    created_at: string
+    avatar_url?: string | null
+    city?: string | null
+    province?: string | null
+    is_verified?: boolean
+    average_rating?: number
+    total_reviews?: number
+    total_listings?: number
+    sold_count?: number
+    phone?: string | null
+    created_at?: string
   }
   isOwnListing: boolean
   onChat: () => void
@@ -48,7 +45,7 @@ export function SellerCard({ seller, isOwnListing, onChat, onCall }: SellerCardP
 
   const location = [seller.city, seller.province].filter(Boolean).join(', ') || 'Indonesia'
   
-  const sellerSince = formatRelativeTime(seller.created_at)
+  const sellerSince = seller.created_at ? formatRelativeTime(seller.created_at) : 'baru saja'
   
   const renderStars = (rating: number) => {
     return (
@@ -65,7 +62,7 @@ export function SellerCard({ seller, isOwnListing, onChat, onCall }: SellerCardP
           />
         ))}
         <span className="text-sm text-muted-foreground ml-1">
-          ({seller.total_reviews})
+          ({seller.total_reviews || 0})
         </span>
       </div>
     )
@@ -137,9 +134,9 @@ export function SellerCard({ seller, isOwnListing, onChat, onCall }: SellerCardP
         </div>
 
         {/* Rating Display */}
-        {seller.total_reviews > 0 && (
+        {(seller.total_reviews || 0) > 0 && (
           <div className="mb-4">
-            {renderStars(seller.average_rating)}
+            {renderStars(seller.average_rating || 0)}
           </div>
         )}
 

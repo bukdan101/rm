@@ -49,15 +49,15 @@ import { cn } from '@/lib/utils'
 // DATA CONSTANTS FROM DATABASE
 // ==============================
 
-const TOKEN_SETTINGS = {
-  marketplace_umum: { tokens: 3, duration: '30 hari', name: 'Marketplace Umum (WhatsApp)' },
-  dealer_marketplace: { tokens: 5, duration: '7 hari', name: 'Dealer Marketplace (Bidding)' },
-  chat_platform: { tokens: 4, duration: '30 hari', name: 'Chat Platform' },
-  inspection_160: { tokens: 10, duration: 'Sekali', name: 'Inspeksi 160 Titik' },
-  featured_7days: { tokens: 5, duration: '7 hari', name: 'Featured/Promoted' },
-  extend_listing: { tokens: 2, duration: '30 hari', name: 'Perpanjangan Listing' },
-  extend_dealer: { tokens: 2, duration: '7 hari', name: 'Perpanjangan Dealer' },
-  token_value: 10000, // 1 Token = Rp 10.000
+const KREDIT_SETTINGS = {
+  marketplace_umum: { kredits: 3, duration: '30 hari', name: 'Marketplace Umum (WhatsApp)' },
+  dealer_marketplace: { kredits: 5, duration: '7 hari', name: 'Dealer Marketplace (Bidding)' },
+  chat_platform: { kredits: 4, duration: '30 hari', name: 'Chat Platform' },
+  inspection_160: { kredits: 10, duration: 'Sekali', name: 'Inspeksi 160 Titik' },
+  featured_7days: { kredits: 5, duration: '7 hari', name: 'Featured/Promoted' },
+  extend_listing: { kredits: 2, duration: '30 hari', name: 'Perpanjangan Listing' },
+  extend_dealer: { kredits: 2, duration: '7 hari', name: 'Perpanjangan Dealer' },
+  kredit_value: 10000, // 1 Kredit = Rp 10.000
 }
 
 const USER_ROLES = [
@@ -173,18 +173,18 @@ function WorkflowDiagram({ steps, title, description }: { steps: WorkflowStep[];
 
 
 // ==============================
-// TOKEN CALCULATOR
+// KREDIT CALCULATOR
 // ==============================
 
-function TokenCalculator() {
+function KreditCalculator() {
   const [selectedServices, setSelectedServices] = useState<string[]>(['marketplace_umum'])
   
-  const totalTokens = selectedServices.reduce((sum, key) => {
-    const setting = TOKEN_SETTINGS[key as keyof typeof TOKEN_SETTINGS]
-    return sum + (typeof setting === 'object' ? setting.tokens : 0)
+  const totalKredit = selectedServices.reduce((sum, key) => {
+    const setting = KREDIT_SETTINGS[key as keyof typeof KREDIT_SETTINGS]
+    return sum + (typeof setting === 'object' ? setting.kredits : 0)
   }, 0)
   
-  const totalRupiah = totalTokens * TOKEN_SETTINGS.token_value
+  const totalRupiah = totalKredit * KREDIT_SETTINGS.kredit_value
   
   const toggleService = (key: string) => {
     setSelectedServices(prev => 
@@ -199,14 +199,14 @@ function TokenCalculator() {
       <CardHeader className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
         <CardTitle className="flex items-center gap-2">
           <PiggyBank className="w-5 h-5" />
-          Kalkulator Token
+          Kalkulator Kredit
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
         {/* Services */}
         <div className="grid gap-2">
-          {Object.entries(TOKEN_SETTINGS).filter(([key]) => key !== 'token_value').map(([key, value]) => {
-            const setting = value as { tokens: number; duration: string; name: string }
+          {Object.entries(KREDIT_SETTINGS).filter(([key]) => key !== 'kredit_value').map(([key, value]) => {
+            const setting = value as { kredits: number; duration: string; name: string }
             const isSelected = selectedServices.includes(key)
             return (
               <button
@@ -224,9 +224,9 @@ function TokenCalculator() {
                   <p className="text-xs text-muted-foreground">{setting.duration}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-amber-600">{setting.tokens} Token</p>
+                  <p className="font-bold text-amber-600">{setting.kredits} Kredit</p>
                   <p className="text-xs text-muted-foreground">
-                    Rp {(setting.tokens * TOKEN_SETTINGS.token_value).toLocaleString('id-ID')}
+                    Rp {(setting.kredits * KREDIT_SETTINGS.kredit_value).toLocaleString('id-ID')}
                   </p>
                 </div>
               </button>
@@ -239,7 +239,7 @@ function TokenCalculator() {
           <div className="flex justify-between items-center">
             <div>
               <p className="text-sm text-muted-foreground">Total Biaya</p>
-              <p className="text-2xl font-bold text-amber-600">{totalTokens} Token</p>
+              <p className="text-2xl font-bold text-amber-600">{totalKredit} Kredit</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-muted-foreground">Setara</p>
@@ -250,7 +250,7 @@ function TokenCalculator() {
         
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Info className="w-4 h-4" />
-          <span>1 Token = Rp {TOKEN_SETTINGS.token_value.toLocaleString('id-ID')}</span>
+          <span>1 Kredit = Rp {KREDIT_SETTINGS.kredit_value.toLocaleString('id-ID')}</span>
         </div>
       </CardContent>
     </Card>
@@ -276,7 +276,7 @@ function VisibilityDiagram() {
         <CardContent className="p-4 space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Biaya</span>
-            <span className="font-bold">3 Token</span>
+            <span className="font-bold">3 Kredit</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Durasi</span>
@@ -309,7 +309,7 @@ function VisibilityDiagram() {
         <CardContent className="p-4 space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Biaya</span>
-            <span className="font-bold">5 Token</span>
+            <span className="font-bold">5 Kredit</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Durasi</span>
@@ -342,7 +342,7 @@ function VisibilityDiagram() {
         <CardContent className="p-4 space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Biaya</span>
-            <span className="font-bold">8 Token (3+5)</span>
+            <span className="font-bold">8 Kredit (3+5)</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Durasi</span>
@@ -393,7 +393,7 @@ function InspectionVisualization() {
         <Card className="border-0 shadow-md">
           <CardContent className="p-4 text-center">
             <p className="text-3xl font-bold text-amber-500">10</p>
-            <p className="text-xs text-muted-foreground">Token / Inspeksi</p>
+            <p className="text-xs text-muted-foreground">Kredit / Inspeksi</p>
           </CardContent>
         </Card>
       </div>
@@ -470,7 +470,7 @@ function TransactionFlow() {
 
 function DealerMarketplaceFlow() {
   const steps = [
-    { id: '1', title: 'User Pasang Iklan ke Dealer Marketplace', description: 'User memilih visibility "Dealer Marketplace" atau "Both"', icon: PlusCircle, color: 'bg-purple-500', details: ['Biaya 5 Token (7 hari)', 'Wajib KYC Approved', 'Status: pending_inspection'] },
+    { id: '1', title: 'User Pasang Iklan ke Dealer Marketplace', description: 'User memilih visibility "Dealer Marketplace" atau "Both"', icon: PlusCircle, color: 'bg-purple-500', details: ['Biaya 5 Kredit (7 hari)', 'Wajib KYC Approved', 'Status: pending_inspection'] },
     { id: '2', title: 'Listing Tersedia untuk Dealer', description: 'Listing muncul di dashboard dealer terverifikasi', icon: Eye, color: 'bg-blue-500', details: ['Dealer dapat melihat detail', 'Dealer dapat bid', 'Sistem bidding aktif'] },
     { id: '3', title: 'Dealer Ajukan Penawaran', description: 'Dealer mengajukan penawaran harga', icon: Gavel, color: 'bg-amber-500', details: ['Harga penawaran', 'Pesan untuk seller', 'Financing/pickup options'] },
     { id: '4', title: 'Seller Review Penawaran', description: 'Seller menerima, tolak, atau negosiasi', icon: FileCheck, color: 'bg-green-500', details: ['Lihat profil dealer', 'Compare penawaran', 'Counter offer'] },
@@ -490,7 +490,7 @@ function UserRegistrationFlow() {
     { id: '1', title: 'Daftar Akun', description: 'Buat akun dengan email atau nomor HP', icon: User, color: 'bg-blue-500', details: ['Email/HP valid', 'Password aman', 'Verifikasi email/HP'] },
     { id: '2', title: 'Lengkapi Profil', description: 'Isi informasi profil dasar', icon: IdCard, color: 'bg-green-500', details: ['Nama lengkap', 'Foto profil', 'Nomor telepon'] },
     { id: '3', title: 'Verifikasi KYC (Opsional)', description: 'Untuk fitur dealer marketplace', icon: Shield, color: 'bg-amber-500', details: ['Upload KTP', 'Foto selfie', 'Verifikasi 1-2 hari'] },
-    { id: '4', title: 'Beli Token', description: 'Isi saldo token untuk transaksi', icon: Wallet, color: 'bg-purple-500', details: ['Pilih paket token', 'Pembayaran aman', 'Token langsung masuk'] },
+    { id: '4', title: 'Beli Kredit', description: 'Isi saldo kredit untuk transaksi', icon: Wallet, color: 'bg-purple-500', details: ['Pilih paket kredit', 'Pembayaran aman', 'Kredit langsung masuk'] },
     { id: '5', title: 'Mulai Transaksi', description: 'Jual atau beli mobil di AutoMarket', icon: Car, color: 'bg-pink-500', details: ['Pasang iklan', 'Cari mobil', 'Dealer marketplace'] },
   ]
   
@@ -509,7 +509,7 @@ function ListingCreationFlow() {
     { id: '4', title: 'Harga', description: 'Tentukan harga jual', icon: DollarSign, color: 'bg-emerald-500', details: ['Harga tunai', 'Harga kredit (opsional)', 'Status nego'] },
     { id: '5', title: 'Foto', description: 'Upload foto kendaraan', icon: Camera, color: 'bg-pink-500', details: ['Min 1 foto', 'Max 10 foto', 'Foto utama', 'Multiple angles'] },
     { id: '6', title: 'Inspeksi', description: 'Pilih apakah ingin inspeksi', icon: ClipboardCheck, color: 'bg-purple-500', details: ['Opsional', '160 titik inspeksi', 'Sertifikat resmi'] },
-    { id: '7', title: 'Review & Publish', description: 'Review dan publikasikan iklan', icon: CheckCircle, color: 'bg-teal-500', details: ['Cek semua data', 'Pilih visibility', 'Potong token', 'Listing aktif!'] },
+    { id: '7', title: 'Review & Publish', description: 'Review dan publikasikan iklan', icon: CheckCircle, color: 'bg-teal-500', details: ['Cek semua data', 'Pilih visibility', 'Potong kredit', 'Listing aktif!'] },
   ]
   
   return <WorkflowDiagram steps={steps} title="Alur Pembuatan Iklan (7 Langkah)" description="Dari informasi kendaraan hingga publikasi" />
@@ -712,8 +712,8 @@ export default function CaraKerjaPage() {
               </CardContent>
             </Card>
 
-            {/* Token Calculator */}
-            <TokenCalculator />
+            {/* Kredit Calculator */}
+            <KreditCalculator />
           </TabsContent>
 
           {/* LISTING TAB */}

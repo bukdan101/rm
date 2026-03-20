@@ -1,0 +1,1372 @@
+{
+  "inspection": {
+    "id": "239c7453-3e40-4c4f-aaa0-058ea8bc1e34",
+    "car_listing_id": "00252a8c-79f9-456e-b2c8-572e3f257f39",
+    "inspector_id": null,
+    "inspector_name": null,
+    "inspection_place": null,
+    "inspection_date": "2026-03-18T03:12:28.526+00:00",
+    "total_points": 160,
+    "passed_points": 134,
+    "failed_points": 26,
+    "inspection_score": 84,
+    "accident_free": true,
+    "flood_free": true,
+    "fire_free": true,
+    "odometer_tampered": false,
+    "risk_level": "low",
+    "overall_grade": "B",
+    "recommended": true,
+    "recommendation_notes": null,
+    "certificate_number": "INS-2026-74302",
+    "certificate_url": null,
+    "certificate_issued_at": "2026-03-18T03:12:28.526",
+    "certificate_expires_at": "2026-06-16T03:12:28.526",
+    "status": "completed",
+    "created_at": "2026-03-18T03:12:28.600811+00:00",
+    "updated_at": "2026-03-18T03:12:28.600811+00:00",
+    "car_listings": {
+      "id": "00252a8c-79f9-456e-b2c8-572e3f257f39",
+      "city": "Jakarta Barat",
+      "fuel": "bensin",
+      "year": 2020,
+      "title": "Nissan Navara 2020",
+      "brands": {
+        "name": "Nissan"
+      },
+      "mileage": 10071,
+      "province": "DKI Jakarta",
+      "body_type": "pickup",
+      "car_models": {
+        "name": "Navara"
+      },
+      "price_cash": 362482697,
+      "transmission": "automatic"
+    }
+  },
+  "categories": [
+    {
+      "id": "7858247b-fd7c-4b18-82bf-bf55e09f3311",
+      "name": "Engine",
+      "description": "Sistem mesin kendaraan",
+      "icon": "engine",
+      "display_order": 1,
+      "total_items": 15,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Engine Start",
+          "description": "Mesin dapat menyala dengan mudah saat distarter",
+          "display_order": 1,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Engine Idle",
+          "description": "Putaran mesin stabil saat idle",
+          "display_order": 2,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Engine Noise",
+          "description": "Tidak ada suara berisik abnormal dari mesin",
+          "display_order": 3,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Engine Oil Level",
+          "description": "Level oli mesin normal",
+          "display_order": 4,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Engine Oil Leak",
+          "description": "Tidak ada kebocoran oli mesin",
+          "display_order": 5,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Radiator Condition",
+          "description": "Kondisi radiator baik",
+          "display_order": 6,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Radiator Coolant Level",
+          "description": "Level coolant radiator normal",
+          "display_order": 7,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Cooling Fan",
+          "description": "Kipas pendingin berfungsi dengan baik",
+          "display_order": 8,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Drive Belt",
+          "description": "V-belt/serpentine belt kondisi baik",
+          "display_order": 9,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Battery Condition",
+          "description": "Aki dalam kondisi baik",
+          "display_order": 10,
+          "is_critical": true,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Air Filter",
+          "description": "Filter udara bersih",
+          "display_order": 11,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Fuel Pump",
+          "description": "Pompa bensin berfungsi normal",
+          "display_order": 12,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Spark Plug",
+          "description": "Busi dalam kondisi baik",
+          "display_order": 13,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Engine Mounting",
+          "description": "Engine mounting tidak rusak",
+          "display_order": 14,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Turbo Condition",
+          "description": "Turbo berfungsi normal (jika ada)",
+          "display_order": 15,
+          "is_critical": false,
+          "status": "baik"
+        }
+      ],
+      "passed": 12,
+      "failed": 3,
+      "score": 80
+    },
+    {
+      "id": "99b05996-914b-4a5a-acbc-38e03b210cff",
+      "name": "Transmission",
+      "description": "Sistem transmisi dan persneling",
+      "icon": "settings",
+      "display_order": 2,
+      "total_items": 10,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Transmission Shift",
+          "description": "Perpindahan gigi halus",
+          "display_order": 16,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Transmission Oil",
+          "description": "Level oli transmisi normal",
+          "display_order": 17,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Clutch Condition",
+          "description": "Kopling tidak slip (manual)",
+          "display_order": 18,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Gearbox Noise",
+          "description": "Tidak ada suara abnormal pada gearbox",
+          "display_order": 19,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Drive Shaft",
+          "description": "Drive shaft kondisi baik",
+          "display_order": 20,
+          "is_critical": true,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Differential",
+          "description": "Differential berfungsi normal",
+          "display_order": 21,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "CV Joint",
+          "description": "CV Joint tidak berbunyi",
+          "display_order": 22,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Transmission Mount",
+          "description": "Transmission mounting kondisi baik",
+          "display_order": 23,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Propeller Shaft",
+          "description": "Propeller shaft kondisi baik (4WD)",
+          "display_order": 24,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Transmission Leak",
+          "description": "Tidak ada kebocoran transmisi",
+          "display_order": 25,
+          "is_critical": true,
+          "status": "baik"
+        }
+      ],
+      "passed": 9,
+      "failed": 1,
+      "score": 90
+    },
+    {
+      "id": "c7affdba-bcbe-4633-8e36-5b4646eea61c",
+      "name": "Brake",
+      "description": "Sistem pengereman",
+      "icon": "disc",
+      "display_order": 3,
+      "total_items": 10,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Brake Pad Front",
+          "description": "Kampas rem depan masih tebal",
+          "display_order": 26,
+          "is_critical": true,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Brake Pad Rear",
+          "description": "Kampas rem belakang masih tebal",
+          "display_order": 27,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Brake Disc",
+          "description": "Disc brake tidak aus",
+          "display_order": 28,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Brake Fluid",
+          "description": "Level minyak rem normal",
+          "display_order": 29,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Brake Hose",
+          "description": "Selang rem tidak bocor",
+          "display_order": 30,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Brake Caliper",
+          "description": "Caliper rem berfungsi normal",
+          "display_order": 31,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "ABS System",
+          "description": "Sistem ABS berfungsi",
+          "display_order": 32,
+          "is_critical": true,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Hand Brake",
+          "description": "Rem tangan berfungsi baik",
+          "display_order": 33,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Brake Booster",
+          "description": "Brake booster berfungsi",
+          "display_order": 34,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Brake Performance",
+          "description": "Performa pengereman optimal",
+          "display_order": 35,
+          "is_critical": true,
+          "status": "perlu_perbaikan"
+        }
+      ],
+      "passed": 5,
+      "failed": 5,
+      "score": 50
+    },
+    {
+      "id": "d1e5c468-e70f-4490-9845-fc68101a95f3",
+      "name": "Suspension",
+      "description": "Sistem suspensi dan peredam kejut",
+      "icon": "activity",
+      "display_order": 4,
+      "total_items": 10,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Front Shock Absorber",
+          "description": "Shock absorber depan berfungsi",
+          "display_order": 36,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Rear Shock Absorber",
+          "description": "Shock absorber belakang berfungsi",
+          "display_order": 37,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Spring Condition",
+          "description": "Per kondisi baik",
+          "display_order": 38,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Lower Arm",
+          "description": "Lower arm tidak rusak",
+          "display_order": 39,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Ball Joint",
+          "description": "Ball joint tidak longgar",
+          "display_order": 40,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Stabilizer Link",
+          "description": "Stabilizer link kondisi baik",
+          "display_order": 41,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Suspension Bushings",
+          "description": "Bushings suspensi tidak aus",
+          "display_order": 42,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Suspension Noise",
+          "description": "Tidak ada suara abnormal suspensi",
+          "display_order": 43,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Wheel Bearing",
+          "description": "Wheel bearing kondisi baik",
+          "display_order": 44,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Wheel Alignment",
+          "description": "Wheel alignment sesuai",
+          "display_order": 45,
+          "is_critical": false,
+          "status": "baik"
+        }
+      ],
+      "passed": 9,
+      "failed": 1,
+      "score": 90
+    },
+    {
+      "id": "1f644adf-d79d-4b7b-a547-1a8bcfc1d04e",
+      "name": "Steering",
+      "description": "Sistem kemudi",
+      "icon": "navigation",
+      "display_order": 5,
+      "total_items": 5,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Steering Wheel",
+          "description": "Setir tidak bergetar",
+          "display_order": 46,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Steering Rack",
+          "description": "Steering rack kondisi baik",
+          "display_order": 47,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Power Steering Pump",
+          "description": "Pompa power steering berfungsi",
+          "display_order": 48,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Steering Fluid",
+          "description": "Level oli power steering normal",
+          "display_order": 49,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Steering Column",
+          "description": "Steering column tidak longgar",
+          "display_order": 50,
+          "is_critical": true,
+          "status": "baik"
+        }
+      ],
+      "passed": 5,
+      "failed": 0,
+      "score": 100
+    },
+    {
+      "id": "c2742625-51c1-4ad6-8b90-fa965839e072",
+      "name": "Exterior",
+      "description": "Kondisi eksterior kendaraan",
+      "icon": "car",
+      "display_order": 6,
+      "total_items": 15,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Front Bumper",
+          "description": "Bumper depan kondisi baik",
+          "display_order": 51,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Rear Bumper",
+          "description": "Bumper belakang kondisi baik",
+          "display_order": 52,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Hood",
+          "description": "Kap mesin tidak penyok",
+          "display_order": 53,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Front Left Door",
+          "description": "Pintu depan kiri kondisi baik",
+          "display_order": 54,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Front Right Door",
+          "description": "Pintu depan kanan kondisi baik",
+          "display_order": 55,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Rear Left Door",
+          "description": "Pintu belakang kiri kondisi baik",
+          "display_order": 56,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Rear Right Door",
+          "description": "Pintu belakang kanan kondisi baik",
+          "display_order": 57,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Roof",
+          "description": "Atap tidak penyok",
+          "display_order": 58,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Front Fender Left",
+          "description": "Fender depan kiri kondisi baik",
+          "display_order": 59,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Front Fender Right",
+          "description": "Fender depan kanan kondisi baik",
+          "display_order": 60,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Rear Quarter Panel Left",
+          "description": "Panel quarter kiri kondisi baik",
+          "display_order": 61,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Rear Quarter Panel Right",
+          "description": "Panel quarter kanan kondisi baik",
+          "display_order": 62,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Paint Condition",
+          "description": "Cat tidak pudar",
+          "display_order": 63,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Rust Check",
+          "description": "Tidak ada karat berat",
+          "display_order": 64,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Windshield",
+          "description": "Kaca depan tidak retak",
+          "display_order": 65,
+          "is_critical": true,
+          "status": "baik"
+        }
+      ],
+      "passed": 13,
+      "failed": 2,
+      "score": 87
+    },
+    {
+      "id": "b26c34d0-e882-4e20-ab0b-9cc2d69001d8",
+      "name": "Interior",
+      "description": "Kondisi interior kabin",
+      "icon": "grid",
+      "display_order": 7,
+      "total_items": 10,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Dashboard",
+          "description": "Dashboard tidak retak",
+          "display_order": 66,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Steering Condition",
+          "description": "Kulit setir tidak aus",
+          "display_order": 67,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Seat Condition",
+          "description": "Jok tidak robek",
+          "display_order": 68,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Seat Belt",
+          "description": "Sabuk pengaman berfungsi",
+          "display_order": 69,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Interior Trim",
+          "description": "Trim interior lengkap",
+          "display_order": 70,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Carpet Condition",
+          "description": "Karpet bersih tidak lembab",
+          "display_order": 71,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Door Trim",
+          "description": "Trim pintu kondisi baik",
+          "display_order": 72,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "AC Cooling",
+          "description": "AC dingin",
+          "display_order": 73,
+          "is_critical": true,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "AC Blower",
+          "description": "Blower AC berfungsi",
+          "display_order": 74,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "AC Filter",
+          "description": "Filter AC bersih",
+          "display_order": 75,
+          "is_critical": false,
+          "status": "baik"
+        }
+      ],
+      "passed": 8,
+      "failed": 2,
+      "score": 80
+    },
+    {
+      "id": "6d53e79d-3f6b-46f4-aeb0-3136957a42fc",
+      "name": "Electrical",
+      "description": "Sistem kelistrikan",
+      "icon": "zap",
+      "display_order": 8,
+      "total_items": 10,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Headlight",
+          "description": "Lampu depan menyala",
+          "display_order": 76,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Tail Light",
+          "description": "Lampu belakang menyala",
+          "display_order": 77,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Turn Signal",
+          "description": "Lampu sein berfungsi",
+          "display_order": 78,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Fog Lamp",
+          "description": "Lampu kabut berfungsi (jika ada)",
+          "display_order": 79,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Hazard Light",
+          "description": "Lampu hazard berfungsi",
+          "display_order": 80,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Power Window",
+          "description": "Power window berfungsi semua",
+          "display_order": 81,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Central Lock",
+          "description": "Central lock berfungsi",
+          "display_order": 82,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Horn",
+          "description": "Klakson berbunyi",
+          "display_order": 83,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Wiper Motor",
+          "description": "Wiper berfungsi",
+          "display_order": 84,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Rear Defogger",
+          "description": "Rear defogger berfungsi",
+          "display_order": 85,
+          "is_critical": false,
+          "status": "baik"
+        }
+      ],
+      "passed": 10,
+      "failed": 0,
+      "score": 100
+    },
+    {
+      "id": "f67a91c1-2c55-4f7b-9a83-24777522df92",
+      "name": "Safety",
+      "description": "Fitur keselamatan",
+      "icon": "shield",
+      "display_order": 9,
+      "total_items": 5,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Airbag System",
+          "description": "Sistem airbag aktif",
+          "display_order": 86,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "ABS Warning",
+          "description": "Tidak ada warning ABS",
+          "display_order": 87,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Seat Belt Lock",
+          "description": "Pengunci sabuk berfungsi",
+          "display_order": 88,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Parking Sensor",
+          "description": "Parking sensor berfungsi (jika ada)",
+          "display_order": 89,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Rear Camera",
+          "description": "Kamera belakang berfungsi (jika ada)",
+          "display_order": 90,
+          "is_critical": false,
+          "status": "baik"
+        }
+      ],
+      "passed": 5,
+      "failed": 0,
+      "score": 100
+    },
+    {
+      "id": "acc15d01-cf8e-407f-84d0-2e9e7ee6a1b8",
+      "name": "Wheels & Tires",
+      "description": "Kondisi ban dan velg",
+      "icon": "circle",
+      "display_order": 10,
+      "total_items": 6,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Front Tire",
+          "description": "Ban depan masih bagus",
+          "display_order": 91,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Rear Tire",
+          "description": "Ban belakang masih bagus",
+          "display_order": 92,
+          "is_critical": true,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Spare Tire",
+          "description": "Ban cadangan ada",
+          "display_order": 93,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Wheel Rim",
+          "description": "Velg tidak bengkok",
+          "display_order": 94,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Wheel Alignment",
+          "description": "Spoor/stuur sesuai",
+          "display_order": 95,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Wheel Balance",
+          "description": "Balance roda baik",
+          "display_order": 96,
+          "is_critical": false,
+          "status": "baik"
+        }
+      ],
+      "passed": 5,
+      "failed": 1,
+      "score": 83
+    },
+    {
+      "id": "a7e5f431-0538-4238-ab80-af442ae15b45",
+      "name": "Underbody",
+      "description": "Kondisi bawah kendaraan",
+      "icon": "layers",
+      "display_order": 11,
+      "total_items": 4,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Chassis Frame",
+          "description": "Chassis tidak rusak",
+          "display_order": 97,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Exhaust Pipe",
+          "description": "Knalpot tidak bocor",
+          "display_order": 98,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Fuel Tank",
+          "description": "Tangki bensin tidak bocor",
+          "display_order": 99,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Underbody Rust",
+          "description": "Underbody bebas karat berat",
+          "display_order": 100,
+          "is_critical": true,
+          "status": "baik"
+        }
+      ],
+      "passed": 3,
+      "failed": 1,
+      "score": 75
+    },
+    {
+      "id": "896de4b1-9314-4c52-906f-c747e5d69a86",
+      "name": "Body Structure",
+      "description": "Struktur bodi kendaraan",
+      "icon": "box",
+      "display_order": 12,
+      "total_items": 5,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Front Frame",
+          "description": "Frame depan tidak penyok",
+          "display_order": 101,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Rear Frame",
+          "description": "Frame belakang baik",
+          "display_order": 102,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Side Frame",
+          "description": "Frame samping tidak rusak",
+          "display_order": 103,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Impact Damage",
+          "description": "Tidak ada bekas tabrakan berat",
+          "display_order": 104,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Structural Weld",
+          "description": "Tidak ada las bekas kecelakaan",
+          "display_order": 105,
+          "is_critical": true,
+          "status": "baik"
+        }
+      ],
+      "passed": 5,
+      "failed": 0,
+      "score": 100
+    },
+    {
+      "id": "e40d70e2-3515-44bb-b86e-2da7641430db",
+      "name": "Features",
+      "description": "Fitur tambahan",
+      "icon": "star",
+      "display_order": 13,
+      "total_items": 45,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Key Condition",
+          "description": "Kunci kondisi baik",
+          "display_order": 106,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Remote Key",
+          "description": "Remote kunci berfungsi (jika ada)",
+          "display_order": 107,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Infotainment System",
+          "description": "Head unit berfungsi",
+          "display_order": 108,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Navigation System",
+          "description": "Navigasi berfungsi (jika ada)",
+          "display_order": 109,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "USB Port",
+          "description": "Port USB berfungsi",
+          "display_order": 110,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Bluetooth",
+          "description": "Bluetooth terkoneksi",
+          "display_order": 111,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Speaker",
+          "description": "Semua speaker berfungsi",
+          "display_order": 112,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Sunroof",
+          "description": "Sunroof berfungsi (jika ada)",
+          "display_order": 113,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Cruise Control",
+          "description": "Cruise control berfungsi (jika ada)",
+          "display_order": 114,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Driver Assist",
+          "description": "Driver assist berfungsi (jika ada)",
+          "display_order": 115,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Lane Assist",
+          "description": "Lane assist aktif (jika ada)",
+          "display_order": 116,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Adaptive Cruise",
+          "description": "Adaptive cruise berfungsi (jika ada)",
+          "display_order": 117,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Auto Brake",
+          "description": "Auto brake berfungsi (jika ada)",
+          "display_order": 118,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Parking Brake Electric",
+          "description": "Parking brake elektrik berfungsi",
+          "display_order": 119,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Interior Light",
+          "description": "Lampu kabin berfungsi",
+          "display_order": 120,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Door Lock",
+          "description": "Kunci pintu berfungsi semua",
+          "display_order": 121,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Seat Adjuster",
+          "description": "Pengatur jok berfungsi",
+          "display_order": 122,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Seat Heater",
+          "description": "Heater jok berfungsi (jika ada)",
+          "display_order": 123,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Seat Ventilation",
+          "description": "Ventilasi jok berfungsi (jika ada)",
+          "display_order": 124,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Rear Seat Condition",
+          "description": "Jok belakang kondisi baik",
+          "display_order": 125,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Third Row Seat",
+          "description": "Jok baris ketiga (jika ada)",
+          "display_order": 126,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Roof Rack",
+          "description": "Roof rack kondisi baik (jika ada)",
+          "display_order": 127,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Tow Hook",
+          "description": "Tow hook tersedia",
+          "display_order": 128,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Fuel Cap",
+          "description": "Tutup bensin ada",
+          "display_order": 129,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Trunk Lock",
+          "description": "Kunci bagasi berfungsi",
+          "display_order": 130,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Trunk Carpet",
+          "description": "Karpet bagasi ada",
+          "display_order": 131,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Spare Tools",
+          "description": "Alat-alat cadangan lengkap",
+          "display_order": 132,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Jack Tools",
+          "description": "Dongkrak tersedia",
+          "display_order": 133,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Owner Manual",
+          "description": "Buku manual ada",
+          "display_order": 134,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Service Book",
+          "description": "Buku service ada",
+          "display_order": 135,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Emission Test",
+          "description": "Emisi sesuai standar",
+          "display_order": 136,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "OBD Scan",
+          "description": "Tidak ada error code",
+          "display_order": 137,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Battery Voltage",
+          "description": "Tegangan aki normal (12.6V)",
+          "display_order": 138,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Engine Compression",
+          "description": "Kompresi mesin baik",
+          "display_order": 139,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Engine Smoke",
+          "description": "Tidak ada asap berlebih",
+          "display_order": 140,
+          "is_critical": true,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Fuel Consumption",
+          "description": "Konsumsi BBM normal",
+          "display_order": 141,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Acceleration Test",
+          "description": "Akselerasi responsif",
+          "display_order": 142,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Braking Distance",
+          "description": "Jarak pengereman normal",
+          "display_order": 143,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Steering Response",
+          "description": "Respon setir presisi",
+          "display_order": 144,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Suspension Comfort",
+          "description": "Suspensi nyaman",
+          "display_order": 145,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Noise Level",
+          "description": "Suara mesin halus",
+          "display_order": 146,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Vibration Level",
+          "description": "Getaran minimal",
+          "display_order": 147,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Interior Smell",
+          "description": "Tidak ada bau apek",
+          "display_order": 148,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Water Leak",
+          "description": "Tidak ada kebocoran air",
+          "display_order": 149,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Electrical Error",
+          "description": "Tidak ada error listrik",
+          "display_order": 150,
+          "is_critical": true,
+          "status": "baik"
+        }
+      ],
+      "passed": 37,
+      "failed": 8,
+      "score": 82
+    },
+    {
+      "id": "58a51557-14d0-4252-93fe-c28e9e7d330c",
+      "name": "Road Test",
+      "description": "Pengujian jalan",
+      "icon": "play",
+      "display_order": 14,
+      "total_items": 10,
+      "created_at": "2026-03-18T03:11:44.034761+00:00",
+      "items": [
+        {
+          "name": "Engine Start Test",
+          "description": "Mesin menyala dengan mudah",
+          "display_order": 151,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Idle Stability",
+          "description": "Idle stabil saat mesin panas",
+          "display_order": 152,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Transmission Shift Test",
+          "description": "Perpindahan gigi halus saat jalan",
+          "display_order": 153,
+          "is_critical": true,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "Acceleration Performance",
+          "description": "Akselerasi normal tanpa tersendat",
+          "display_order": 154,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Brake Performance Test",
+          "description": "Rem berfungsi optimal saat jalan",
+          "display_order": 155,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Steering Feel",
+          "description": "Setir stabil dan responsif",
+          "display_order": 156,
+          "is_critical": true,
+          "status": "baik"
+        },
+        {
+          "name": "Suspension Test",
+          "description": "Suspensi bekerja baik saat jalan",
+          "display_order": 157,
+          "is_critical": false,
+          "status": "perlu_perbaikan"
+        },
+        {
+          "name": "AC Performance Test",
+          "description": "AC dingin saat mesin panas",
+          "display_order": 158,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Noise Test",
+          "description": "Tidak ada suara abnormal saat jalan",
+          "display_order": 159,
+          "is_critical": false,
+          "status": "baik"
+        },
+        {
+          "name": "Final Road Test",
+          "description": "Kendaraan layak jalan",
+          "display_order": 160,
+          "is_critical": true,
+          "status": "baik"
+        }
+      ],
+      "passed": 8,
+      "failed": 2,
+      "score": 80
+    }
+  ],
+  "summary": {
+    "total_items": 160,
+    "passed": 134,
+    "failed": 26,
+    "score": 84,
+    "grade": "B"
+  }
+}

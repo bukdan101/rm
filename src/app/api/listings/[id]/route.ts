@@ -73,22 +73,32 @@ async function getTokenSettings(): Promise<{
   }
 }
 
-// GET - Get listing detail by ID
+// GET - Get listing detail by ID or slug
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
-    
-    // First get the basic listing data
+
+    // Get listing by ID or slug
     const { data: listing, error } = await supabaseAdmin
       .from('car_listings')
-      .select('*')
-      .eq('id', id)
+      .select(`
+        *,
+        brand:brands(id, name, slug, logo_url),
+        model:car_models(id, name, slug, body_type),
+        variant:car_variants(id, name, transmission, fuel_type),
+        exterior_color:car_colors!car_listings_exterior_color_id_fkey(id, name, hex_code),
+        interior_color:car_colors!car_listings_interior_color_id_fkey(id, name, hex_code),
+        images:car_images(id, image_url, is_primary, display_order),
+        documents:car_documents(*),
+        features:car_features(*)
+      `)
+      .or(`slug.eq.${id},id.eq.${id}`)
       .is('deleted_at', null)
       .single()
-    
+
     if (error || !listing) {
       console.error('Listing fetch error:', error)
       return NextResponse.json({
@@ -96,92 +106,114 @@ export async function GET(
         error: 'Listing tidak ditemukan'
       }, { status: 404 })
     }
-    
-    // Get brand
-    let brand = null
-    if (listing.brand_id) {
-      const { data: brandData } = await supabaseAdmin
-        .from('brands')
-        .select('id, name, slug, logo_url')
-        .eq('id', listing.brand_id)
-        .single()
-      brand = brandData
-    }
-    
-    // Get model
-    let model = null
-    if (listing.model_id) {
-      const { data: modelData } = await supabaseAdmin
-        .from('car_models')
-        .select('id, name, slug, body_type')
-        .eq('id', listing.model_id)
-        .single()
-      model = modelData
-    }
-    
-    // Get color
-    let color = null
-    if (listing.exterior_color_id) {
-      const { data: colorData } = await supabaseAdmin
-        .from('car_colors')
-        .select('id, name')
-        .eq('id', listing.exterior_color_id)
-        .single()
-      color = colorData
-    }
-    
-    // Get user/profile
-    let userProfile = null
-    if (listing.user_id) {
-      const { data: profileData } = await supabaseAdmin
+
+    // Get seller info
+    let seller = null
+    if (listing.seller_id) {
+      const { data: sellerData } = await supabaseAdmin
         .from('profiles')
-        .select('id, full_name, phone, avatar_url, role')
-        .eq('id', listing.user_id)
+        .select('id, full_name, phone, avatar_url, is_verified, city, province')
+        .eq('id', listing.seller_id)
         .single()
-      userProfile = profileData ? {
-        id: profileData.id,
-        name: profileData.full_name,
-        phone: profileData.phone,
-        avatar_url: profileData.avatar_url,
-        role: profileData.role
-      } : null
+      seller = sellerData
     }
-    
-    // Get images
-    const { data: images } = await supabaseAdmin
-      .from('car_images')
-      .select('id, image_url, is_primary, display_order')
-      .eq('car_listing_id', id)
-      .order('display_order', { ascending: true })
-    
+
+    // Get dealer info if listing belongs to dealer
+    let dealer = null
+    if (listing.dealer_id) {
+      const { data: dealerData } = await supabaseAdmin
+        .from('dealers')
+        .select(`
+          id, name, slug, logo_url, cover_url, description,
+          phone, whatsapp, email, website, instagram,
+          address, verified, rating, review_count, subscription_tier
+        `)
+        .eq('id', listing.dealer_id)
+        .single()
+      dealer = dealerData
+    }
+
     // Get inspection if exists
     const { data: inspection } = await supabaseAdmin
       .from('car_inspections')
-      .select('id, overall_grade, inspection_score, status')
-      .eq('car_listing_id', id)
-      .eq('status', 'completed')
-      .single()
-    
+      .select(`
+        id,
+        inspector_name,
+        inspection_place,
+        inspection_date,
+        total_points,
+        passed_points,
+        accident_free,
+        flood_free,
+        fire_free,
+        risk_level,
+        overall_score,
+        status,
+        created_at,
+        results:inspection_results(
+          id,
+          status,
+          notes,
+          image_url,
+          item:inspection_items(id, category, name, description, display_order)
+        )
+      `)
+      .eq('car_listing_id', listing.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    // Group inspection results by category
+    let inspectionByCategory = null
+    let inspectionStats = null
+    if (inspection && inspection.results) {
+      const grouped: Record<string, any[]> = {}
+      for (const result of inspection.results) {
+        const category = result.item?.category || 'Lainnya'
+        if (!grouped[category]) {
+          grouped[category] = []
+        }
+        grouped[category].push(result)
+      }
+      inspectionByCategory = grouped
+
+      // Calculate stats
+      const total = inspection.results.length
+      const passed = inspection.results.filter((r: any) => r.status === 'baik' || r.status === 'istimewa').length
+      const needRepair = inspection.results.filter((r: any) => r.status === 'perlu_perbaikan').length
+      const notRelated = inspection.results.filter((r: any) => r.status === 'tidak_berkaitan').length
+
+      inspectionStats = {
+        total,
+        passed,
+        needRepair,
+        notRelated,
+        passedPercentage: total > 0 ? Math.round((passed / total) * 100) : 0
+      }
+    }
+
     // Increment view count
     await supabaseAdmin
       .from('car_listings')
       .update({ view_count: (listing.view_count || 0) + 1 })
-      .eq('id', id)
-    
-    // Transform data
-    const transformedListing = {
-      ...listing,
-      brand,
-      model,
-      color,
-      user: userProfile,
-      images: images || [],
-      inspection: inspection || null,
-    }
-    
+      .eq('id', listing.id)
+
+    // Sort images by display_order
+    const sortedImages = listing.images?.sort((a: any, b: any) => (a.display_order || 0) - (b.display_order || 0)) || []
+
     return NextResponse.json({
       success: true,
-      listing: transformedListing
+      listing: {
+        ...listing,
+        images: sortedImages,
+        seller,
+        dealer,
+        inspection: inspection ? {
+          ...inspection,
+          results_by_category: inspectionByCategory,
+          stats: inspectionStats
+        } : null
+      }
     })
   } catch (error: any) {
     console.error('Error fetching listing:', error)

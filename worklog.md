@@ -1621,3 +1621,185 @@ Updated the Admin Dashboard to fetch real data from the `/api/admin/stats` API e
 - **Refresh Function**: Manual data refresh capability
 - **Same UI Layout**: All original styling and structure preserved
 - **Lint Status**: All files pass lint with no errors
+---
+Task ID: 18 - go-backend-agent
+Agent: Main Assistant
+Task: Create Golang Fiber v3 backend project structure for AutoMarket Indonesia
+
+Work Log:
+- Created project directory structure: internal/config, internal/database, internal/models, pkg/response, pkg/logger, db/
+- Created `.env` with all configuration values (APP_NAME, APP_ENV, APP_PORT, DB_DRIVER, DB_DSN, JWT_SECRET, JWT_EXPIRATION_HOURS)
+- Created `internal/config/config.go` with LoadConfig() function using godotenv for .env loading
+- Created `internal/database/database.go` with ConnectDatabase() function using gorm.io/driver/sqlite, WAL mode, foreign keys
+- Created `internal/models/models.go` with all 35 GORM models:
+  - Region: Province, City, District, Village
+  - User: Profile
+  - Catalog: Brand, CarModel, CarVariant, CarColor
+  - Dealer: Dealer
+  - Listing: CarListing (with 45+ fields), CarImage, CarVideo, CarDocument, CarFeature
+  - Inspection: InspectionCategory, InspectionItem, CarInspection, InspectionResult
+  - Credits: CreditPackage, UserCredit, CreditTransaction, Payment
+  - Boost: BoostFeature, ListingBoost
+  - Offers: DealerOffer, DealerOfferHistory
+  - KYC: KycVerification
+  - Notifications: Notification
+  - Favorites: Favorite
+  - Registration: DealerRegistration
+  - Tokens: TokenSetting, TokenPackage, UserToken, TokenTransaction
+  - GetAllModels() helper for AutoMigrate
+- Created `pkg/response/response.go` with JSON response helpers: Success, Error, Paginated, Created, OK, BadRequest, Unauthorized, Forbidden, NotFound, InternalServerError
+- Created `pkg/logger/logger.go` with colored console logging: Info, Error, Warn, Debug, Fatal, Startup
+- All models use SQLite-compatible types: string for UUIDs, int64 for BIGINT, float64 for DECIMAL
+
+Stage Summary:
+- **6 files created** in /home/z/automarket-api
+- **35 GORM models** matching Supabase schema with SQLite-compatible types
+- **Config system** with godotenv .env loading
+- **Database layer** with SQLite WAL mode and foreign keys
+- **Response helpers** for consistent JSON API responses
+- **Colored logger** for development-time debugging
+- **Module**: github.com/bukdan101/automarket-api
+
+---
+## Task ID: 18 - go-auth-system-agent
+### Work Task
+Build the AUTH SYSTEM for AutoMarket Indonesia Golang Fiber v3 backend.
+
+### Work Summary
+Created complete auth system with 4 new files + 1 fix for existing response package:
+
+**1. Created `/home/z/automarket-api/pkg/jwt/jwt.go`:**
+- `GenerateToken(userID, role, secret, expHours)` - Creates HS256 JWT with user_id, role, exp, iat claims
+- `ParseToken(tokenString, secret)` - Parses and validates JWT, returns MapClaims
+- Validates signing method is HMAC before parsing
+
+**2. Created `/home/z/automarket-api/internal/middleware/auth.go`:**
+- `JWTAuthMiddleware(secret)` - Extracts Bearer token from Authorization header, validates JWT, stores user_id and role in Locals
+- `AdminOnly()` - Returns 403 if role != "admin"
+- `DealerOnly()` - Returns 403 if role not in ["dealer", "admin"]
+- `GetUserID(c)` / `GetUserRole(c)` - Helpers to extract from Locals
+- All use `fiber.Ctx` (interface, Fiber v3 style)
+
+**3. Created `/home/z/automarket-api/internal/handlers/auth_handler.go`:**
+- `AuthHandler` struct with `db *gorm.DB` and `jwtSecret string`
+- `Register` - POST /api/auth/register: validates input, checks email uniqueness, bcrypt password hashing, creates Profile (role=buyer) + UserCredential, returns JWT + user data
+- `Login` - POST /api/auth/login: finds profile by email, bcrypt compare, dev mode fallback for OAuth-only profiles
+- `GetProfile` - GET /api/auth/me: returns authenticated user's profile
+- `UpdateProfile` - PUT /api/auth/profile: updates full_name, phone, avatar_url
+- `CheckRole` - GET /api/auth/check-role: returns user_id, role, is_admin, is_dealer
+- `GoogleAuth` - POST /api/auth/google: find-or-create profile, update name/avatar from Google, generate JWT
+- `AdminLogin` - POST /api/auth/admin-login: dev mode, email containing "admin" grants admin role, auto-creates profile
+- `UserCredential` model (local to handlers package): separate table for password hashes since Profile model has no PasswordHash field
+
+**4. Created `/home/z/automarket-api/internal/routes/auth_routes.go`:**
+- `SetupAuthRoutes(router, handler, jwtSecret)` - Registers all auth routes
+- Public: /register, /login, /google, /admin-login
+- Protected (JWT middleware): /me, /profile, /check-role
+
+**5. Fixed `/home/z/automarket-api/pkg/response/response.go`:**
+- Changed all `*fiber.Ctx` to `fiber.Ctx` for Fiber v3 compatibility (Ctx is interface in v3, not pointer to struct)
+
+### Key Design Decisions:
+- Separate `user_credentials` table for password storage since Profile model doesn't have PasswordHash field
+- Transactional profile + credential creation in Register
+- Dev mode fallbacks: Login allows OAuth-only profiles, AdminLogin accepts any password
+- All JSON uses snake_case
+- Import path: `github.com/bukdan101/automarket-api/...`
+
+### Build Status:
+- `go vet` passes cleanly for all new packages (pkg/jwt, pkg/response, internal/middleware, internal/handlers, internal/routes)
+- Dependencies installed: fiber/v3, gorm, sqlite driver, jwt/v5, uuid, bcrypt/crypto, godotenv
+---
+Task ID: 18
+Agent: Main Assistant (Go Backend)
+Task: Create Listing System for AutoMarket Golang Fiber v3 Backend
+
+Work Log:
+- Read all existing files to understand project structure, models, middleware, and conventions
+- Created `/home/z/automarket-api/internal/handlers/listing_handler.go`:
+  - `ListingHandler` struct with `db *gorm.DB`
+  - `NewListingHandler(db *gorm.DB) *ListingHandler`
+  - `GetListings` - GET /api/listings with full pagination and filtering (search, brand, model, condition, transmission, fuel, body_type, year range, price range, city, province, sort, status, visibility)
+  - `GetListing` - GET /api/listings/:id with all relations (Brand, Model, Variant, ExteriorColor, InteriorColor, Images, Videos, Documents, Features, Inspection, Dealer, User) and view_count increment
+  - `CreateListing` - POST /api/listings (auth) with listing_number generation (AM-timestamp-random4), slug generation, image creation, transaction support
+  - `UpdateListing` - PUT /api/listings/:id (auth) with owner check, partial update support
+  - `DeleteListing` - DELETE /api/listings/:id (auth) with soft delete, owner/admin check
+  - `GetMyListings` - GET /api/listings/my (auth) with pagination
+  - `UpdateListingPhotos` - PUT /api/listings/:id/photos (auth) replacing all images
+  - `GetListingsByBrand` - GET /api/brands/:brand_id/listings with pagination
+  - `GetFeaturedListings` - GET /api/listings/featured (featured_until > now OR active with views, limit 10)
+- Created `/home/z/automarket-api/internal/handlers/master_data_handler.go`:
+  - `MasterDataHandler` struct with `db *gorm.DB`
+  - `GetBrands` - GET /api/brands with listing count per brand
+  - `GetModels` - GET /api/models with optional brand_id filter
+  - `GetVariants` - GET /api/variants with optional model_id filter
+  - `GetColors` - GET /api/colors
+  - `GetProvinces` - GET /api/locations/provinces (active only)
+  - `GetCities` - GET /api/locations/cities with optional province_id filter
+  - `GetDistricts` - GET /api/locations/districts with optional city_id filter
+  - `GetInspectionCategories` - GET /api/inspections/categories
+  - `GetInspectionItems` - GET /api/inspections/items with optional category_id filter
+  - `Search` - GET /api/search?q=xxx with grouped results (brands, models, listings)
+- Created `/home/z/automarket-api/internal/routes/listing_routes.go`:
+  - `SetupListingRoutes` with public and auth-protected routes
+  - `/api/listings/featured` registered before `/:id` to avoid route conflict
+  - `/api/listings/my` behind auth middleware
+  - `/api/brands/:brand_id/listings` as public route
+- Created `/home/z/automarket-api/internal/routes/master_data_routes.go`:
+  - `SetupMasterDataRoutes` with all public routes
+  - Groups: /api/locations (provinces, cities, districts), /api/inspections (categories, items)
+
+Stage Summary:
+- **Listing Handler**: 9 endpoints covering full CRUD + search + featured + brand filtering
+- **Master Data Handler**: 10 endpoints for brands, models, variants, colors, locations, inspections, search
+- **Listing Routes**: Public + auth-protected routes with proper ordering
+- **Master Data Routes**: All public routes for reference data
+- **Conventions**: Follows existing Fiber v3 patterns (c.Bind().JSON, c.Params, c.Query), GORM Preload for relations, response helpers for consistent API responses
+- **Status**: All 4 files created successfully
+## Work Log - AutoMarket API: Main Server, Router Setup & Seeder
+
+### Date: 2025-07-14
+
+### Files Created:
+1. **`internal/routes/routes.go`** - Main route setup function `SetupRoutes(app, db, cfg)` that:
+   - Creates all handlers (AuthHandler, ListingHandler, MasterDataHandler)
+   - Creates JWT auth middleware
+   - Registers auth, listing, and master_data routes
+   - Mounts static file server for uploads via `fiber/v3/middleware/static`
+
+2. **`cmd/server/main.go`** - Main server entry point that:
+   - Loads config via `config.LoadConfig()`
+   - Connects to database via `database.ConnectDatabase(cfg)`
+   - Runs AutoMigrate with `models.GetAllModels()`
+   - Creates Fiber app with AppName config
+   - Sets up CORS middleware (allow all origins, GET/POST/PUT/DELETE, Content-Type/Authorization headers)
+   - Sets up all routes via `routes.SetupRoutes()`
+   - Adds `GET /api/health` endpoint (returns status/service/version)
+   - Adds `GET /api/stats` endpoint (returns counts of profiles, listings, brands, dealers)
+   - Starts server on configured port
+   - Handles graceful shutdown (SIGINT/SIGTERM) with 10s timeout
+
+3. **`seed/seed.go`** - Standalone database seeder (`go run seed/seed.go`) that:
+   - Seeds 10 Indonesian provinces
+   - Seeds 16 cities across provinces
+   - Seeds 10 car brands (Toyota, Honda, Mitsubishi, Suzuki, Daihatsu, Nissan, BMW, Mercedes-Benz, Hyundai, Wuling)
+   - Seeds 17 car models across brands
+   - Seeds 17 car variants with realistic specs and prices
+   - Seeds 10 car colors (Indonesian names)
+   - Seeds 9 credit packages (5 user + 4 dealer)
+   - Seeds token settings (default pricing configuration)
+   - Seeds admin user profile (admin@automarket.co.id)
+   - Seeds 5 sample listings with realistic Indonesian car data and 13 images
+   - All seeding is conditional (only if table is empty)
+   - Prints formatted summary of seeded data
+
+### Dependencies Added:
+- `github.com/gofiber/fiber/v3/middleware/cors` - CORS middleware for Fiber v3
+- `github.com/gofiber/fiber/v3/middleware/static` - Static file serving for Fiber v3
+
+### Key Design Notes:
+- Used Fiber v3 middleware patterns (no `app.Static()` - uses `static.New()` middleware instead)
+- CORS allows all origins for development
+- Seed file is runnable standalone with hardcoded config
+- All builds verified passing with `go build`
+

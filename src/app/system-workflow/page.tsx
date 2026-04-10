@@ -21,12 +21,17 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
+  CheckCircle2,
+  XCircle,
   AlertTriangle,
-  Server,
+  ArrowRight,
   Database,
-  Code2,
+  Server,
+  Cpu,
+  Shield,
   Zap,
   MessageSquare,
+  TrendingUp,
   Users,
   Car,
   Building2,
@@ -34,386 +39,277 @@ import {
   Layers,
   GitBranch,
   Clock,
-  Shield,
-  ArrowRight,
-  ThumbsUp,
-  ThumbsDown,
-  TriangleAlert,
-  FileText,
-  Brain,
-  Gauge,
-  LayoutGrid,
-  AlertCircle,
+  Code2,
+  Box,
+  Rocket,
+  Target,
+  Eye,
 } from 'lucide-react'
 
-// ─── Data: Gap Analysis Table ──────────────────────────────
-const gapRows = [
-  ['Arsitektur API', 'GraphQL Gateway (Fiber)', 'REST API (Fiber) — 25 endpoint sudah ada'],
-  ['Database', 'Schema Isolation per service', 'Single database, GORM AutoMigrate'],
-  ['Foreign Key', '❌ NO FK — UUID reference only', '✅ 27 GORM foreignKey relations'],
-  ['Frontend', 'GraphQL Client', '131 REST API routes + Supabase client'],
-  ['Auth', 'JWT dari user-service', 'JWT sudah ada + Google OAuth'],
-  ['ORM', 'Raw SQL (no FK)', 'GORM dengan relations'],
-  ['Deployment', '6 Cloud Run containers', '1 binary (belum deploy)'],
-  ['Caching', 'Redis + DataLoader', 'Redis connected (belum terpakai penuh)'],
-  ['Storage', 'GCS', 'Belum diimplementasi (config ada)'],
-  ['Event Bus', 'Pub/Sub (Phase 3)', 'Tidak ada'],
-  ['Query Join', 'GraphQL resolver join', 'GORM Preload / JOIN SQL'],
-  ['Location', 'Tidak ada di PRD', '4 tabel (Country, Province, City, District)'],
-]
-
-// ─── Data: Architecture Choices ────────────────────────────
-const archChoices = [
-  {
-    id: 'A',
-    title: 'IKUTI PRD',
-    subtitle: 'GraphQL + No FK + Microservices',
-    color: 'amber',
-    borderClass: 'border-amber-500/40',
-    tagClass: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
-    pros: [
-      'Sesuai PRD 100%',
-      'Schema isolation = true independence',
-      'GraphQL resolver = flexible data fetching',
-      'Siap scale ke 6 containers',
-    ],
-    cons: [
-      'REWRITE seluruh backend (101 models → ulang)',
-      'REWRITE seluruh frontend (131 REST routes → GraphQL client)',
-      'Tidak ada GORM relations → manual join di resolver',
-      'Timeline: 8-12 minggu',
-      'Higher complexity untuk team kecil',
-    ],
-  },
-  {
-    id: 'B',
-    title: 'HYBRID',
-    subtitle: 'REST + Clean Architecture + Modular Monolith',
-    color: 'emerald',
-    borderClass: 'border-emerald-500/40',
-    tagClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-    pros: [
-      '101 models sudah siap (tinggal restructure)',
-      '25 API endpoints sudah jalan',
-      'Frontend 131 routes tinggal redirect ke Go backend',
-      'GORM relations → data consistency otomatis',
-      'Timeline: 2-4 minggu',
-    ],
-    cons: [
-      'Tidak sesuai PRD (GraphQL)',
-      'Single DB = tidak true microservice',
-      'GORM FK = coupling antar tabel',
-      'Perlu refactor nanti untuk scale',
-    ],
-  },
-  {
-    id: 'C',
-    title: 'INCREMENTAL',
-    subtitle: 'REST sekarang → GraphQL nanti',
-    color: 'blue',
-    borderClass: 'border-blue-500/40',
-    tagClass: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
-    pros: [
-      'Mulai dengan REST + GORM (sudah ada)',
-      'Tambahkan GraphQL gateway di depan (wrapper)',
-      'Ganti ke No FK secara bertahap per service',
-      'Extract service satu per satu',
-      'Timeline: 4-6 minggu untuk MVP, 8-12 minggu untuk full',
-    ],
-    cons: [
-      '2 system API (REST + GraphQL) sementara',
-      'Migration complexity bertahap',
-      'Perlu maintain 2 client (REST + GraphQL) sementara',
-    ],
-  },
-]
-
-// ─── Data: Table Coverage per Service ──────────────────────
-interface TableCoverageRow {
-  tableName: string
-  prd: string
-  backendModel: string
-  status: string
-}
-
-const serviceCoverage: {
-  serviceName: string
-  tableCount: string
-  rows: TableCoverageRow[]
-}[] = [
-  {
-    serviceName: 'USER SERVICE',
-    tableCount: '8 tables',
-    rows: [
-      { tableName: 'profiles', prd: '✅', backendModel: 'Profile (user.go)', status: '✅ Ready' },
-      { tableName: 'user_settings', prd: '✅', backendModel: 'UserSettings (user.go)', status: '✅ Ready' },
-      { tableName: 'user_sessions', prd: '✅', backendModel: 'UserSession (user.go)', status: '✅ Ready' },
-      { tableName: 'user_tokens', prd: '✅', backendModel: 'UserToken (token.go)', status: '✅ Ready' },
-      { tableName: 'kyc_verifications', prd: '✅', backendModel: 'KycVerification (admin.go)', status: '✅ Ready' },
-      { tableName: 'user_verifications', prd: '✅', backendModel: 'UserVerification (user.go)', status: '✅ Ready' },
-      { tableName: 'user_addresses', prd: '✅', backendModel: 'UserAddress (user.go)', status: '✅ Ready' },
-      { tableName: 'user_documents', prd: '✅', backendModel: 'UserDocument (user.go)', status: '✅ Ready' },
-    ],
-  },
-  {
-    serviceName: 'LISTING SERVICE',
-    tableCount: '18 tables',
-    rows: [
-      { tableName: 'car_listings', prd: '✅', backendModel: 'CarListing (listing.go)', status: '✅ Ready — 45+ columns' },
-      { tableName: 'car_images', prd: '✅', backendModel: 'CarImage (listing.go)', status: '✅ Ready' },
-      { tableName: 'car_features', prd: '✅', backendModel: 'CarFeatures (listing.go)', status: '✅ Ready — 18 boolean fields' },
-      { tableName: 'car_feature_values', prd: '✅', backendModel: 'CarFeatureValue (listing.go)', status: '✅ Ready' },
-      { tableName: 'car_documents', prd: '✅', backendModel: 'CarDocument (listing.go)', status: '✅ Ready' },
-      { tableName: 'car_inspections', prd: '✅', backendModel: 'CarInspection (inspection.go)', status: '✅ Ready' },
-      { tableName: 'inspection_results', prd: '✅', backendModel: 'InspectionResult (inspection.go)', status: '✅ Ready' },
-      { tableName: 'inspection_items', prd: '✅', backendModel: 'InspectionItem (inspection.go)', status: '✅ Ready' },
-      { tableName: 'inspection_categories', prd: '✅', backendModel: 'InspectionCategory (inspection.go)', status: '✅ Ready' },
-      { tableName: 'car_brands', prd: '✅', backendModel: 'Brand (vehicle.go)', status: '✅ Ready' },
-      { tableName: 'car_models', prd: '✅', backendModel: 'CarModel (vehicle.go)', status: '✅ Ready' },
-      { tableName: 'car_variants', prd: '✅', backendModel: 'CarVariant (vehicle.go)', status: '✅ Ready' },
-      { tableName: 'car_generations', prd: '✅', backendModel: 'CarGeneration (vehicle.go)', status: '✅ Ready' },
-      { tableName: 'car_colors', prd: '✅', backendModel: 'CarColor (vehicle.go)', status: '✅ Ready' },
-      { tableName: 'car_body_types', prd: '✅', backendModel: 'CarBodyType (vehicle.go)', status: '✅ Ready' },
-      { tableName: 'car_fuel_types', prd: '✅', backendModel: 'CarFuelType (vehicle.go)', status: '✅ Ready' },
-      { tableName: 'car_transmissions', prd: '✅', backendModel: 'CarTransmission (vehicle.go)', status: '✅ Ready' },
-      { tableName: 'car_videos', prd: '✅', backendModel: 'CarVideo (listing.go)', status: '✅ Ready' },
-    ],
-  },
-  {
-    serviceName: 'INTERACTION SERVICE',
-    tableCount: '7 tables',
-    rows: [
-      { tableName: 'car_reviews', prd: '✅', backendModel: 'CarReview (rental.go)', status: '⚠️ DUPLICATE — also in review.go' },
-      { tableName: 'review_images', prd: '✅', backendModel: 'ReviewImage (rental.go)', status: '⚠️ DUPLICATE — also in review.go' },
-      { tableName: 'review_votes', prd: '✅', backendModel: 'ReviewVote (rental.go)', status: '⚠️ DUPLICATE — also in review.go' },
-      { tableName: 'car_favorites', prd: '✅', backendModel: 'CarFavorite (listing.go)', status: '⚠️ DUPLICATE — also Favorites in analytics.go' },
-      { tableName: 'recent_views', prd: '✅', backendModel: 'RecentView (listing.go)', status: '✅ Ready' },
-      { tableName: 'recommendations', prd: '✅', backendModel: 'Recommendation (analytics.go)', status: '✅ Ready' },
-      { tableName: 'trending_cars', prd: '✅', backendModel: 'TrendingCar (listing.go)', status: '✅ Ready' },
-    ],
-  },
-  {
-    serviceName: 'TRANSACTION SERVICE',
-    tableCount: '14 tables',
-    rows: [
-      { tableName: 'orders', prd: '✅', backendModel: 'Order (payment.go)', status: '✅ Ready' },
-      { tableName: 'order_items', prd: '✅', backendModel: 'OrderItem (payment.go)', status: '✅ Ready' },
-      { tableName: 'payments', prd: '✅', backendModel: 'Payment (payment.go)', status: '✅ Ready' },
-      { tableName: 'transactions', prd: '✅', backendModel: 'Transaction (payment.go)', status: '✅ Ready' },
-      { tableName: 'refunds', prd: '✅', backendModel: 'Refund (payment.go)', status: '✅ Ready' },
-      { tableName: 'invoices', prd: '✅', backendModel: 'Invoice (payment.go)', status: '✅ Ready' },
-      { tableName: 'escrow_accounts', prd: '✅', backendModel: 'EscrowAccount (payment.go)', status: '✅ Ready' },
-      { tableName: 'token_transactions', prd: '✅', backendModel: 'TokenTransaction (token.go)', status: '✅ Ready' },
-      { tableName: 'topup_requests', prd: '✅', backendModel: 'TopupRequest (token.go)', status: '✅ Ready' },
-      { tableName: 'token_packages', prd: '✅', backendModel: 'TokenPackage (token.go)', status: '✅ Ready' },
-      { tableName: 'rental_bookings', prd: '✅', backendModel: 'RentalBooking (rental.go)', status: '✅ Ready' },
-      { tableName: 'rental_payments', prd: '✅', backendModel: 'RentalPayment (rental.go)', status: '✅ Ready' },
-      { tableName: 'rental_reviews', prd: '✅', backendModel: 'RentalReview (rental.go)', status: '✅ Ready' },
-      { tableName: 'rental_insurance', prd: '✅', backendModel: 'RentalInsurance (rental.go)', status: '✅ Ready' },
-    ],
-  },
-  {
-    serviceName: 'BUSINESS SERVICE',
-    tableCount: '14 tables',
-    rows: [
-      { tableName: 'dealers', prd: '✅', backendModel: 'Dealer (dealer.go)', status: '✅ Ready' },
-      { tableName: 'dealer_staff', prd: '✅', backendModel: 'DealerStaff (dealer.go)', status: '✅ Ready' },
-      { tableName: 'dealer_reviews', prd: '✅', backendModel: 'DealerReview (dealer.go)', status: '✅ Ready' },
-      { tableName: 'dealer_branches', prd: '✅', backendModel: 'DealerBranch (dealer.go)', status: '✅ Ready' },
-      { tableName: 'dealer_documents', prd: '✅', backendModel: 'DealerDocument (dealer.go)', status: '✅ Ready' },
-      { tableName: 'dealer_inventory', prd: '✅', backendModel: 'DealerInventory (dealer.go)', status: '✅ Ready' },
-      { tableName: 'dealer_offers', prd: '✅', backendModel: 'DealerOffer (dealer.go)', status: '✅ Ready' },
-      { tableName: 'dealer_offer_histories', prd: '✅', backendModel: 'DealerOfferHistory (dealer.go)', status: '✅ Ready' },
-      { tableName: 'banners', prd: '✅', backendModel: 'Banner (admin.go)', status: '✅ Ready' },
-      { tableName: 'broadcasts', prd: '✅', backendModel: 'Broadcast (notification.go)', status: '✅ Ready' },
-      { tableName: 'categories', prd: '✅', backendModel: 'Category (vehicle.go)', status: '✅ Ready' },
-      { tableName: 'coupons', prd: '✅', backendModel: 'Coupon (payment.go)', status: '✅ Ready' },
-      { tableName: 'support_tickets', prd: '✅', backendModel: 'SupportTicket (admin.go)', status: '✅ Ready' },
-      { tableName: 'support_ticket_messages', prd: '✅', backendModel: 'SupportTicketMessage (admin.go)', status: '✅ Ready' },
-    ],
-  },
-  {
-    serviceName: 'SYSTEM SERVICE',
-    tableCount: '12 tables',
-    rows: [
-      { tableName: 'messages', prd: '✅', backendModel: 'Message (chat.go)', status: '✅ Ready' },
-      { tableName: 'conversations', prd: '✅', backendModel: 'Conversation (chat.go)', status: '✅ Ready' },
-      { tableName: 'message_attachments', prd: '✅', backendModel: 'MessageAttachment (chat.go)', status: '✅ Ready' },
-      { tableName: 'notifications', prd: '✅', backendModel: 'Notification (notification.go)', status: '✅ Ready — split jadi 2 tabel' },
-      { tableName: 'notification_logs', prd: '✅', backendModel: 'NotificationLog (notification.go)', status: '✅ Ready' },
-      { tableName: 'notification_templates', prd: '✅', backendModel: 'NotificationTemplate (notification.go)', status: '✅ Ready' },
-      { tableName: 'analytics_events', prd: '✅', backendModel: 'AnalyticsEvent (analytics.go)', status: '✅ Ready' },
-      { tableName: 'analytics_clicks', prd: '✅', backendModel: 'AnalyticsClick (analytics.go)', status: '✅ Ready' },
-      { tableName: 'analytics_conversions', prd: '✅', backendModel: 'AnalyticsConversion (analytics.go)', status: '✅ Ready' },
-      { tableName: 'analytics_page_views', prd: '✅', backendModel: 'AnalyticsPageView (analytics.go)', status: '✅ Ready' },
-      { tableName: 'search_logs', prd: '✅', backendModel: 'SearchLog (analytics.go)', status: '✅ Ready' },
-      { tableName: 'activity_logs', prd: '✅', backendModel: 'ActivityLog (admin.go)', status: '✅ Ready' },
-    ],
-  },
-]
-
-// ─── Data: Extra Tables Not in PRD ─────────────────────────
-const extraTables = [
-  ['User', 'user.go', 'Auth table (implicit, PRD only has profiles)'],
-  ['SystemSetting', 'admin.go', 'Admin configuration key-value store'],
-  ['Report', 'admin.go', 'User content reporting'],
-  ['TokenSetting', 'token.go', 'Token pricing configuration'],
-  ['BoostSetting', 'token.go', 'Listing boost configuration'],
-  ['PaymentMethod', 'payment.go', 'Saved payment methods'],
-  ['Withdrawal', 'payment.go', 'Seller withdrawal requests'],
-  ['FeeSetting', 'payment.go', 'Platform fee configuration'],
-  ['Country', 'location.go', 'Geographic master data'],
-  ['Province', 'location.go', 'Geographic master data'],
-  ['City', 'location.go', 'Geographic master data'],
-  ['District', 'location.go', 'Geographic master data'],
-  ['InspectionPhoto', 'inspection.go', 'Inspection photo evidence'],
-  ['InspectionCertificate', 'inspection.go', 'Certificate tracking'],
-  ['UserNotification', 'notification.go', 'Per-user notification delivery'],
-  ['FeatureCategory', 'vehicle.go', 'Feature hierarchy (3-level)'],
-  ['FeatureGroup', 'vehicle.go', 'Feature hierarchy (3-level)'],
-  ['FeatureItem', 'vehicle.go', 'Feature hierarchy (3-level)'],
-  ['CarRentalPrice', 'listing.go', 'Rental pricing per listing'],
-  ['CarPriceHistory', 'listing.go', 'Price change audit trail'],
-  ['CarStatusHistory', 'listing.go', 'Status change audit trail'],
-  ['CarView', 'listing.go', 'View tracking'],
-  ['CarCompare', 'listing.go', 'Car comparison'],
-  ['RentalAvailability', 'rental.go', 'Calendar availability'],
-  ['DealerMarketplaceSetting', 'dealer.go', 'B2B marketplace config'],
-  ['DealerMarketplaceFavorite', 'dealer.go', 'B2B favorites'],
-  ['DealerMarketplaceView', 'dealer.go', 'B2B view tracking'],
-]
-
-// ─── Data: Duplicate & Bug List ────────────────────────────
-const bugItems = [
-  { severity: 'critical', emoji: '🔴', text: 'CarReview duplicate: review.go vs rental.go → COMPILE ERROR' },
-  { severity: 'critical', emoji: '🔴', text: 'ReviewImage duplicate: review.go vs rental.go → COMPILE ERROR' },
-  { severity: 'critical', emoji: '🔴', text: 'ReviewVote duplicate: review.go vs rental.go → COMPILE ERROR' },
-  { severity: 'warning', emoji: '⚠️', text: 'Favorites vs CarFavorite: analytics.go vs listing.go → 2 tabel terpisah untuk 1 konsep' },
-  { severity: 'warning', emoji: '⚠️', text: 'Token deduction not atomic in CreateListing controller' },
-  { severity: 'warning', emoji: '⚠️', text: 'Hardcoded tokenCost = 10 in controller (seharusnya dari TokenSetting)' },
-  { severity: 'warning', emoji: '⚠️', text: 'Admin routes group assigned to blank identifier (_ = auth.Group(...))' },
-  { severity: 'warning', emoji: '⚠️', text: 'MinIO/GCS config exists but no storage service implemented' },
-  { severity: 'warning', emoji: '⚠️', text: 'Invoice.Items using *string (jsonb) instead of proper struct' },
-]
-
-// ─── Data: Frontend Impact Table ───────────────────────────
-const frontendImpactRows = [
-  ['API Calls per page', '3-8 REST calls', '1 GraphQL query'],
-  ['Data fetching', "fetch('/api/listings')", 'useQuery(getCars, {variables})'],
-  ['State management', 'React Query + SWR', 'Apollo Client / urql'],
-  ['Bundle size', '~15KB (fetch)', '~45KB (graphql client)'],
-  ['Developer exp', 'Simpler, familiar', 'Learning curve, schema'],
-  ['131 routes', 'Redirect ke Go backend', 'REWRITE semua ke GraphQL'],
-  ['Components', 'Tidak perlu diubah', 'Perlu diubah semua data fetching'],
-]
-
-// ─── Data: Discussion Points ───────────────────────────────
+// ─── Data: 7 Keputusan Final ─────────────────────────────────
 const decisions = [
+  { num: 1, topic: 'API Style', choice: '✅ GraphQL Gateway (gqlgen + Fiber)' },
+  { num: 2, topic: 'Foreign Key', choice: '✅ No FK — UUID reference only' },
+  { num: 3, topic: 'Database', choice: '✅ 6 PostgreSQL schemas' },
+  { num: 4, topic: 'Architecture', choice: '✅ 6 Microservices (6 containers)' },
+  { num: 5, topic: 'Extra Tables', choice: '✅ 27 tabel dipertahankan + masuk PRD' },
+  { num: 6, topic: 'Duplicate Fix', choice: '✅ rental.go version (hapus review.go)' },
+  { num: 7, topic: 'Prioritas', choice: '✅ All 6 services sekaligus' },
+]
+
+// ─── Data: Service Tables ────────────────────────────────────
+interface TableDef {
+  name: string
+  schema: string
+  columns: string
+  notes: string
+}
+
+const userTables: TableDef[] = [
+  { name: 'profiles', schema: 'user_schema', columns: 'id, name, phone, role, avatar_url, email_verified, is_active', notes: 'Main user table' },
+  { name: 'user_settings', schema: 'user_schema', columns: 'id, user_id, email_notifications, push_notifications, language', notes: '1:1 with profiles' },
+  { name: 'user_sessions', schema: 'user_schema', columns: 'id, user_id, token, ip_address, expires_at', notes: 'Auth sessions' },
+  { name: 'user_tokens', schema: 'user_schema', columns: 'id, user_id, balance, total_purchased, total_used', notes: 'Token economy' },
+  { name: 'kyc_verifications', schema: 'user_schema', columns: 'id, user_id, status, nik, ktp_photo_url, selfie_photo_url', notes: 'KYC flow' },
+  { name: 'user_verifications', schema: 'user_schema', columns: 'id, user_id, verification_type, code, verified', notes: 'Email/phone verify' },
+  { name: 'user_addresses', schema: 'user_schema', columns: 'id, user_id, city_id, province_id, address, is_primary', notes: 'User addresses' },
+  { name: 'user_documents', schema: 'user_schema', columns: 'id, user_id, document_type, document_url, verified', notes: 'KTP/SIM/NPWP' },
+]
+
+const listingTables: TableDef[] = [
+  { name: 'car_listings', schema: 'listing_schema', columns: 'id, user_id, brand_id, model_id, price_cash, status, slug', notes: 'MAIN table 45+ cols' },
+  { name: 'car_images', schema: 'listing_schema', columns: 'id, car_listing_id, image_url, is_primary, display_order', notes: 'Max 10 per listing' },
+  { name: 'car_videos', schema: 'listing_schema', columns: 'id, car_listing_id, video_url, thumbnail_url', notes: 'YouTube/uploaded' },
+  { name: 'car_documents', schema: 'listing_schema', columns: 'id, car_listing_id, stnk_status, bpkb_status', notes: 'STNK/BPKB docs' },
+  { name: 'car_features', schema: 'listing_schema', columns: 'id, car_listing_id, airbag, abs, sunroof...', notes: '18 boolean fields' },
+  { name: 'car_feature_values', schema: 'listing_schema', columns: 'id, car_listing_id, feature_item_id, value', notes: 'Dynamic features' },
+  { name: 'car_rental_prices', schema: 'listing_schema', columns: 'id, car_listing_id, price_per_day/week/month', notes: 'Rental pricing' },
+  { name: 'car_price_history', schema: 'listing_schema', columns: 'id, car_listing_id, price_old, price_new, changed_by', notes: 'Audit trail' },
+  { name: 'car_status_history', schema: 'listing_schema', columns: 'id, car_listing_id, status_old, status_new', notes: 'Status audit' },
+  { name: 'car_inspections', schema: 'listing_schema', columns: 'id, car_listing_id, score, risk_level, overall_grade', notes: '160-point inspect' },
+  { name: 'inspection_results', schema: 'listing_schema', columns: 'id, inspection_id, item_id, status, severity', notes: 'Per-item result' },
+  { name: 'inspection_items', schema: 'listing_schema', columns: 'id, category_id, name, display_order, is_critical', notes: '160 items' },
+  { name: 'inspection_categories', schema: 'listing_schema', columns: 'id, name, display_order, total_items', notes: '13 categories' },
+  { name: 'inspection_photos', schema: 'listing_schema', columns: 'id, inspection_id, image_url, position', notes: 'Evidence photos' },
+  { name: 'inspection_certificates', schema: 'listing_schema', columns: 'id, inspection_id, certificate_number, is_valid', notes: 'Certificate' },
+  { name: 'brands', schema: 'listing_schema', columns: 'id, name, slug, logo_url, is_popular', notes: '30+ brands' },
+  { name: 'car_models', schema: 'listing_schema', columns: 'id, brand_id, name, body_type, is_popular', notes: '200+ models' },
+  { name: 'car_variants', schema: 'listing_schema', columns: 'id, model_id, name, engine_capacity, transmission', notes: 'Trim levels' },
+  { name: 'car_generations', schema: 'listing_schema', columns: 'id, model_id, name, year_start, year_end', notes: 'Facelift/gen' },
+  { name: 'car_colors', schema: 'listing_schema', columns: 'id, name, hex_code, is_metallic', notes: '50+ colors' },
+  { name: 'car_body_types', schema: 'listing_schema', columns: 'id, name, description, icon_url', notes: 'SUV/Sedan/MPV...' },
+  { name: 'car_fuel_types', schema: 'listing_schema', columns: 'id, name, description', notes: 'Bensin/Diesel/EV' },
+  { name: 'car_transmissions', schema: 'listing_schema', columns: 'id, name, description', notes: 'AT/MT/CVT' },
+]
+
+const interactionTables: TableDef[] = [
+  { name: 'car_reviews', schema: 'interaction_schema', columns: 'id, user_id, car_listing_id, rating, pros, cons, anonymous', notes: 'Rich reviews' },
+  { name: 'review_images', schema: 'interaction_schema', columns: 'id, review_id, image_url, caption', notes: 'Review media' },
+  { name: 'review_votes', schema: 'interaction_schema', columns: 'id, review_id, user_id, vote_type', notes: 'Helpful/not' },
+  { name: 'car_favorites', schema: 'interaction_schema', columns: 'id, user_id, car_listing_id, notes', notes: 'Save cars' },
+  { name: 'recent_views', schema: 'interaction_schema', columns: 'id, user_id, car_listing_id, view_count', notes: 'Browsing history' },
+  { name: 'recommendations', schema: 'interaction_schema', columns: 'id, user_id, car_listing_id, score, source', notes: 'AI recs' },
+  { name: 'trending_cars', schema: 'interaction_schema', columns: 'id, car_listing_id, period, score, rank', notes: 'Trending algo' },
+  { name: 'car_views', schema: 'interaction_schema', columns: 'id, car_listing_id, viewer_id, ip_address, duration', notes: 'View tracking' },
+  { name: 'car_compares', schema: 'interaction_schema', columns: 'id, user_id, car_listing_ids (uuid[])', notes: 'Compare feature' },
+  { name: 'search_logs', schema: 'interaction_schema', columns: 'id, user_id, query, filters, results_count', notes: 'Search analytics' },
+]
+
+const transactionTables: TableDef[] = [
+  { name: 'orders', schema: 'transaction_schema', columns: 'id, buyer_id, seller_id, car_listing_id, total_amount', notes: 'Main order' },
+  { name: 'order_items', schema: 'transaction_schema', columns: 'id, order_id, item_type, item_id, unit_price', notes: 'Line items' },
+  { name: 'payments', schema: 'transaction_schema', columns: 'id, order_id, payer_id, amount, payment_method', notes: 'Payment records' },
+  { name: 'payment_methods', schema: 'transaction_schema', columns: 'id, user_id, method_type, provider, account_number', notes: 'Saved methods' },
+  { name: 'transactions', schema: 'transaction_schema', columns: 'id, order_id, transaction_type, amount, from_account', notes: 'Ledger' },
+  { name: 'invoices', schema: 'transaction_schema', columns: 'id, order_id, items (jsonb), subtotal, total', notes: 'Invoice gen' },
+  { name: 'escrow_accounts', schema: 'transaction_schema', columns: 'id, order_id, amount_held, status, release_conditions', notes: 'Escrow' },
+  { name: 'refunds', schema: 'transaction_schema', columns: 'id, order_id, amount, reason, status', notes: 'Refund flow' },
+  { name: 'withdrawals', schema: 'transaction_schema', columns: 'id, user_id, amount, bank_name, status', notes: 'Dealer payout' },
+  { name: 'fee_settings', schema: 'transaction_schema', columns: 'id, platform_fee_percent, transaction_fee, withdrawal_fee', notes: 'Config' },
+  { name: 'coupons', schema: 'transaction_schema', columns: 'id, code, discount_type, discount_value, usage_limit', notes: 'Promo codes' },
+  { name: 'token_packages', schema: 'transaction_schema', columns: 'id, name, tokens, price, bonus_tokens', notes: 'Buy tokens' },
+  { name: 'token_settings', schema: 'transaction_schema', columns: 'id, token_price_base, listing_tokens, boost_tokens', notes: 'Pricing config' },
+  { name: 'token_transactions', schema: 'transaction_schema', columns: 'id, user_id, transaction_type, amount, balance_after', notes: 'Token ledger' },
+  { name: 'user_tokens', schema: 'transaction_schema', columns: 'id, user_id, balance, total_purchased, total_used', notes: 'Balance' },
+  { name: 'topup_requests', schema: 'transaction_schema', columns: 'id, user_id, amount, tokens, payment_proof_url', notes: 'Manual topup' },
+  { name: 'boost_settings', schema: 'transaction_schema', columns: 'id, boost_type, price_tokens, duration_days', notes: 'Boost config' },
+  { name: 'rental_bookings', schema: 'transaction_schema', columns: 'id, car_listing_id, renter_id, total_days, total_amount', notes: 'Rental' },
+  { name: 'rental_payments', schema: 'transaction_schema', columns: 'id, booking_id, payment_type, amount, paid_at', notes: 'Rental pay' },
+  { name: 'rental_reviews', schema: 'transaction_schema', columns: 'id, booking_id, reviewer_id, rating, comment', notes: 'Rental review' },
+  { name: 'rental_insurance', schema: 'transaction_schema', columns: 'id, booking_id, provider, coverage_type, premium', notes: 'Insurance' },
+  { name: 'rental_availability', schema: 'transaction_schema', columns: 'id, car_listing_id, date, is_available, booking_id', notes: 'Calendar' },
+]
+
+const businessTables: TableDef[] = [
+  { name: 'dealers', schema: 'business_schema', columns: 'id, name, owner_id, slug, logo_url, rating, verified', notes: 'Dealer profile' },
+  { name: 'dealer_branches', schema: 'business_schema', columns: 'id, dealer_id, name, city_id, operating_hours', notes: 'Multi-branch' },
+  { name: 'dealer_staff', schema: 'business_schema', columns: 'id, dealer_id, user_id, role, can_edit, can_delete', notes: 'Team mgmt' },
+  { name: 'dealer_documents', schema: 'business_schema', columns: 'id, dealer_id, document_type, document_url, verified', notes: 'Legal docs' },
+  { name: 'dealer_inventory', schema: 'business_schema', columns: 'id, dealer_id, car_listing_id, location, stock_status', notes: 'Inventory' },
+  { name: 'dealer_reviews', schema: 'business_schema', columns: 'id, dealer_id, user_id, rating, comment, helpful_count', notes: 'Dealer rating' },
+  { name: 'dealer_marketplace_settings', schema: 'business_schema', columns: 'id, token_cost_public, token_cost_dealer, inspection_cost', notes: 'B2B config' },
+  { name: 'dealer_marketplace_favorites', schema: 'business_schema', columns: 'id, dealer_id, car_listing_id, staff_id', notes: 'B2B wishlist' },
+  { name: 'dealer_marketplace_views', schema: 'business_schema', columns: 'id, dealer_id, car_listing_id, view_duration_seconds', notes: 'B2B tracking' },
+  { name: 'dealer_offers', schema: 'business_schema', columns: 'id, dealer_id, car_listing_id, offer_price, status', notes: 'B2B offers' },
+  { name: 'dealer_offer_histories', schema: 'business_schema', columns: 'id, offer_id, action, previous_price, new_price', notes: 'Offer audit' },
+  { name: 'banners', schema: 'business_schema', columns: 'id, title, image_url, position, is_active, click_count', notes: 'CMS banners' },
+  { name: 'broadcasts', schema: 'business_schema', columns: 'id, title, body, segment, scheduled_at, status', notes: 'Push broadcast' },
+  { name: 'categories', schema: 'business_schema', columns: 'id, name, slug, parent_id, is_featured', notes: 'Car categories' },
+  { name: 'coupons', schema: 'business_schema', columns: 'id, code, discount_type, discount_value, usage_limit', notes: 'Promos' },
+  { name: 'support_tickets', schema: 'business_schema', columns: 'id, user_id, subject, category, priority, status', notes: 'Help desk' },
+  { name: 'support_ticket_messages', schema: 'business_schema', columns: 'id, ticket_id, sender_id, is_admin, message', notes: 'Ticket chat' },
+]
+
+const systemTables: TableDef[] = [
+  { name: 'conversations', schema: 'system_schema', columns: 'id, buyer_id, seller_id, last_message, status', notes: 'Chat threads' },
+  { name: 'messages', schema: 'system_schema', columns: 'id, conversation_id, sender_id, message, message_type', notes: 'Chat messages' },
+  { name: 'message_attachments', schema: 'system_schema', columns: 'id, message_id, file_url, file_type, file_size', notes: 'Chat files' },
+  { name: 'notifications', schema: 'system_schema', columns: 'id, type, title, body, data, image_url', notes: 'Notification content' },
+  { name: 'user_notifications', schema: 'system_schema', columns: 'id, user_id, notification_id, is_read, clicked', notes: 'Per-user delivery' },
+  { name: 'notification_templates', schema: 'system_schema', columns: 'id, type, name, subject, body, channels', notes: 'Templates' },
+  { name: 'notification_logs', schema: 'system_schema', columns: 'id, template_id, user_id, channel, status', notes: 'Delivery log' },
+  { name: 'analytics_events', schema: 'system_schema', columns: 'id, user_id, event_type, event_name, properties', notes: 'Event tracking' },
+  { name: 'analytics_page_views', schema: 'system_schema', columns: 'id, user_id, page_type, page_url, time_on_page', notes: 'Page analytics' },
+  { name: 'analytics_clicks', schema: 'system_schema', columns: 'id, user_id, element_type, element_id, page_url', notes: 'Click tracking' },
+  { name: 'analytics_conversions', schema: 'system_schema', columns: 'id, user_id, conversion_type, funnel_step', notes: 'Conversion' },
+  { name: 'activity_logs', schema: 'system_schema', columns: 'id, user_id, action, entity_type, entity_id', notes: 'Audit log' },
+  { name: 'system_settings', schema: 'system_schema', columns: 'id, key, value, type, group', notes: 'Config KV' },
+  { name: 'reports', schema: 'system_schema', columns: 'id, reporter_id, entity_type, entity_id, reason, status', notes: 'User reports' },
+  { name: 'locations_countries', schema: 'system_schema', columns: 'id, name, code, iso2', notes: 'Countries' },
+  { name: 'locations_provinces', schema: 'system_schema', columns: 'id, country_id, name, code', notes: 'Provinces' },
+  { name: 'locations_cities', schema: 'system_schema', columns: 'id, province_id, name, type', notes: 'Cities' },
+  { name: 'locations_districts', schema: 'system_schema', columns: 'id, city_id, name', notes: 'Districts' },
+]
+
+// ─── Data: Roadmap Phases ────────────────────────────────────
+const roadmapPhases = [
   {
-    number: 1,
-    title: 'GraphQL atau REST?',
-    content:
-      'PRD mengusulkan GraphQL. Tapi backend sudah REST. Pilihan:',
-    options: [
-      'A) Rewrite ke GraphQL (sesuai PRD, 8-12 minggu)',
-      'B) Pertahankan REST, tambah GraphQL layer nanti (pragmatis, 2-4 minggu MVP)',
-      'C) REST untuk MVP, GraphQL untuk v2',
+    phase: 1,
+    weeks: 'Week 1-2',
+    title: 'Foundation',
+    icon: <Layers className="w-5 h-5 text-emerald-400" />,
+    items: [
+      'Setup 6 service repositories + gateway',
+      'PostgreSQL schemas creation (6 schemas, 100 tables)',
+      'Shared Go modules (pkg/database, pkg/logger)',
+      'Docker Compose for local dev',
     ],
   },
   {
-    number: 2,
-    title: 'Foreign Key atau No FK?',
-    content:
-      'PRD bilang NO FK. Tapi 27 GORM foreignKey sudah ada.',
-    options: [
-      'A) Hapus semua FK, pakai UUID reference manual (sesuai PRD, banyak rewrite)',
-      'B) Pertahankan GORM FK, hapus DB-level FK constraint (middle ground)',
-      'C) Pertahankan semua FK seperti sekarang (paling cepat)',
+    phase: 2,
+    weeks: 'Week 2-3',
+    title: 'User Service + Auth',
+    icon: <Users className="w-5 h-5 text-cyan-400" />,
+    items: [
+      'profiles CRUD + Google OAuth + JWT',
+      'user_sessions, user_settings',
+      'GraphQL auth resolvers',
+      'Gateway auth middleware',
     ],
   },
   {
-    number: 3,
-    title: 'Schema Isolation atau Single DB?',
-    content:
-      'PRD mengusulkan CREATE SCHEMA per service. Sekarang single public schema.',
-    options: [
-      'A) 6 PostgreSQL schemas (sesuai PRD, perlu migration besar)',
-      'B) Single DB, pisah pakai folder/module di code (pragmatis)',
-      'C) Mulai single, schema isolation saat extract service',
+    phase: 3,
+    weeks: 'Week 3-4',
+    title: 'Listing Service',
+    icon: <Car className="w-5 h-5 text-amber-400" />,
+    items: [
+      'car_listings CRUD + images',
+      'brands, models, variants',
+      'GraphQL listing resolvers',
+      'File upload (GCS integration)',
     ],
   },
   {
-    number: 4,
-    title: 'Microservice dari awal atau Modular Monolith dulu?',
-    content:
-      'PRD Phase 1 bilang "monolith microservice lite".',
-    options: [
-      'A) 6 service dari awal (6 repositori, 6 container, sesuai PRD)',
-      'B) Modular monolith, 1 binary, clean architecture per module (paling cepat)',
-      'C) 2 service dulu: core (user+listing+interaction) + support (sisanya)',
+    phase: 4,
+    weeks: 'Week 4-5',
+    title: 'Interaction + Inspection',
+    icon: <Eye className="w-5 h-5 text-purple-400" />,
+    items: [
+      'favorites, reviews, search',
+      'inspection system (160-point)',
+      'view tracking, recommendations',
     ],
   },
   {
-    number: 5,
-    title: '27 tabel extra (ada di backend, tidak di PRD) — hapus atau dokumentasi?',
-    content:
-      'Banyak tabel penting: locations (4), dealer_marketplace (3), settings (4), dll',
-    options: [
-      'A) Hapus yang tidak perlu, sisakan yang penting',
-      'B) Masukkan semua ke PRD (update PRD)',
-      'C) Pertahankan semua, PRD dianggap minimum viable',
+    phase: 5,
+    weeks: 'Week 5-6',
+    title: 'Transaction Service',
+    icon: <Cpu className="w-5 h-5 text-orange-400" />,
+    items: [
+      'orders, payments, escrow',
+      'token system (purchase, usage, balance)',
+      'rental bookings',
     ],
   },
   {
-    number: 6,
-    title: 'Tabel duplikat — versi mana yang dipakai?',
-    content:
-      'CarReview: review.go (sederhana) vs rental.go (lengkap dengan order_id, pros/cons, anonymous)',
-    options: [
-      'A) Pakai rental.go version (lebih lengkap), hapus review.go',
-      'B) Pakai review.go version (lebih clean), hapus dari rental.go',
-      'C) Merge keduanya jadi 1 struct yang komprehensif',
+    phase: 6,
+    weeks: 'Week 6-7',
+    title: 'Business Service',
+    icon: <Building2 className="w-5 h-5 text-blue-400" />,
+    items: [
+      'dealers, branches, staff',
+      'dealer offers (B2B marketplace)',
+      'banners, coupons, categories',
     ],
   },
   {
-    number: 7,
-    title: 'Timeline & Prioritas?',
-    content:
-      'Fitur apa yang pertama kali dibangun untuk user bisa pakai:',
-    options: [
-      'A) Auth + Listing + Search (MVP minimum)',
-      'B) Auth + Listing + Dealer + Token (MVP marketplace)',
-      'C) Semua 6 service sekaligus (sesuai PRD, lebih lama)',
+    phase: 7,
+    weeks: 'Week 7-8',
+    title: 'System Service',
+    icon: <MessageSquare className="w-5 h-5 text-rose-400" />,
+    items: [
+      'chat (conversations + messages via WebSocket)',
+      'notifications (push, email, in-app)',
+      'analytics (events, page views, clicks)',
+      'support tickets',
+    ],
+  },
+  {
+    phase: 8,
+    weeks: 'Week 8-10',
+    title: 'Frontend Migration + Integration',
+    icon: <Rocket className="w-5 h-5 text-emerald-400" />,
+    items: [
+      'Replace 131 REST routes with GraphQL client',
+      'Update all components data fetching',
+      'Gateway deployment',
+      'Testing + QA',
     ],
   },
 ]
 
-// ─── Status Badge Helper ───────────────────────────────────
-function StatusBadge({ text }: { text: string }) {
-  if (text.startsWith('✅'))
-    return (
-      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs whitespace-nowrap">
-        {text}
-      </Badge>
-    )
-  if (text.startsWith('⚠️'))
-    return (
-      <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs whitespace-nowrap">
-        {text}
-      </Badge>
-    )
-  return (
-    <Badge variant="outline" className="bg-zinc-500/10 text-zinc-400 border-zinc-500/20 text-xs whitespace-nowrap">
-      {text}
-    </Badge>
-  )
-}
+// ─── Data: Tech Stack ────────────────────────────────────────
+const techStack = [
+  { layer: 'Frontend', tech: 'Next.js + React + Tailwind', version: '16 + 19 + 4' },
+  { layer: 'GraphQL Client', tech: 'urql (lighter than Apollo)', version: 'latest' },
+  { layer: 'API Gateway', tech: 'Fiber + gqlgen', version: 'v3 + latest' },
+  { layer: 'Backend Services', tech: 'Go + Fiber + gqlgen', version: '1.25 + v3' },
+  { layer: 'Database', tech: 'PostgreSQL (Cloud SQL)', version: '17' },
+  { layer: 'Cache', tech: 'Redis (Memorystore)', version: '7' },
+  { layer: 'Storage', tech: 'Google Cloud Storage', version: '—' },
+  { layer: 'Auth', tech: 'Google OAuth + JWT', version: '—' },
+  { layer: 'Inter-service', tech: 'gRPC (or HTTP for simplicity)', version: 'latest' },
+  { layer: 'Container', tech: 'Docker + Cloud Run', version: '—' },
+  { layer: 'Infrastructure', tech: 'Terraform (optional)', version: '—' },
+]
 
-// ─── Section Title Component ───────────────────────────────
+// ─── Data: Risks ─────────────────────────────────────────────
+const risks = [
+  { risk: 'GraphQL complexity', severity: 'Medium', mitigation: 'Start with simple schema, iterate' },
+  { risk: 'No FK data inconsistency', severity: 'High', mitigation: 'Application-level validation, periodic cleanup jobs' },
+  { risk: 'N+1 queries in resolvers', severity: 'High', mitigation: 'DataLoader batching, Redis cache' },
+  { risk: '6 services = 6 deploy pipelines', severity: 'Medium', mitigation: 'CI/CD automation, shared Makefile' },
+  { risk: 'Cross-service latency', severity: 'Medium', mitigation: 'gRPC for internal calls, Redis cache' },
+  { risk: 'Frontend rewrite (131 routes)', severity: 'High', mitigation: 'Incremental migration, feature flags' },
+  { risk: 'Schema migration across 6 DBs', severity: 'Medium', mitigation: 'Versioned migrations per service' },
+  { risk: 'Team size (1-3 devs for 6 services)', severity: 'High', mitigation: 'Clear documentation, shared patterns' },
+]
+
+// ─── Section Title Component ─────────────────────────────────
 function SectionTitle({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 mb-8">
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/15 to-cyan-500/15 border border-emerald-500/20 flex items-center justify-center">
+      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/15 to-cyan-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0">
         {icon}
       </div>
       <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
@@ -423,10 +319,73 @@ function SectionTitle({ icon, children }: { icon: React.ReactNode; children: Rea
   )
 }
 
-// ─── Main Page ─────────────────────────────────────────────
-export default function PrdAnalysisPage() {
+// ─── Table Renderer ──────────────────────────────────────────
+function ServiceTable({ tables }: { tables: TableDef[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow className="border-zinc-800 hover:bg-transparent">
+            <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider py-3 px-4">
+              Table Name
+            </TableHead>
+            <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider py-3 px-4 hidden md:table-cell">
+              Schema
+            </TableHead>
+            <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider py-3 px-4">
+              Key Columns
+            </TableHead>
+            <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider py-3 px-4 hidden lg:table-cell">
+              Notes
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {tables.map((t) => (
+            <TableRow key={t.name} className="border-zinc-800 hover:bg-zinc-800/40 transition-colors">
+              <TableCell className="py-2.5 px-4 text-sm font-mono font-medium text-emerald-400 whitespace-nowrap">
+                {t.name}
+              </TableCell>
+              <TableCell className="py-2.5 px-4 text-xs text-zinc-500 font-mono hidden md:table-cell">
+                {t.schema}
+              </TableCell>
+              <TableCell className="py-2.5 px-4 text-xs text-zinc-400 max-w-xs">
+                {t.columns}
+              </TableCell>
+              <TableCell className="py-2.5 px-4 text-xs text-zinc-500 hidden lg:table-cell">
+                {t.notes}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+// ─── Severity Badge ──────────────────────────────────────────
+function SeverityBadge({ severity }: { severity: string }) {
+  if (severity === 'High') {
+    return (
+      <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/20 text-xs whitespace-nowrap">
+        {severity}
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs whitespace-nowrap">
+      {severity}
+    </Badge>
+  )
+}
+
+// ─── Main Page ───────────────────────────────────────────────
+export default function FinalBlueprintPage() {
+  const totalTables = userTables.length + listingTables.length + interactionTables.length + transactionTables.length + businessTables.length + systemTables.length
+
   return (
     <div className="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col">
+
       {/* ═══════════════════════════════════════════════════════
           SECTION 1: HERO
       ═══════════════════════════════════════════════════════ */}
@@ -445,32 +404,30 @@ export default function PrdAnalysisPage() {
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
           <div className="text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 mb-8">
-              <FileText className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-xs text-amber-400 font-medium tracking-wide">
-                PRODUCT REQUIREMENTS DOCUMENT
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 mb-8">
+              <Target className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-xs text-emerald-400 font-medium tracking-wide">
+                AUTOMARKET INDONESIA
               </span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-4">
-              <span className="text-zinc-100">PRD ANALYSIS</span>{' '}
-              <span className="text-amber-400">—</span>{' '}
               <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-                DISCUSSION
+                FINAL BLUEPRINT
               </span>
             </h1>
 
             <p className="text-lg sm:text-xl text-zinc-400 mb-10 max-w-2xl mx-auto">
-              AutoMarket Indonesia — Deep Dive Arsitektur &amp; Database
+              AutoMarket Indonesia — Keputusan Final Arsitektur
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
               {[
-                { icon: <Server className="w-4 h-4" />, value: '6 Services' },
-                { icon: <Database className="w-4 h-4" />, value: '73 Tables' },
-                { icon: <Zap className="w-4 h-4" />, value: '131 API Routes' },
-                { icon: <Code2 className="w-4 h-4" />, value: '101 Go Models' },
-                { icon: <GitBranch className="w-4 h-4" />, value: 'GraphQL vs REST' },
+                { icon: <Zap className="w-4 h-4" />, value: 'GraphQL' },
+                { icon: <Server className="w-4 h-4" />, value: '6 Microservices' },
+                { icon: <Database className="w-4 h-4" />, value: '6 Schemas' },
+                { icon: <Shield className="w-4 h-4" />, value: 'No FK' },
+                { icon: <Layers className="w-4 h-4" />, value: `${totalTables} Tables` },
               ].map((stat, i) => (
                 <div
                   key={i}
@@ -482,9 +439,9 @@ export default function PrdAnalysisPage() {
               ))}
             </div>
 
-            <p className="text-sm text-amber-400/80 italic">
-              ⏸️ MODE DISKUSI — Belum ada implementasi. Kita analisa dulu.
-            </p>
+            <Badge className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-6 py-2 text-sm font-semibold">
+              ✅ KEPUTUSAN FINAL — SIAP IMPLEMENTASI
+            </Badge>
           </div>
         </div>
       </header>
@@ -494,533 +451,465 @@ export default function PrdAnalysisPage() {
       ═══════════════════════════════════════════════════════ */}
       <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-12 sm:py-16 space-y-20 flex-1">
 
-        {/* ─── SECTION 2: GAP ANALYSIS ─────────────────── */}
+        {/* ─── SECTION 2: KEPUTUSAN SUMMARY ──────────────── */}
         <section>
-          <SectionTitle icon={<Brain className="w-5 h-5 text-emerald-400" />}>
-            PRD vs REALITY — Gap Analysis
+          <SectionTitle icon={<CheckCircle2 className="w-5 h-5 text-emerald-400" />}>
+            Ringkasan Keputusan
+          </SectionTitle>
+
+          <Card className="bg-zinc-900 border border-emerald-500/30 overflow-hidden">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg text-zinc-200">7 Keputusan Final Arsitektur</CardTitle>
+              <CardDescription className="text-zinc-500">
+                Semua keputusan sudah final dan siap untuk implementasi
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-zinc-800 hover:bg-transparent">
+                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4 w-12">#</TableHead>
+                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4 w-44">Keputusan</TableHead>
+                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4">Pilihan</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {decisions.map((d) => (
+                      <TableRow key={d.num} className="border-zinc-800 hover:bg-zinc-800/40 transition-colors">
+                        <TableCell className="py-3 px-4 text-sm font-bold text-zinc-500">{d.num}</TableCell>
+                        <TableCell className="py-3 px-4 text-sm font-medium text-zinc-200">{d.topic}</TableCell>
+                        <TableCell className="py-3 px-4 text-sm text-emerald-400 font-medium">{d.choice}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Separator className="bg-zinc-800/60" />
+
+        {/* ─── SECTION 3: UPDATED PRD — COMPLETE TABLE LIST ─ */}
+        <section>
+          <SectionTitle icon={<Database className="w-5 h-5 text-emerald-400" />}>
+            Updated PRD — Daftar Tabel Lengkap
+          </SectionTitle>
+
+          <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
+            <CardContent className="p-0">
+              <Tabs defaultValue="user" className="w-full">
+                <TabsList className="w-full justify-start bg-zinc-900 border-b border-zinc-800 rounded-none p-0 h-auto gap-0 overflow-x-auto flex-nowrap">
+                  <TabsTrigger
+                    value="user"
+                    className="rounded-none border-b-2 border-transparent px-4 sm:px-6 py-3 data-[state=active]:border-emerald-500 data-[state=active]:bg-transparent data-[state=active]:text-emerald-400 data-[state=active]:shadow-none text-zinc-500 text-xs sm:text-sm whitespace-nowrap"
+                  >
+                    USER ({userTables.length})
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="listing"
+                    className="rounded-none border-b-2 border-transparent px-4 sm:px-6 py-3 data-[state=active]:border-cyan-500 data-[state=active]:bg-transparent data-[state=active]:text-cyan-400 data-[state=active]:shadow-none text-zinc-500 text-xs sm:text-sm whitespace-nowrap"
+                  >
+                    LISTING ({listingTables.length})
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="interaction"
+                    className="rounded-none border-b-2 border-transparent px-4 sm:px-6 py-3 data-[state=active]:border-purple-500 data-[state=active]:bg-transparent data-[state=active]:text-purple-400 data-[state=active]:shadow-none text-zinc-500 text-xs sm:text-sm whitespace-nowrap"
+                  >
+                    INTERACTION ({interactionTables.length})
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="transaction"
+                    className="rounded-none border-b-2 border-transparent px-4 sm:px-6 py-3 data-[state=active]:border-orange-500 data-[state=active]:bg-transparent data-[state=active]:text-orange-400 data-[state=active]:shadow-none text-zinc-500 text-xs sm:text-sm whitespace-nowrap"
+                  >
+                    TRANSACTION ({transactionTables.length})
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="business"
+                    className="rounded-none border-b-2 border-transparent px-4 sm:px-6 py-3 data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400 data-[state=active]:shadow-none text-zinc-500 text-xs sm:text-sm whitespace-nowrap"
+                  >
+                    BUSINESS ({businessTables.length})
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="system"
+                    className="rounded-none border-b-2 border-transparent px-4 sm:px-6 py-3 data-[state=active]:border-rose-500 data-[state=active]:bg-transparent data-[state=active]:text-rose-400 data-[state=active]:shadow-none text-zinc-500 text-xs sm:text-sm whitespace-nowrap"
+                  >
+                    SYSTEM ({systemTables.length})
+                  </TabsTrigger>
+                </TabsList>
+
+                <ScrollArea className="max-h-[600px]">
+                  <TabsContent value="user" className="p-4 sm:p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Users className="w-4 h-4 text-emerald-400" />
+                      <span className="text-sm font-semibold text-emerald-400">USER SERVICE — user_schema</span>
+                    </div>
+                    <ServiceTable tables={userTables} />
+                  </TabsContent>
+
+                  <TabsContent value="listing" className="p-4 sm:p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Car className="w-4 h-4 text-cyan-400" />
+                      <span className="text-sm font-semibold text-cyan-400">LISTING SERVICE — listing_schema</span>
+                    </div>
+                    <ServiceTable tables={listingTables} />
+                  </TabsContent>
+
+                  <TabsContent value="interaction" className="p-4 sm:p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <MessageSquare className="w-4 h-4 text-purple-400" />
+                      <span className="text-sm font-semibold text-purple-400">INTERACTION SERVICE — interaction_schema</span>
+                    </div>
+                    <ServiceTable tables={interactionTables} />
+                  </TabsContent>
+
+                  <TabsContent value="transaction" className="p-4 sm:p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Cpu className="w-4 h-4 text-orange-400" />
+                      <span className="text-sm font-semibold text-orange-400">TRANSACTION SERVICE — transaction_schema</span>
+                    </div>
+                    <ServiceTable tables={transactionTables} />
+                  </TabsContent>
+
+                  <TabsContent value="business" className="p-4 sm:p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Building2 className="w-4 h-4 text-blue-400" />
+                      <span className="text-sm font-semibold text-blue-400">BUSINESS SERVICE — business_schema</span>
+                    </div>
+                    <ServiceTable tables={businessTables} />
+                  </TabsContent>
+
+                  <TabsContent value="system" className="p-4 sm:p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Settings className="w-4 h-4 text-rose-400" />
+                      <span className="text-sm font-semibold text-rose-400">SYSTEM SERVICE — system_schema</span>
+                    </div>
+                    <ServiceTable tables={systemTables} />
+                  </TabsContent>
+                </ScrollArea>
+              </Tabs>
+
+              <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-900/50">
+                <p className="text-sm text-zinc-400">
+                  <span className="font-bold text-emerald-400">TOTAL: {totalTables} tabel</span> across 6 schemas{' '}
+                  <span className="text-zinc-500">(73 PRD + 27 extra)</span>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Separator className="bg-zinc-800/60" />
+
+        {/* ─── SECTION 4: SYSTEM ARCHITECTURE DIAGRAM ────── */}
+        <section>
+          <SectionTitle icon={<Server className="w-5 h-5 text-emerald-400" />}>
+            Diagram Arsitektur Sistem
+          </SectionTitle>
+
+          <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
+            <CardContent className="p-4 sm:p-6">
+              <pre className="p-4 sm:p-6 rounded-lg bg-zinc-950 border border-zinc-800 overflow-x-auto text-[10px] sm:text-xs font-mono text-zinc-400 leading-relaxed">
+                <code>{`┌──────────────────────────────────────────────────────┐
+│                    Next.js 16 (FE)                    │
+│              GraphQL Client (urql/Apollo)              │
+│         131 pages · 120+ components · SSR/SSG         │
+└────────────────────────┬─────────────────────────────┘
+                         │ GraphQL (HTTP)
+                         ▼
+┌──────────────────────────────────────────────────────┐
+│              GraphQL Gateway (Fiber v3)               │
+│         gqlgen · Schema Stitching · Auth              │
+│         DataLoader · Rate Limiting · Logging          │
+└───┬────┬────┬────┬────┬──────────────────────────────┘
+    │    │    │    │    │
+    ▼    ▼    ▼    ▼    ▼
+┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐┌──────┐
+│ user ││listng││inter ││trans ││busin ││system│
+│ svc  ││ svc  ││ svc  ││ svc  ││ svc  ││ svc  │
+│:3001 ││:3002 ││:3003 ││:3004 ││:3005 ││:3006 │
+└──┬───┘└──┬───┘└──┬───┘└──┬───┘└──┬───┘└──┬───┘
+   │       │       │       │       │       │
+   ▼       ▼       ▼       ▼       ▼       ▼
+┌──────────────────────────────────────────────────────┐
+│              Cloud SQL — PostgreSQL 17                │
+│                                                       │
+│  user_schema    listing_schema    interaction_schema  │
+│  transaction_schema  business_schema  system_schema  │
+└──────────────────────────────────────────────────────┘
+   │               │               │
+   ▼               ▼               ▼
+┌────────┐  ┌──────────┐  ┌────────────────┐
+│ Redis  │  │ GCS      │  │ Cloud Run     │
+│ Cache  │  │ Storage  │  │ (6 containers) │
+└────────┘  └──────────┘  └────────────────┘`}</code>
+              </pre>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Separator className="bg-zinc-800/60" />
+
+        {/* ─── SECTION 5: GRAPHQL SCHEMA DESIGN ─────────── */}
+        <section>
+          <SectionTitle icon={<Code2 className="w-5 h-5 text-emerald-400" />}>
+            Desain GraphQL Schema
+          </SectionTitle>
+
+          <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+                  Gateway Schema
+                </Badge>
+                <span className="text-sm text-zinc-500">Stitched dari semua services</span>
+              </div>
+              <pre className="p-4 sm:p-6 rounded-lg bg-zinc-950 border border-zinc-800 overflow-x-auto text-[10px] sm:text-xs font-mono text-zinc-400 leading-relaxed">
+                <code>{`# Gateway Schema (stitched from all services)
+
+type Query {
+  # Listing Service
+  cars(filter: CarFilter, pagination: Pagination): CarConnection!
+  car(id: ID!): Car
+  brands: [Brand!]!
+  models(brandId: ID!): [CarModel!]!
+
+  # User Service  
+  me: User!
+  user(id: ID!): User
+  dealer(slug: String!): Dealer
+
+  # Transaction Service
+  orders: [Order!]!
+  order(id: ID!): Order
+  myTokens: UserToken!
+
+  # Interaction Service
+  myFavorites: [Favorite!]!
+  reviews(carId: ID!): [Review!]!
+  recommendations: [Recommendation!]!
+
+  # Business Service
+  dealers(filter: DealerFilter): [Dealer!]!
+  banners(position: String): [Banner!]!
+
+  # System Service
+  conversations: [Conversation!]!
+  notifications: [Notification!]!
+  trendingCars: [TrendingCar!]!
+}
+
+type Mutation {
+  # Auth
+  login(input: LoginInput!): AuthPayload!
+  register(input: RegisterInput!): AuthPayload!
+  googleAuth(token: String!): AuthPayload!
+
+  # Listings
+  createListing(input: CreateListingInput!): Car!
+  updateListing(id: ID!, input: UpdateListingInput!): Car!
+  deleteListing(id: ID!): Boolean!
+
+  # Interactions
+  toggleFavorite(carId: ID!): Boolean!
+  createReview(input: CreateReviewInput!): Review!
+
+  # Transactions
+  createOrder(input: CreateOrderInput!): Order!
+  purchaseTokens(packageId: ID!): UserToken!
+
+  # Chat
+  sendMessage(input: SendMessageInput!): Message!
+  createConversation(carId: ID!): Conversation!
+}`}</code>
+              </pre>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Separator className="bg-zinc-800/60" />
+
+        {/* ─── SECTION 6: FOLDER STRUCTURE PER SERVICE ───── */}
+        <section>
+          <SectionTitle icon={<GitBranch className="w-5 h-5 text-emerald-400" />}>
+            Struktur Folder per Service
           </SectionTitle>
 
           <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
             <CardHeader className="pb-4">
-              <CardTitle className="text-lg text-zinc-200">Perbandingan PRD dengan Kondisi Existing</CardTitle>
+              <CardTitle className="text-lg text-zinc-200">Struktur Standar — Berlaku untuk semua 6 services</CardTitle>
               <CardDescription className="text-zinc-500">
-                Setiap aspek dibandingkan antara dokumen PRD dan kondisi backend yang sudah dibangun
+                Setiap service mengikuti pola Clean Architecture yang sama
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-zinc-800 hover:bg-transparent">
-                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4 w-40">
-                        Aspek
-                      </TableHead>
-                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4">
-                        PRD (Diusulkan)
-                      </TableHead>
-                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4">
-                        Realita (Existing)
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {gapRows.map((row, i) => (
-                      <TableRow key={i} className="border-zinc-800 hover:bg-zinc-800/40 transition-colors">
-                        <TableCell className="py-3 px-4 text-sm font-medium text-zinc-200">
-                          {row[0]}
-                        </TableCell>
-                        <TableCell className="py-3 px-4 text-sm text-amber-400/90 font-mono">
-                          {row[1]}
-                        </TableCell>
-                        <TableCell className="py-3 px-4 text-sm text-emerald-400/90 font-mono">
-                          {row[2]}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Alert className="mt-6 border-red-500/40 bg-red-500/5">
-            <AlertTriangle className="h-4 w-4 text-red-400" />
-            <AlertTitle className="text-red-400 font-semibold">⚠️ Gap Terbesar</AlertTitle>
-            <AlertDescription className="text-zinc-400 text-sm mt-1">
-              PRD mengusulkan GraphQL + No FK + Schema Isolation, tapi backend sudah dibangun dengan REST + GORM FK + Single DB. Migrasi berarti <span className="text-red-400 font-semibold">REWRITE hampir seluruh backend</span>.
-            </AlertDescription>
-          </Alert>
-        </section>
-
-        <Separator className="bg-zinc-800/60" />
-
-        {/* ─── SECTION 3: 3 PILIHAN ARSITEKTUR ─────────── */}
-        <section>
-          <SectionTitle icon={<GitBranch className="w-5 h-5 text-emerald-400" />}>
-            3 Pilihan Arsitektur
-          </SectionTitle>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {archChoices.map((choice) => (
-              <Card key={choice.id} className={`bg-zinc-900 ${choice.borderClass} border-2 flex flex-col`}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline" className={choice.tagClass}>
-                      Pilihan {choice.id}
-                    </Badge>
-                    <span className="text-2xl font-black text-zinc-700">{choice.id}</span>
-                  </div>
-                  <CardTitle className="text-lg text-zinc-100 mt-2">{choice.title}</CardTitle>
-                  <CardDescription className="text-zinc-500 text-xs">{choice.subtitle}</CardDescription>
-                </CardHeader>
-                <CardContent className="flex-1 space-y-4">
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <ThumbsUp className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Kelebihan</span>
-                    </div>
-                    <ul className="space-y-1.5">
-                      {choice.pros.map((pro, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-zinc-400">
-                          <span className="text-emerald-500 mt-0.5">+</span>
-                          <span>{pro}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <Separator className="bg-zinc-800" />
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <ThumbsDown className="w-3.5 h-3.5 text-red-400" />
-                      <span className="text-xs font-bold text-red-400 uppercase tracking-wider">Kekurangan</span>
-                    </div>
-                    <ul className="space-y-1.5">
-                      {choice.cons.map((con, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-zinc-400">
-                          <span className="text-red-500 mt-0.5">−</span>
-                          <span>{con}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-
-        <Separator className="bg-zinc-800/60" />
-
-        {/* ─── SECTION 4: DATABASE STRATEGY DEEP DIVE ──── */}
-        <section>
-          <SectionTitle icon={<Database className="w-5 h-5 text-emerald-400" />}>
-            Database Strategy — Deep Dive
-          </SectionTitle>
-
-          <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
-            <CardContent className="p-0">
-              <Tabs defaultValue="graphql" className="w-full">
-                <TabsList className="w-full justify-start bg-zinc-900 border-b border-zinc-800 rounded-none p-0 h-auto gap-0">
-                  <TabsTrigger
-                    value="graphql"
-                    className="rounded-none border-b-2 border-transparent px-6 py-3 data-[state=active]:border-amber-500 data-[state=active]:bg-transparent data-[state=active]:text-amber-400 data-[state=active]:shadow-none text-zinc-500"
-                  >
-                    GraphQL Resolver (PRD)
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="gorm"
-                    className="rounded-none border-b-2 border-transparent px-6 py-3 data-[state=active]:border-emerald-500 data-[state=active]:bg-transparent data-[state=active]:text-emerald-400 data-[state=active]:shadow-none text-zinc-500"
-                  >
-                    GORM Preload (Existing)
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="hybrid"
-                    className="rounded-none border-b-2 border-transparent px-6 py-3 data-[state=active]:border-cyan-500 data-[state=active]:bg-transparent data-[state=active]:text-cyan-400 data-[state=active]:shadow-none text-zinc-500"
-                  >
-                    Hybrid (Recommended)
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="graphql" className="p-6 space-y-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/20">
-                      PRD Approach
-                    </Badge>
-                    <span className="text-sm text-zinc-500">No FK + GraphQL resolver join</span>
-                  </div>
-                  <p className="text-sm text-zinc-400">
-                    Dengan <span className="text-amber-400 font-mono">No Foreign Key</span>, setiap relasi diselesaikan di GraphQL resolver layer. Client minta data, gateway resolves dari masing-masing service secara paralel.
-                  </p>
-                  <pre className="p-4 rounded-lg bg-zinc-950 border border-zinc-800 overflow-x-auto text-xs font-mono text-zinc-400 leading-relaxed">
-                    <code>{`# Client asks: getCarDetail(id: "abc")
-# GraphQL Gateway resolves:
-
-1. listing-service: SELECT * FROM car_listings WHERE id = 'abc'
-2. user-service:    SELECT * FROM profiles WHERE id = '{user_id dari step 1}'
-3. listing-service: SELECT * FROM car_images WHERE car_listing_id = 'abc'
-4. listing-service: SELECT * FROM car_inspections WHERE car_listing_id = 'abc'
-
-# Gateway merges results → single JSON response`}</code>
-                  </pre>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-                      <p className="text-xs font-bold text-emerald-400 mb-2">✅ Kelebihan</p>
-                      <ul className="space-y-1 text-xs text-zinc-400">
-                        <li>• True service independence</li>
-                        <li>• Schema isolation per service</li>
-                        <li>• Flexible data fetching (client-driven)</li>
-                      </ul>
-                    </div>
-                    <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/10">
-                      <p className="text-xs font-bold text-red-400 mb-2">❌ Kekurangan</p>
-                      <ul className="space-y-1 text-xs text-zinc-400">
-                        <li>• N+1 problem (perlu DataLoader)</li>
-                        <li>• 3-5 network calls per query</li>
-                        <li>• Higher latency vs SQL JOIN</li>
-                      </ul>
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="gorm" className="p-6 space-y-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                      Existing Approach
-                    </Badge>
-                    <span className="text-sm text-zinc-500">GORM Preload dengan SQL JOIN</span>
-                  </div>
-                  <p className="text-sm text-zinc-400">
-                    GORM <span className="text-emerald-400 font-mono">Preload</span> menghasilkan SQL JOIN yang efisien. Semua data diambil dalam 1 query ke single database.
-                  </p>
-                  <pre className="p-4 rounded-lg bg-zinc-950 border border-zinc-800 overflow-x-auto text-xs font-mono text-zinc-400 leading-relaxed">
-                    <code>{`// Single SQL with JOIN
-db.Preload("Brand").Preload("Model").Preload("Images").
-  Preload("User").Preload("Dealer").
-  First(&listing, id)
-// → 1 query with LEFT JOINs = fast`}</code>
-                  </pre>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-                      <p className="text-xs font-bold text-emerald-400 mb-2">✅ Kelebihan</p>
-                      <ul className="space-y-1 text-xs text-zinc-400">
-                        <li>• ACID transactions</li>
-                        <li>• Fast JOIN (1 query)</li>
-                        <li>• Data consistency otomatis</li>
-                        <li>• Simple code</li>
-                      </ul>
-                    </div>
-                    <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/10">
-                      <p className="text-xs font-bold text-red-400 mb-2">❌ Kekurangan</p>
-                      <ul className="space-y-1 text-xs text-zinc-400">
-                        <li>• Single DB (coupling)</li>
-                        <li>• Service coupling via FK</li>
-                        <li>• Harder to split later</li>
-                      </ul>
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="hybrid" className="p-6 space-y-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/20">
-                      Recommended
-                    </Badge>
-                    <span className="text-sm text-zinc-500">GORM dulu → GraphQL nanti, bertahap</span>
-                  </div>
-                  <p className="text-sm text-zinc-400">
-                    Pertahankan GORM untuk Phase 1 (cepat, sudah ada). Persiapkan migrasi ke GraphQL di Phase 2-3.
-                  </p>
-
-                  <div className="space-y-3">
-                    {[
-                      {
-                        phase: 'Phase 1',
-                        desc: 'GORM with soft relations (no FK constraints in DB, tapi GORM tags tetap ada)',
-                        badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-                      },
-                      {
-                        phase: 'Phase 2',
-                        desc: 'Add GraphQL layer on top (gqlgen) sebagai wrapper di depan REST',
-                        badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-                      },
-                      {
-                        phase: 'Phase 3',
-                        desc: 'Extract services, remove GORM relations, pakai resolver joins',
-                        badgeClass: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-                      },
-                    ].map((item) => (
-                      <div key={item.phase} className="flex items-start gap-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
-                        <Badge variant="outline" className={`${item.badgeClass} text-xs whitespace-nowrap mt-0.5`}>
-                          {item.phase}
-                        </Badge>
-                        <p className="text-sm text-zinc-400">{item.desc}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <p className="text-xs text-zinc-500 mt-2 font-medium">Contoh implementasi Phase 1:</p>
-                  <pre className="p-4 rounded-lg bg-zinc-950 border border-zinc-800 overflow-x-auto text-xs font-mono text-zinc-400 leading-relaxed">
-                    <code>{`// Phase 1: GORM without DB-level FK
-type CarListing struct {
-    ID       uuid.UUID  \`gorm:"primaryKey"\`
-    BrandID  *uuid.UUID \`gorm:"index"\`       // no foreignKey tag
-    Brand    *Brand      \`gorm:"foreignKey:BrandID"\` // GORM-level only
-}`}</code>
-                  </pre>
-                </TabsContent>
-              </Tabs>
+            <CardContent className="p-4 sm:p-6">
+              <pre className="p-4 sm:p-6 rounded-lg bg-zinc-950 border border-zinc-800 overflow-x-auto text-[10px] sm:text-xs font-mono text-zinc-400 leading-relaxed">
+                <code>{`/services
+├── gateway/                    # GraphQL Gateway (Fiber + gqlgen)
+│   ├── cmd/server/main.go
+│   ├── internal/
+│   │   ├── gqlgen/             # Generated GraphQL code
+│   │   ├── resolver/           # Gateway resolvers (stitching)
+│   │   ├── middleware/         # Auth, rate limit, logging
+│   │   └── config/
+│   ├── graph/
+│   │   └── gateway.graphql     # Stitched schema
+│   └── go.mod
+│
+├── user-service/               # Port 3001
+│   ├── cmd/server/main.go
+│   ├── internal/
+│   │   ├── domain/             # Models (NO GORM FK)
+│   │   │   └── user.go
+│   │   ├── repository/
+│   │   │   └── user_repository.go
+│   │   ├── usecase/
+│   │   │   └── user_usecase.go
+│   │   ├── handler/
+│   │   │   └── grpc_handler.go  # or REST for internal
+│   │   ├── gqlgen/             # GraphQL resolvers
+│   │   └── dto/
+│   ├── graph/
+│   │   └── user.graphql        # User service schema
+│   ├── migrations/             # SQL migrations (user_schema)
+│   └── go.mod
+│
+├── listing-service/            # Port 3002
+├── interaction-service/        # Port 3003
+├── transaction-service/        # Port 3004
+├── business-service/           # Port 3005
+└── system-service/             # Port 3006`}</code>
+              </pre>
             </CardContent>
           </Card>
         </section>
 
         <Separator className="bg-zinc-800/60" />
 
-        {/* ─── SECTION 5: TABLE COVERAGE ───────────────── */}
+        {/* ─── SECTION 7: NO FK — HOW IT WORKS ──────────── */}
         <section>
-          <SectionTitle icon={<LayoutGrid className="w-5 h-5 text-emerald-400" />}>
-            Table Coverage — PRD vs Existing
+          <SectionTitle icon={<Shield className="w-5 h-5 text-emerald-400" />}>
+            No Foreign Key — Cara Kerja
           </SectionTitle>
 
-          <Accordion type="multiple" defaultValue={serviceCoverage.map((_, i) => `svc-${i}`)}>
-            {serviceCoverage.map((svc, idx) => (
-              <AccordionItem key={idx} value={`svc-${idx}`} className="border-zinc-800">
-                <AccordionTrigger className="hover:no-underline hover:bg-zinc-900/50 px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
-                      {svc.tableCount}
-                    </Badge>
-                    <span className="font-semibold text-zinc-200">{svc.serviceName}</span>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="px-4 pb-4">
-                  <Card className="bg-zinc-900/80 border-zinc-800 overflow-hidden">
-                    <CardContent className="p-0">
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="border-zinc-800 hover:bg-transparent">
-                              <TableHead className="text-zinc-500 text-xs py-2.5 px-4">Table Name</TableHead>
-                              <TableHead className="text-zinc-500 text-xs py-2.5 px-4">PRD</TableHead>
-                              <TableHead className="text-zinc-500 text-xs py-2.5 px-4">Backend Model</TableHead>
-                              <TableHead className="text-zinc-500 text-xs py-2.5 px-4">Status</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {svc.rows.map((row, i) => (
-                              <TableRow key={i} className="border-zinc-800/60 hover:bg-zinc-800/30 transition-colors">
-                                <TableCell className="py-2.5 px-4 text-sm font-mono text-zinc-300">{row.tableName}</TableCell>
-                                <TableCell className="py-2.5 px-4 text-sm text-center">{row.prd}</TableCell>
-                                <TableCell className="py-2.5 px-4 text-sm font-mono text-zinc-400">{row.backendModel}</TableCell>
-                                <TableCell className="py-2.5 px-4">
-                                  <StatusBadge text={row.status} />
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-
-          <div className="mt-6 flex items-center gap-3">
-            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-sm px-4 py-1.5">
-              73/73 tables covered (100%)
-            </Badge>
-            <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-sm px-4 py-1.5">
-              +20 extra structs not in PRD
-            </Badge>
-            <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/20 text-sm px-4 py-1.5">
-              +4 duplicates to fix
-            </Badge>
-          </div>
-        </section>
-
-        <Separator className="bg-zinc-800/60" />
-
-        {/* ─── SECTION 6: EXTRA TABLES NOT IN PRD ──────── */}
-        <section>
-          <SectionTitle icon={<AlertCircle className="w-5 h-5 text-emerald-400" />}>
-            What&apos;s Missing from PRD — 27 Extra Tables
-          </SectionTitle>
-
-          <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base text-zinc-200">
-                Struct yang ada di backend tapi TIDAK tercantum di PRD
-              </CardTitle>
-              <CardDescription className="text-zinc-500 text-xs">
-                Tabel-tabel ini sudah dibangun di Go backend karena kebutuhan fitur yang sudah ada
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="max-h-[500px]">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-zinc-800 hover:bg-transparent">
-                        <TableHead className="text-zinc-500 text-xs py-2.5 px-4 w-48">Struct</TableHead>
-                        <TableHead className="text-zinc-500 text-xs py-2.5 px-4 w-32">File</TableHead>
-                        <TableHead className="text-zinc-500 text-xs py-2.5 px-4">Why it exists</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {extraTables.map((row, i) => (
-                        <TableRow key={i} className="border-zinc-800/60 hover:bg-zinc-800/30 transition-colors">
-                          <TableCell className="py-2.5 px-4 text-sm font-mono text-amber-400">{row[0]}</TableCell>
-                          <TableCell className="py-2.5 px-4 text-sm font-mono text-zinc-500">{row[1]}</TableCell>
-                          <TableCell className="py-2.5 px-4 text-xs text-zinc-400">{row[2]}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+          <Accordion type="multiple" defaultValue={['before', 'after', 'why']} className="space-y-3">
+            <AccordionItem value="before" className="border-zinc-800 bg-zinc-900 rounded-lg px-4 data-[state=open]:border-red-500/30 overflow-hidden">
+              <AccordionTrigger className="hover:no-underline py-4">
+                <div className="flex items-center gap-2">
+                  <XCircle className="w-4 h-4 text-red-400" />
+                  <span className="text-sm font-semibold text-red-400">Before — GORM foreignKey (creates DB constraint)</span>
                 </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
+              </AccordionTrigger>
+              <AccordionContent className="pb-4">
+                <pre className="p-4 rounded-lg bg-zinc-950 border border-zinc-800 overflow-x-auto text-[10px] sm:text-xs font-mono text-zinc-400 leading-relaxed">
+                  <code>{`// ❌ OLD — GORM foreignKey (creates DB constraint)
+type CarListing struct {
+    BrandID *uuid.UUID \`gorm:"type:uuid;index"\`
+    Brand   *Brand     \`gorm:"foreignKey:BrandID"\` // Creates FK constraint!
+}
+// → ALTER TABLE car_listings ADD CONSTRAINT fk_brand 
+//   FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE`}</code>
+                </pre>
+              </AccordionContent>
+            </AccordionItem>
 
-          <Alert className="mt-6 border-amber-500/30 bg-amber-500/5">
-            <AlertTriangle className="h-4 w-4 text-amber-400" />
-            <AlertTitle className="text-amber-400 font-semibold">❓ Pertanyaan</AlertTitle>
-            <AlertDescription className="text-zinc-400 text-sm mt-1">
-              27 tabel ini hapus atau masukkan ke PRD? Banyak yang penting untuk fitur yang sudah ada di frontend.
-            </AlertDescription>
-          </Alert>
-        </section>
+            <AccordionItem value="after" className="border-zinc-800 bg-zinc-900 rounded-lg px-4 data-[state=open]:border-emerald-500/30 overflow-hidden">
+              <AccordionTrigger className="hover:no-underline py-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span className="text-sm font-semibold text-emerald-400">After — No FK, UUID reference only</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pb-4">
+                <pre className="p-4 rounded-lg bg-zinc-950 border border-zinc-800 overflow-x-auto text-[10px] sm:text-xs font-mono text-zinc-400 leading-relaxed">
+                  <code>{`// ✅ NEW — No FK constraint, GORM preload via manual resolver
+type CarListing struct {
+    BrandID *uuid.UUID \`gorm:"type:uuid;index"\` // Just an index, no FK
+    // NO gorm:"foreignKey:BrandID" tag
+    // Brand resolved in GraphQL resolver
+}
 
-        <Separator className="bg-zinc-800/60" />
+// In GraphQL resolver:
+func (r *carResolver) Brand(ctx context.Context, obj *CarListing) (*Brand, error) {
+    if obj.BrandID == nil { return nil, nil }
+    return r.listingSvc.GetBrandByID(ctx, *obj.BrandID)
+}`}</code>
+                </pre>
+              </AccordionContent>
+            </AccordionItem>
 
-        {/* ─── SECTION 7: DUPLICATE & BUG LIST ─────────── */}
-        <section>
-          <SectionTitle icon={<TriangleAlert className="w-5 h-5 text-emerald-400" />}>
-            Duplicate &amp; Bug List
-          </SectionTitle>
-
-          <Card className="bg-zinc-900 border-red-500/20 overflow-hidden">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-red-400">
-                <AlertTriangle className="w-5 h-5" />
-                Masalah yang Harus Diperbaiki
-              </CardTitle>
-              <CardDescription className="text-zinc-500 text-xs">
-                {bugItems.filter(b => b.severity === 'critical').length} critical errors, {bugItems.filter(b => b.severity === 'warning').length} warnings
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y divide-zinc-800/60">
-                {bugItems.map((item, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-3 px-6 py-3.5 transition-colors ${
-                      item.severity === 'critical' ? 'bg-red-500/5' : 'hover:bg-zinc-800/30'
-                    }`}
-                  >
-                    <span className="text-base flex-shrink-0 mt-0.5">{item.emoji}</span>
-                    <div className="flex items-start gap-2 flex-1 min-w-0">
-                      <span className="text-sm text-zinc-300">{item.text}</span>
-                      {item.severity === 'critical' && (
-                        <Badge variant="outline" className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px] font-bold uppercase flex-shrink-0">
-                          CRITICAL
-                        </Badge>
-                      )}
-                    </div>
+            <AccordionItem value="why" className="border-zinc-800 bg-zinc-900 rounded-lg px-4 data-[state=open]:border-cyan-500/30 overflow-hidden">
+              <AccordionTrigger className="hover:no-underline py-4">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-cyan-400" />
+                  <span className="text-sm font-semibold text-cyan-400">Why this matters for microservices</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pb-4">
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
+                    <span className="text-emerald-400 mt-0.5">→</span>
+                    <p className="text-sm text-zinc-400">
+                      <span className="text-zinc-200 font-medium">listing-service</span> tidak bisa JOIN ke <span className="font-mono text-zinc-200">user_service.profiles</span> (berbeda schema/service)
+                    </p>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <Separator className="bg-zinc-800/60" />
-
-        {/* ─── SECTION 8: FRONTEND IMPACT ANALYSIS ─────── */}
-        <section>
-          <SectionTitle icon={<Gauge className="w-5 h-5 text-emerald-400" />}>
-            Frontend Impact Analysis
-          </SectionTitle>
-
-          <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base text-zinc-200">
-                Dampak Pilihan Arsitektur terhadap Frontend
-              </CardTitle>
-              <CardDescription className="text-zinc-500 text-xs">
-                Frontend saat ini sudah punya 131 REST API routes — pengaruh besar tergantung pilihan
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-zinc-800 hover:bg-transparent">
-                      <TableHead className="text-zinc-500 text-xs py-3 px-4 w-44">Aspek</TableHead>
-                      <TableHead className="text-zinc-500 text-xs py-3 px-4">
-                        Jika REST (Sekarang)
-                      </TableHead>
-                      <TableHead className="text-zinc-500 text-xs py-3 px-4">
-                        Jika GraphQL (PRD)
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {frontendImpactRows.map((row, i) => (
-                      <TableRow key={i} className="border-zinc-800/60 hover:bg-zinc-800/30 transition-colors">
-                        <TableCell className="py-3 px-4 text-sm font-medium text-zinc-200">{row[0]}</TableCell>
-                        <TableCell className="py-3 px-4 text-sm text-emerald-400 font-mono">{row[1]}</TableCell>
-                        <TableCell className="py-3 px-4 text-sm text-amber-400 font-mono">{row[2]}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Alert className="mt-6 border-amber-500/30 bg-amber-500/5">
-            <Gauge className="h-4 w-4 text-amber-400" />
-            <AlertTitle className="text-amber-400 font-semibold">Frontend Impact Summary</AlertTitle>
-            <AlertDescription className="text-zinc-400 text-sm mt-1">
-              REST = redirect URL saja (minim perubahan). GraphQL = <span className="text-red-400 font-semibold">REWRITE semua 131 routes + components</span>.
-            </AlertDescription>
-          </Alert>
-        </section>
-
-        <Separator className="bg-zinc-800/60" />
-
-        {/* ─── SECTION 9: DISCUSSION POINTS ────────────── */}
-        <section>
-          <SectionTitle icon={<MessageSquare className="w-5 h-5 text-emerald-400" />}>
-            Discussion Points — Keputusan yang Harus Diambil
-          </SectionTitle>
-
-          <div className="space-y-6">
-            {decisions.map((d) => (
-              <Card key={d.number} className="bg-zinc-900 border-amber-500/20 overflow-hidden">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-emerald-500/20 border border-amber-500/20 text-lg font-black text-amber-400">
-                      {d.number}
-                    </span>
-                    <div>
-                      <CardTitle className="text-base text-zinc-100">{d.title}</CardTitle>
-                      <CardDescription className="text-zinc-500 text-xs mt-0.5">{d.content}</CardDescription>
-                    </div>
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
+                    <span className="text-emerald-400 mt-0.5">→</span>
+                    <p className="text-sm text-zinc-400">
+                      GraphQL resolver memanggil <span className="text-zinc-200 font-medium">user-service</span> internally via gRPC atau HTTP
+                    </p>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 ml-1">
-                    {d.options.map((opt, i) => (
-                      <div
-                        key={i}
-                        className="flex items-start gap-3 p-3 rounded-lg bg-zinc-800/40 border border-zinc-700/40 hover:bg-zinc-800/60 transition-colors"
-                      >
-                        <div className="w-5 h-5 rounded-full bg-zinc-800 border border-zinc-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <div className="w-2 h-2 rounded-full bg-amber-400/50" />
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
+                    <span className="text-emerald-400 mt-0.5">→</span>
+                    <p className="text-sm text-zinc-400">
+                      Setiap service memiliki data secara independen — true service ownership
+                    </p>
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </section>
+
+        <Separator className="bg-zinc-800/60" />
+
+        {/* ─── SECTION 8: IMPLEMENTATION ROADMAP ────────── */}
+        <section>
+          <SectionTitle icon={<Rocket className="w-5 h-5 text-emerald-400" />}>
+            Implementation Roadmap
+          </SectionTitle>
+
+          <div className="space-y-4">
+            {roadmapPhases.map((phase) => (
+              <Card key={phase.phase} className="bg-zinc-900 border-zinc-800 overflow-hidden">
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
+                        {phase.icon}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+                            Phase {phase.phase}
+                          </Badge>
+                          <span className="text-xs text-zinc-500 font-mono">{phase.weeks}</span>
                         </div>
-                        <span className="text-sm text-zinc-300">{opt}</span>
+                        <h3 className="text-base font-bold text-zinc-100 mt-0.5">{phase.title}</h3>
+                      </div>
+                    </div>
+                    {phase.phase < 8 && (
+                      <div className="hidden sm:flex items-center justify-end flex-1">
+                        <ArrowRight className="w-5 h-5 text-zinc-700" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 ml-0 sm:ml-[52px]">
+                    {phase.items.map((item, i) => (
+                      <div key={i} className="flex items-start gap-2 text-sm text-zinc-400">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                        <span>{item}</span>
                       </div>
                     ))}
                   </div>
@@ -1029,28 +918,136 @@ type CarListing struct {
             ))}
           </div>
 
-          <div className="mt-10 text-center">
-            <p className="text-sm text-zinc-500 italic">
-              💬 Diskusikan keputusan-keputusan di atas. Setelah disetujui, baru kita implementasi.
-            </p>
+          <div className="mt-6 p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="w-4 h-4 text-zinc-500" />
+              <span className="text-sm font-semibold text-zinc-300">Total Estimasi Timeline</span>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                <span className="text-xs text-zinc-400">Backend: 8 minggu</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-cyan-500" />
+                <span className="text-xs text-zinc-400">Frontend Migration: 2 minggu</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-amber-500" />
+                <span className="text-xs text-zinc-400">Testing + QA: 2 minggu</span>
+              </div>
+              <span className="text-xs text-zinc-500 font-bold">= ~10 minggu total</span>
+            </div>
           </div>
+        </section>
+
+        <Separator className="bg-zinc-800/60" />
+
+        {/* ─── SECTION 9: TECHNOLOGY STACK ──────────────── */}
+        <section>
+          <SectionTitle icon={<Box className="w-5 h-5 text-emerald-400" />}>
+            Technology Stack (Final)
+          </SectionTitle>
+
+          <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg text-zinc-200">Teknologi per Layer</CardTitle>
+              <CardDescription className="text-zinc-500">
+                Stack final yang akan digunakan di seluruh proyek
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-zinc-800 hover:bg-transparent">
+                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4">Layer</TableHead>
+                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4">Technology</TableHead>
+                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4">Version</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {techStack.map((t) => (
+                      <TableRow key={t.layer} className="border-zinc-800 hover:bg-zinc-800/40 transition-colors">
+                        <TableCell className="py-3 px-4 text-sm font-medium text-zinc-200">{t.layer}</TableCell>
+                        <TableCell className="py-3 px-4 text-sm font-mono text-cyan-400">{t.tech}</TableCell>
+                        <TableCell className="py-3 px-4 text-sm text-zinc-500 font-mono">{t.version}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Separator className="bg-zinc-800/60" />
+
+        {/* ─── SECTION 10: RISKS & MITIGATIONS ──────────── */}
+        <section>
+          <SectionTitle icon={<AlertTriangle className="w-5 h-5 text-emerald-400" />}>
+            Risks & Mitigations
+          </SectionTitle>
+
+          <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-zinc-800 hover:bg-transparent">
+                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4">Risk</TableHead>
+                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4 w-28">Severity</TableHead>
+                      <TableHead className="text-zinc-400 font-semibold text-sm py-3 px-4">Mitigation</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {risks.map((r) => (
+                      <TableRow key={r.risk} className="border-zinc-800 hover:bg-zinc-800/40 transition-colors">
+                        <TableCell className="py-3 px-4 text-sm font-medium text-zinc-200">{r.risk}</TableCell>
+                        <TableCell className="py-3 px-4">
+                          <SeverityBadge severity={r.severity} />
+                        </TableCell>
+                        <TableCell className="py-3 px-4 text-sm text-zinc-400">{r.mitigation}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Alert className="mt-6 border-amber-500/40 bg-amber-500/5">
+            <AlertTriangle className="h-4 w-4 text-amber-400" />
+            <AlertTitle className="text-amber-400 font-semibold">Perhatian Khusus</AlertTitle>
+            <AlertDescription className="text-zinc-400 text-sm mt-1">
+              Risiko tertinggi ada di <span className="text-amber-400 font-semibold">data inconsistency (No FK)</span> dan <span className="text-amber-400 font-semibold">frontend rewrite (131 routes)</span>. 
+              Kedua hal ini perlu mitigasi proaktif dari awal development.
+            </AlertDescription>
+          </Alert>
         </section>
 
       </main>
 
       {/* ═══════════════════════════════════════════════════════
-          STICKY BOTTOM BAR
+          FOOTER — Sticky Bottom Bar
       ═══════════════════════════════════════════════════════ */}
-      <div className="sticky bottom-0 z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-center gap-3">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-            <span className="text-sm">⏸️</span>
-            <span className="text-sm text-amber-400 font-medium">
-              MODE DISKUSI — Tidak ada kode yang ditulis
-            </span>
+      <footer className="sticky bottom-0 z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Rocket className="w-5 h-5 text-emerald-400" />
+              <span className="text-sm font-bold text-emerald-400">
+                FINAL BLUEPRINT — Menunggu konfirmasi untuk mulai implementasi
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-zinc-500">
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>{totalTables} tables · 6 services · 6 schemas · GraphQL</span>
+            </div>
           </div>
         </div>
-      </div>
+      </footer>
+
     </div>
   )
 }

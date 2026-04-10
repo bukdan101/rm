@@ -1975,3 +1975,149 @@ Stage Summary:
 - Document covers: 6 microservices, 96 tables, 6 PostgreSQL schemas, No-FK principle
 - Committed to local branch 'microservice' (commit 6dab7b6)
 - User needs to configure GitHub credentials to push to remote
+
+---
+Task ID: 2
+Agent: User Service Builder
+Task: Build user-service microservice (port 8001)
+
+Work Log:
+- Read shared pkg files: config, database, middleware, auth, jwt_service, utils
+- Created go.mod with automarket-user-service module (Go 1.24, Fiber v3, GORM, JWT)
+- Created 8 model files with NO foreign keys:
+  - internal/models/profile.go (profiles table)
+  - internal/models/user_settings.go (user_settings table)
+  - internal/models/user_session.go (user_sessions table)
+  - internal/models/user_token.go (user_tokens table)
+  - internal/models/kyc.go (kyc_verifications table)
+  - internal/models/user_verification.go (user_verifications table)
+  - internal/models/user_address.go (user_addresses table)
+  - internal/models/user_document.go (user_documents table)
+- Created auth controller with Google OAuth + JWT (GoogleLogin, GoogleCallback, GetProfile, UpdateProfile, RefreshToken)
+- Created JWT helper (JWTBuilder, JWTParser)
+- Created user controller with full CRUD (GetUser, GetSettings, UpdateSettings, GetAddresses, AddAddress, UpdateAddress, DeleteAddress, GetDocuments, UploadDocument, ListUsers, UpdateUserRole)
+- Created KYC controller (SubmitKYC, GetKYC, UpdateKYCStatus, ReviewKYC, ListPendingKYC)
+- Created token controller (GetBalance, GetTransactions)
+- Created routes.go with 24 API endpoints (public, authenticated, admin)
+- Created cmd/server/main.go (Fiber app, DB connection with retry, auto-migrate, middleware)
+- Created Dockerfile (multi-stage Go build)
+- Created .env (default env vars)
+- Note: Go not installed in environment, build verification skipped
+
+Stage Summary:
+- user-service on port 8001
+- 8 tables: profiles, user_settings, user_sessions, user_tokens, kyc_verifications, user_verifications, user_addresses, user_documents
+- 24+ API endpoints across public, authenticated, and admin groups
+- Google OAuth + JWT authentication
+- All tables in user_schema with NO foreign keys (UUID string refs only)
+- Bahasa Indonesia error messages
+- Consistent JSON response format
+---
+## Task ID: 4 - Interaction Service Builder
+### Work Task
+Build the complete interaction-service microservice for AutoMarket Indonesia using Golang Fiber v3 + GORM + PostgreSQL.
+
+### Work Summary
+Created all 15 files for the interaction-service microservice at `/home/z/my-project/microservices/interaction-service/`.
+
+**Files Created (15):**
+1. `go.mod` — Module automarket-interaction-service, Go 1.24, Fiber v3 + GORM + JWT + UUID
+2. `.env` — Service config (PORT 8003, DB_SCHEMA=interaction_schema)
+3. `Dockerfile` — Multi-stage build (golang:1.24-alpine → alpine)
+4. `internal/models/review.go` — CarReview, ReviewImage, ReviewVote (7 tables total across all model files)
+5. `internal/models/favorite.go` — CarFavorite
+6. `internal/models/recent_view.go` — RecentView
+7. `internal/models/recommendation.go` — Recommendation
+8. `internal/models/trending.go` — TrendingCar
+9. `internal/controllers/review_controller.go` — Full CRUD, voting, seller response, images, admin ops
+10. `internal/controllers/favorite_controller.go` — Add/remove/list favorites
+11. `internal/controllers/recent_view_controller.go` — Track/list recent views
+12. `internal/controllers/recommendation_controller.go` — Get personalized recommendations
+13. `internal/controllers/trending_controller.go` — Get trending cars by period
+14. `internal/routes/routes.go` — 18 API endpoints organized by public/authenticated/admin
+15. `cmd/server/main.go` — Fiber app, DB with retry, auto-migrate 7 tables, JWT middleware
+
+**Architecture Rules Followed:**
+- NO foreign keys — all cross-table references use UUID string fields only
+- Schema isolation — search_path=interaction_schema,public in DSN
+- Golang Fiber v3 with GORM PostgreSQL driver
+- PKs: gorm:"type:uuid;primaryKey;default:gen_random_uuid()"
+- Check constraints for all enums (status, vote_type, period, source, rating 1-5)
+
+**API Endpoints (18 total):**
+- Public: health check, listing reviews (paginated/sorted), review detail, trending
+- Authenticated: review CRUD, images, voting, seller response, favorites, recent views, recommendations
+- Admin: review list with filters, status update, force delete
+
+**Business Logic:**
+- Review: duplicate prevention, rating validation, max 10 images, anonymous support
+- Vote: toggle behavior, cannot vote own review, count tracking
+- Favorites: duplicate prevention
+- Recent views: auto-increment on re-view
+- Recommendations: fallback from recent views + trending when empty
+
+### Stage Summary:
+- All 15 files created at microservices/interaction-service/
+- 7 tables: car_reviews, review_images, review_votes, car_favorites, recent_views, recommendations, trending_cars
+- 18 API endpoints across public, authenticated, and admin groups
+- Follows established patterns from user-service microservice
+- Work record written to /home/z/my-project/agent-ctx/4-interaction-service-builder.md
+
+---
+## Task ID: 6 - Business Service Builder
+### Work Task
+Build the complete business-service microservice for AutoMarket Indonesia using Golang Fiber v3 + GORM + PostgreSQL on PORT 8005.
+
+### Work Summary
+Created all 25 files for the business-service microservice at `/home/z/my-project/microservices/business-service/`:
+
+**Scaffolding (3 files):**
+- `go.mod` — Module automarket-business-service, Go 1.24, Fiber v3, GORM, JWT, UUID
+- `.env` — PORT 8005, business_schema, PostgreSQL config
+- `Dockerfile` — Multi-stage build, Alpine-based, exposes port 8005
+
+**Models (10 files, 16 models):**
+- `dealer.go` — Dealer (slug, rating, review_count, subscription_tier, verified)
+- `dealer_branch.go` — DealerBranch (operating_hours JSONB, is_main)
+- `dealer_staff.go` — DealerStaff (roles: owner/manager/sales/inspector)
+- `dealer_document.go` — DealerDocument (verification documents)
+- `dealer_review.go` — DealerReview (1-5 rating, helpful_count)
+- `dealer_inventory.go` — DealerInventory (stock_status)
+- `dealer_marketplace.go` — DealerMarketplaceSetting, DealerMarketplaceFavorite, DealerMarketplaceView
+- `dealer_offer.go` — DealerOffer (negotiation flow with counter_offer), DealerOfferHistory
+- `banner.go` — Banner (position, click/view tracking, date range)
+- `broadcast.go` — Broadcast (segment targeting, scheduled sending)
+- `category.go` — Category (parent-child hierarchy, featured)
+- `support_ticket.go` — SupportTicket (priority/status workflow), SupportTicketMessage
+
+**Controllers (9 files):**
+- `jwt_helpers.go` — JWT parser/builder for inline middleware
+- `dealer_controller.go` — Full dealer CRUD, branches, staff, inventory, reviews, marketplace settings
+- `offer_controller.go` — B2B offer system (create, view, accept, reject, counter, withdraw), history tracking
+- `marketplace_controller.go` — Favorites CRUD, marketplace settings
+- `banner_controller.go` — Public list + admin CRUD with click tracking
+- `broadcast_controller.go` — Admin broadcast management
+- `category_controller.go` — Public list + admin CRUD (child protection)
+- `support_controller.go` — Ticket CRUD + admin endpoints (assign, reply)
+- `admin_controller.go` — Dealer management, offer listing, marketplace settings
+
+**Routes (1 file):**
+- `routes.go` — 45+ endpoints in Public / Authenticated / Admin groups
+
+**Main Server (1 file):**
+- `cmd/server/main.go` — Fiber app, DB with retry, auto-migrate 16 tables, schema creation
+
+**Architecture:**
+- NO foreign keys — UUID string fields only
+- Schema isolation via search_path=business_schema,public
+- B2B Offer flow: pending → viewed → negotiating → accepted/rejected/expired/withdrawn
+- Counter offers: unlimited ping-pong with full history tracking
+- Docker compose already configured (business-service on port 8005)
+
+**Stage Summary:**
+- **25 files created** for complete business-service microservice
+- **16 database tables** auto-migrated in business_schema
+- **45+ API endpoints** across public, authenticated, and admin routes
+- **Full B2B offer system** with counter-offer ping-pong and history
+- **No Go compiler in environment** — build verification requires Go 1.24+
+- **Status**: All source files written, follows user-service patterns

@@ -1,0 +1,220 @@
+version: '3.9'
+
+services:
+  # ============================================
+  # PostgreSQL - Shared Database
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: automarket-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: automarket
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-schemas.sql:/docker-entrypoint-initdb.d/01-init-schemas.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis - Shared Cache
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: automarket-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # User Service (port 8001)
+  # ============================================
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    container_name: automarket-user-service
+    ports:
+      - "8001:8001"
+    environment:
+      APP_PORT: 8001
+      APP_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: automarket
+      DB_SCHEMA: user_schema
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: automarket-super-secret-jwt-key-2024
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ============================================
+  # Listing Service (port 8002)
+  # ============================================
+  listing-service:
+    build:
+      context: ./listing-service
+      dockerfile: Dockerfile
+    container_name: automarket-listing-service
+    ports:
+      - "8002:8002"
+    environment:
+      APP_PORT: 8002
+      APP_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: automarket
+      DB_SCHEMA: listing_schema
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: automarket-super-secret-jwt-key-2024
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ============================================
+  # Interaction Service (port 8003)
+  # ============================================
+  interaction-service:
+    build:
+      context: ./interaction-service
+      dockerfile: Dockerfile
+    container_name: automarket-interaction-service
+    ports:
+      - "8003:8003"
+    environment:
+      APP_PORT: 8003
+      APP_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: automarket
+      DB_SCHEMA: interaction_schema
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: automarket-super-secret-jwt-key-2024
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ============================================
+  # Transaction Service (port 8004)
+  # ============================================
+  transaction-service:
+    build:
+      context: ./transaction-service
+      dockerfile: Dockerfile
+    container_name: automarket-transaction-service
+    ports:
+      - "8004:8004"
+    environment:
+      APP_PORT: 8004
+      APP_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: automarket
+      DB_SCHEMA: transaction_schema
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: automarket-super-secret-jwt-key-2024
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ============================================
+  # Business Service (port 8005)
+  # ============================================
+  business-service:
+    build:
+      context: ./business-service
+      dockerfile: Dockerfile
+    container_name: automarket-business-service
+    ports:
+      - "8005:8005"
+    environment:
+      APP_PORT: 8005
+      APP_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: automarket
+      DB_SCHEMA: business_schema
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: automarket-super-secret-jwt-key-2024
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ============================================
+  # System Service (port 8006)
+  # ============================================
+  system-service:
+    build:
+      context: ./system-service
+      dockerfile: Dockerfile
+    container_name: automarket-system-service
+    ports:
+      - "8006:8006"
+    environment:
+      APP_PORT: 8006
+      APP_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: automarket
+      DB_SCHEMA: system_schema
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: automarket-super-secret-jwt-key-2024
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

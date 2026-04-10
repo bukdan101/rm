@@ -1803,3 +1803,60 @@ Stage Summary:
 - Seed file is runnable standalone with hardcoded config
 - All builds verified passing with `go build`
 
+
+---
+## Task ID: 2 - system-workflow-agent
+### Work Task
+Create a comprehensive, interactive System Workflow Visualization page at /system-workflow for the AutoMarket Indonesia platform.
+
+### Work Summary
+Created a single comprehensive page at `/src/app/system-workflow/page.tsx` documenting the entire AutoMarket Indonesia system architecture with 101 database tables across 15 modules.
+
+**Page Sections Created:**
+
+1. **Hero Section**: Gradient emerald-teal hero with title "AutoMarket Indonesia - System Architecture", subtitle "Platform Marketplace Otomotif Terlengkap", and 6 stat cards (101 Tables, 81 Pages, 120+ APIs, 4 Roles, 15 Modules, 160 Inspection Points).
+
+2. **Architecture Diagram**: CSS-based visual diagram showing Browser/Client → Next.js 16 Frontend → API Gateway (Caddy) → Golang Fiber v3 Backend → PostgreSQL, Redis, MinIO, WebSocket.
+
+3. **15 Module Accordion Sections**: Each module expandable with:
+   - Module icon + name + table count badge
+   - Flow diagram with gradient step icons (user journey through module)
+   - Database tables grid (table name, column count, FK count)
+   - API endpoints list with colored method badges (GET/POST/PUT/DELETE)
+   - Status workflow diagrams with colored state transitions
+
+4. **User Journey Maps** (3 tabs):
+   - Buyer Journey: Daftar → Jelajahi → Bandingkan → Favorit → Chat → Buat Penawaran → Bayar → Review
+   - Seller Journey: Daftar → KYC → Beli Token → Buat Iklan → Boost → Kelola Penawaran → Selesaikan
+   - Dealer Journey: Registrasi → Onboarding → Inventaris → Marketplace → B2B Bidding → Analytics
+
+5. **Database Schema Grid**: All 101 tables in card grid grouped by module with table name, column count, FK indicators, and color-coded by module.
+
+6. **Token Economy Diagram**: Visual flow showing Purchase → Balance → Use → Transaction Log, plus Admin Topup → Manual Adjustment and Bonus Registrasi (500 Token).
+
+7. **Token Costs**: 7 feature cards showing cost per feature (AI Prediction: 5, Listing Umum: 10, Listing Dealer: 20, etc.) with GRATIS badges for free features.
+
+8. **Token Packages**: 5 package cards (50-1000 tokens) with pricing and per-token cost.
+
+9. **User Roles & Permissions**: 4 role cards (User, Seller, Dealer, Admin) with permission checklists.
+
+10. **Stats Summary Bar**: Emerald gradient bar with key stats.
+
+11. **Footer**: Technology stack badges and documentation note.
+
+**Technical Implementation:**
+- Single file at `/src/app/system-workflow/page.tsx` (~1100 lines)
+- Uses shadcn/ui components: Card, Badge, Button, Tabs, Accordion, Separator, ScrollArea
+- Uses lucide-react icons throughout
+- Emerald/teal/amber palette with NO indigo/blue
+- Fully responsive (mobile-first)
+- 'use client' directive with useState for interactivity
+- All text in Bahasa Indonesia
+- min-h-screen flex flex-col wrapper with sticky footer (mt-auto)
+
+**Stage Summary:**
+- **File**: `/src/app/system-workflow/page.tsx` - Single comprehensive page
+- **Sections**: Hero, Architecture, 15 Modules, 3 Journeys, DB Grid, Token Economy, Roles
+- **Lint**: 0 errors on the page file
+- **HTTP**: 200 OK, compiles in 3ms, renders in 127ms
+- **Palette**: Emerald/teal/amber gradients, no indigo/blue

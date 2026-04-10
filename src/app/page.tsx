@@ -8,13 +8,18 @@ import { PremiumListingsSection } from '@/components/landing/PremiumListingsSect
 import { AuctionSection } from '@/components/landing/AuctionSection'
 import { SponsorLogos } from '@/components/landing/SponsorLogos'
 import { AdBanner } from '@/components/ads/AdBanner'
+import { MicroserviceStatus } from '@/components/dashboard/MicroserviceStatus'
+import { MarketplaceBrowser } from '@/components/marketplace/MarketplaceBrowser'
+import { DealersDirectory } from '@/components/marketplace/DealersDirectory'
+import { ArchitectureDashboard } from '@/components/marketplace/ArchitectureDashboard'
+import { ListingDetailView } from '@/components/marketplace/ListingDetailView'
+import { NavigationTabs } from '@/components/marketplace/NavigationTabs'
 import { Button } from '@/components/ui/button'
 import { GradientHeading } from '@/components/ui/gradient-heading'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getLandingData } from '@/lib/landing-data'
-import { ChevronRight, Clock, TrendingUp, Zap, Shield, Car, AlertCircle, Loader2 } from 'lucide-react'
-import { ListingDetailView } from '@/components/marketplace/ListingDetailView'
+import { ChevronRight, Clock, TrendingUp, Zap, Shield, Car, Loader2 } from 'lucide-react'
 
 // Loading skeletons
 function CategoriesSkeleton() {
@@ -47,23 +52,6 @@ function ListingsSkeleton() {
   )
 }
 
-function AuctionsSkeleton() {
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-      {[...Array(6)].map((_, i) => (
-        <div key={i} className="rounded-lg overflow-hidden">
-          <Skeleton className="h-32 w-full" />
-          <div className="p-2.5 space-y-2">
-            <Skeleton className="h-3 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// Loading component for detail view
 function DetailSkeleton() {
   return (
     <div className="container mx-auto px-4 py-8">
@@ -75,13 +63,22 @@ function DetailSkeleton() {
 }
 
 interface HomePageProps {
-  searchParams: Promise<{ id?: string; tab?: string; sort?: string; featured?: string }>
+  searchParams: Promise<{ 
+    id?: string
+    view?: string
+    tab?: string
+    sort?: string
+    featured?: string
+    brand?: string
+    body_type?: string
+  }>
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams
   const listingId = params.id
-  
+  const view = params.view
+
   // If there's an ID parameter, show the listing detail
   if (listingId) {
     return (
@@ -93,35 +90,70 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     )
   }
 
-  // Otherwise, show the regular homepage
+  // Marketplace View
+  if (view === 'marketplace') {
+    return (
+      <MainLayout>
+        <Suspense fallback={<ListingsSkeleton />}>
+          <MarketplaceBrowser initialBrand={params.brand} initialBodyType={params.body_type} />
+        </Suspense>
+      </MainLayout>
+    )
+  }
+
+  // Dealers View
+  if (view === 'dealers') {
+    return (
+      <MainLayout>
+        <Suspense fallback={<ListingsSkeleton />}>
+          <DealersDirectory />
+        </Suspense>
+      </MainLayout>
+    )
+  }
+
+  // Architecture View
+  if (view === 'architecture') {
+    return (
+      <MainLayout>
+        <Suspense fallback={<DetailSkeleton />}>
+          <ArchitectureDashboard />
+        </Suspense>
+      </MainLayout>
+    )
+  }
+
+  // Default: Home View
   const data = await getLandingData()
-  const { 
-    categories, 
-    featuredListings, 
-    premiumBoostedListings, 
-    highlightedListingIds, 
-    latestListings, 
-    popularListings, 
-    activeAuctions 
+  const {
+    categories,
+    featuredListings,
+    premiumBoostedListings,
+    highlightedListingIds,
+    latestListings,
+    popularListings,
+    activeAuctions,
   } = data
 
   return (
     <MainLayout>
       <main className="min-h-screen bg-background">
-        
-        {/* Top Banner - FULL WIDTH, NO ROUNDED, 2/3 + 1/3 */}
+        {/* Top Banner - FULL WIDTH, 2/3 + 1/3 */}
         <div className="w-full">
           <div className="flex w-full h-[150px]">
-            {/* Landscape Banner - 2/3 width */}
             <div className="w-2/3 h-full relative overflow-hidden">
               <AdBanner position="home-center" showPlaceholder={true} />
             </div>
-            {/* Sidebar Banner - 1/3 width */}
             <div className="w-1/3 h-full relative overflow-hidden">
               <AdBanner position="home-center-sidebar" showPlaceholder={true} />
             </div>
           </div>
         </div>
+
+        {/* Navigation Tabs */}
+        <Suspense fallback={null}>
+          <NavigationTabs />
+        </Suspense>
 
         {/* Hero Stats Banner */}
         <section className="bg-brand-gradient">
@@ -151,7 +183,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
         </section>
 
-        {/* Brand Categories - Main */}
+        {/* Brand Categories */}
         <section className="container mx-auto px-4 pt-6">
           <Suspense fallback={<CategoriesSkeleton />}>
             <CarBrandCategories />
@@ -166,9 +198,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         {/* Premium Boosted Listings */}
         <Suspense fallback={null}>
           {premiumBoostedListings.length > 0 && (
-            <PremiumListingsSection 
-              listings={premiumBoostedListings} 
-              highlightedIds={highlightedListingIds} 
+            <PremiumListingsSection
+              listings={premiumBoostedListings}
+              highlightedIds={highlightedListingIds}
             />
           )}
         </Suspense>
@@ -185,8 +217,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     Premium
                   </Badge>
                 </div>
-                <Link 
-                  href="/?tab=marketplace&featured=true" 
+                <Link
+                  href="/?view=marketplace&featured=true"
                   className="text-emerald-600 gap-1 text-xs flex items-center hover:underline"
                 >
                   Lihat Semua
@@ -195,19 +227,19 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               </div>
             </div>
             <Suspense fallback={<ListingsSkeleton />}>
-              <ListingsSection 
-                title="" 
-                listings={featuredListings} 
-                filterParam="featured=true" 
-                showViewAll={false} 
-                highlightedIds={highlightedListingIds} 
+              <ListingsSection
+                title=""
+                listings={featuredListings}
+                filterParam="featured=true"
+                showViewAll={false}
+                highlightedIds={highlightedListingIds}
               />
             </Suspense>
           </section>
         )}
 
         {/* Auctions */}
-        <Suspense fallback={<AuctionsSkeleton />}>
+        <Suspense fallback={null}>
           {activeAuctions.length > 0 && (
             <AuctionSection auctions={activeAuctions} />
           )}
@@ -222,8 +254,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <Clock className="h-4.5 w-4.5 text-emerald-600" />
                   <h2 className="text-lg font-bold text-foreground">Produk Terbaru</h2>
                 </div>
-                <Link 
-                  href="/?tab=marketplace&sort=newest" 
+                <Link
+                  href="/?view=marketplace&sort=newest"
                   className="text-emerald-600 gap-1 text-xs flex items-center hover:underline"
                 >
                   Lihat Semua
@@ -232,25 +264,23 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               </div>
             </div>
             <Suspense fallback={<ListingsSkeleton />}>
-              <ListingsSection 
-                title="" 
-                listings={latestListings} 
-                filterParam="sort=newest" 
-                showViewAll={false} 
-                highlightedIds={highlightedListingIds} 
+              <ListingsSection
+                title=""
+                listings={latestListings}
+                filterParam="sort=newest"
+                showViewAll={false}
+                highlightedIds={highlightedListingIds}
               />
             </Suspense>
           </section>
         )}
 
-        {/* Inline Ad - FULL WIDTH, NO ROUNDED */}
+        {/* Inline Ad */}
         <div className="w-full">
           <div className="flex w-full h-[150px]">
-            {/* Landscape Banner - 2/3 width */}
             <div className="w-2/3 h-full relative overflow-hidden">
               <AdBanner position="home-inline" showPlaceholder={true} />
             </div>
-            {/* Sidebar Banner - 1/3 width */}
             <div className="w-1/3 h-full relative overflow-hidden">
               <AdBanner position="home-inline-sidebar" showPlaceholder={true} />
             </div>
@@ -266,8 +296,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <TrendingUp className="h-4.5 w-4.5 text-emerald-600" />
                   <h2 className="text-lg font-bold text-foreground">Populer Minggu Ini</h2>
                 </div>
-                <Link 
-                  href="/?tab=marketplace&sort=popular" 
+                <Link
+                  href="/?view=marketplace&sort=popular"
                   className="text-emerald-600 gap-1 text-xs flex items-center hover:underline"
                 >
                   Lihat Semua
@@ -276,12 +306,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               </div>
             </div>
             <Suspense fallback={<ListingsSkeleton />}>
-              <ListingsSection 
-                title="" 
-                listings={popularListings} 
-                filterParam="sort=popular" 
-                showViewAll={false} 
-                highlightedIds={highlightedListingIds} 
+              <ListingsSection
+                title=""
+                listings={popularListings}
+                filterParam="sort=popular"
+                showViewAll={false}
+                highlightedIds={highlightedListingIds}
               />
             </Suspense>
           </section>
@@ -290,6 +320,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         {/* Sponsor Logos */}
         <SponsorLogos />
 
+        {/* Microservice Status */}
+        <section className="container mx-auto px-4 py-4">
+          <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
+            <MicroserviceStatus />
+          </Suspense>
+        </section>
+
         {/* CTA Section */}
         <section className="py-12 bg-brand-gradient">
           <div className="container mx-auto px-4 text-center">
@@ -297,20 +334,20 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               Mulai jualan di AutoMarket sekarang!
             </GradientHeading>
             <p className="text-sm text-white/70 mb-6 max-w-md mx-auto">
-              Gratis daftar · Jutaan pembeli · Transaksi aman dengan escrow · Inspeksi 160 titik
+              Gratis daftar &middot; Jutaan pembeli &middot; Transaksi aman dengan escrow &middot; Inspeksi 160 titik
             </p>
             <div className="flex justify-center gap-3 flex-wrap">
               <Link href="/auth">
-                <Button 
-                  variant="secondary" 
+                <Button
+                  variant="secondary"
                   className="bg-white text-purple-700 hover:bg-gray-100"
                 >
                   Daftar Gratis
                 </Button>
               </Link>
               <Link href="/listing/create">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="text-white border-white/30 hover:bg-white/10"
                 >
                   Jual Mobil

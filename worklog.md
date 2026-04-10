@@ -2337,3 +2337,73 @@ Work Log:
 Stage Summary:
 - system-service on port 8006, 2531 lines of Go code
 - 14 tables in system_schema, 30+ API endpoints + WebSocket
+
+---
+Task ID: 18
+Agent: Main Assistant
+Task: Frontend Migration - API Gateway, Service Layer & Comprehensive SPA Marketplace
+
+Work Log:
+- Analyzed all 6 microservice routes and their endpoints (115+ total API endpoints)
+- Created API Gateway Client (`src/lib/api/client.ts`):
+  - Service-to-route mapping for auto-routing requests
+  - XTransformPort gateway integration via Caddy
+  - JWT token management (set/get/clear with localStorage persistence)
+  - HTTP method helpers (get, post, put, delete)
+  - Service health check utilities
+- Created API Service Layer (`src/lib/api/services.ts`):
+  - 6 service modules: listing, user, interaction, transaction, business, system
+  - Dual-mode architecture: tries microservice first, falls back to demo data
+  - 12 demo brands, 6 demo colors, 16 demo car listings with full detail
+  - 5 demo dealers with complete profiles
+  - Comprehensive filtering support for listings
+- Created Next.js API Proxy Route (`src/app/api/v1/[...path]/route.ts`):
+  - Catch-all BFF route for all `/api/v1/*` requests
+  - Auto-routes to correct microservice based on path segment
+  - Forwards headers, body, query params transparently
+  - Service discovery map for 40+ route prefixes
+- Created Zustand Auth Store (`src/stores/auth-store.ts`):
+  - JWT token state management
+  - Profile and role helpers (isAdmin, isDealer, isSeller)
+  - Login/logout/setProfile actions
+- Created MicroserviceStatus Component (`src/components/dashboard/MicroserviceStatus.tsx`):
+  - Live health check for all 6 services
+  - Compact status bar with expandable detail view
+  - Auto-refresh every 30 seconds
+  - Service info with latency display
+- Created NavigationTabs Component (`src/components/marketplace/NavigationTabs.tsx`):
+  - Tab-based SPA navigation (Home, Marketplace, Dealer, Architecture)
+  - Sticky header with active state styling
+- Created MarketplaceBrowser Component (`src/components/marketplace/MarketplaceBrowser.tsx`):
+  - Full marketplace browse with search bar
+  - Advanced filter panel: body type, brand, price range, condition, fuel, transmission
+  - Sort options (newest, price asc/desc, popular, mileage)
+  - Grid/List view toggle
+  - Pagination with page numbers
+  - Active filter chips with reset functionality
+- Created DealersDirectory Component (`src/components/marketplace/DealersDirectory.tsx`):
+  - 5 demo dealers with search/filter
+  - Stats bar (total dealers, verified, total listings, avg rating)
+  - Dealer cards with rating, location, contact info, verified badge
+- Created ArchitectureDashboard Component (`src/components/marketplace/ArchitectureDashboard.tsx`):
+  - Visual architecture diagram (Client → Gateway → Microservices → Infrastructure)
+  - Technology stack display (Go, Fiber, GORM, PostgreSQL, Redis, Docker, JWT, WebSocket)
+  - Database schema visualization (6 schemas with table counts)
+  - API endpoints summary table (33 public, 55 auth, 41 admin = 129 total)
+  - Frontend migration status tracker (9 items: 5 done, 1 in progress, 3 pending)
+- Updated main page.tsx to be comprehensive SPA:
+  - 4 views via searchParams: Home (default), Marketplace, Dealers, Architecture
+  - Listing Detail view via ?id parameter
+  - Sticky navigation tabs
+  - MicroserviceStatus widget embedded in home view
+
+Stage Summary:
+- **API Gateway**: Full routing client with XTransformPort and JWT support
+- **Service Layer**: 6 typed service modules with demo data fallback
+- **Proxy Route**: /api/v1/[...path] catch-all BFF route
+- **Auth Store**: Zustand JWT token management
+- **SPA Views**: 4 views (Home, Marketplace, Dealers, Architecture) + Listing Detail
+- **Total New Files**: 8 (2 lib, 1 store, 1 API route, 4 components)
+- **Updated Files**: 1 (page.tsx)
+- **Lint Status**: Clean (no src/ errors)
+- **HTTP Status**: All views return 200

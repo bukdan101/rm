@@ -131,8 +131,9 @@ export default function Home() {
 
   // Derived data from Apollo
   const categories = landingData?.landingData?.categories ?? []
-  const featuredCars = (landingData?.landingData?.featuredListings ?? []).map(mapToListingCard)
-  const latestCars = (landingData?.landingData?.latestListings ?? []).map(mapToListingCard)
+  const featuredCars = (landingData?.landingData?.featured ?? []).map(mapToListingCard)
+  const latestCars = (landingData?.landingData?.latest ?? []).map(mapToListingCard)
+  const popularCars = (landingData?.landingData?.popular ?? []).map(mapToListingCard)
   const trendingCars = (trendingData?.trending ?? []).map(mapToListingCard)
   const brands = brandsData?.brands ?? []
   const tokenPackages = tokenPackagesData?.tokenPackages ?? []
@@ -474,7 +475,7 @@ export default function Home() {
             </motion.div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {MOCK_CARS.slice(0, 4).map((car, i) => (
+              {trendingCars.slice(0, 4).map((car, i) => (
                 <motion.div key={car.id} variants={fadeInUp} custom={i + 1}>
                   <CarCard
                     listing={car}
@@ -514,7 +515,15 @@ export default function Home() {
             </motion.div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {MOCK_CARS.slice(4).map((car, i) => (
+              {featuredCars.length > 0 ? featuredCars.map((car, i) => (
+                <motion.div key={car.id} variants={fadeInUp} custom={i + 1}>
+                  <CarCard
+                    listing={car}
+                    onFavorite={toggleFavorite}
+                    isFavorited={favorites.has(car.id)}
+                  />
+                </motion.div>
+              )) : latestCars.map((car, i) => (
                 <motion.div key={car.id} variants={fadeInUp} custom={i + 1}>
                   <CarCard
                     listing={car}
@@ -544,7 +553,7 @@ export default function Home() {
               </motion.div>
 
               <div className="grid grid-cols-4 sm:grid-cols-4 lg:grid-cols-8 gap-4 max-w-4xl mx-auto">
-                {MOCK_BRANDS.map((brand, i) => (
+                {brands.slice(0, 8).map((brand: any, i: number) => (
                   <motion.button
                     key={brand.id}
                     variants={scaleIn}
@@ -552,7 +561,7 @@ export default function Home() {
                     className="flex flex-col items-center gap-2 group cursor-pointer"
                   >
                     <div className="h-16 w-16 rounded-2xl bg-white border shadow-sm flex items-center justify-center text-2xl transition-all group-hover:shadow-md group-hover:border-emerald-300 group-hover:-translate-y-1">
-                      {brand.logo}
+                      <img src={brand.logoUrl || brand.logo || `/brands/${brand.slug}.png`} alt={brand.name} className="h-10 w-10 object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                     </div>
                     <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">
                       {brand.name}
@@ -666,7 +675,7 @@ export default function Home() {
               </motion.div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
-                {MOCK_TOKEN_PACKAGES.map((pkg, i) => (
+                {tokenPackages.map((pkg: any, i: number) => (
                   <motion.div key={pkg.id} variants={fadeInUp} custom={i + 1}>
                     <Card
                       className={`relative overflow-hidden py-0 gap-0 transition-all hover:shadow-xl ${
@@ -684,7 +693,7 @@ export default function Home() {
                         <div className="flex items-center gap-2">
                           {pkg.isPopular ? (
                             <Crown className="h-5 w-5 text-amber-400" />
-                          ) : pkg.id === '3' ? (
+                          ) : pkg.name === 'Bisnis' ? (
                             <Zap className="h-5 w-5 text-emerald-400" />
                           ) : (
                             <Coins className="h-5 w-5 text-slate-400" />
@@ -694,13 +703,13 @@ export default function Home() {
 
                         <div className="flex items-baseline gap-1">
                           <span className="text-3xl font-extrabold text-white">
-                            {pkg.tokenAmount + pkg.bonusTokens}
+                            {(pkg.tokens || pkg.tokenAmount || 0) + (pkg.bonus || pkg.bonusTokens || 0)}
                           </span>
                           <span className="text-sm text-slate-400">Token</span>
                         </div>
-                        {pkg.bonusTokens > 0 && (
+                        {(pkg.bonus || pkg.bonusTokens) > 0 && (
                           <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30">
-                            +{pkg.bonusTokens} bonus gratis
+                            +{pkg.bonus || pkg.bonusTokens} bonus gratis
                           </Badge>
                         )}
 

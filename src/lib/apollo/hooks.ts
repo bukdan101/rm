@@ -4,7 +4,7 @@ import { useQuery, useMutation, useLazyQuery } from '@apollo/client'
 import { gql } from '@apollo/client'
 
 // ============================================================================
-// QUERIES
+// QUERIES — aligned with schema.ts (brand: Brand, model: CarModel, images: [String!]!)
 // ============================================================================
 
 export const HEALTH_QUERY = gql`
@@ -23,12 +23,7 @@ export const ME_QUERY = gql`
       avatar
       role
       isVerified
-      settings {
-        id
-        userId
-        key
-        value
-      }
+      settings { id userId key value }
       tokenBalance
     }
   }
@@ -37,32 +32,26 @@ export const ME_QUERY = gql`
 export const LISTINGS_QUERY = gql`
   query Listings($page: Int, $perPage: Int, $filter: ListingFilter) {
     listings(page: $page, perPage: $perPage, filter: $filter) {
-      items {
-        id
-        slug
-        title
-        price
-        year
-        mileage
-        city
-        province
-        images { url }
-        condition
-        brand
-        model
-        variant
-        transmission
-        fuelType
-        color
-        bodyType
-        seller { id name avatarUrl }
-        viewCount
-        createdAt
-      }
-      totalCount
-      page
-      perPage
-      totalPages
+      id
+      slug
+      title
+      price
+      year
+      mileage
+      city
+      province
+      images
+      isFeatured
+      condition
+      brand { id name slug logo }
+      model { id name slug }
+      transmission
+      fuelType
+      color
+      bodyType
+      seller { id name avatar isVerified rating totalReviews }
+      viewCount
+      createdAt
     }
   }
 `
@@ -79,28 +68,36 @@ export const LISTING_QUERY = gql`
       mileage
       city
       province
-      images { url isPrimary sortOrder }
+      images
+      isFeatured
+      isNegotiable
       condition
-      brand
-      model
+      brand { id name slug logo }
+      model { id name slug }
       variant
       transmission
       fuelType
       color
       bodyType
-      features { sunroof cruiseControl navigation leatherSeats pushStart }
+      engineCapacity
+      seatCapacity
+      features
+      category { id name slug }
       inspection {
         id
         status
         overallScore
-        createdAt
+        inspectedAt
+        reportUrl
         categories { id name score items { id name status notes } }
       }
-      seller { id name avatarUrl phone email role }
-      viewCount
+      seller { id name avatar phone email isVerified rating totalReviews joinedAt totalListings address province city }
       reviewCount
+      viewCount
+      favorites
       status
       createdAt
+      updatedAt
     }
   }
 `
@@ -117,28 +114,36 @@ export const LISTING_BY_SLUG_QUERY = gql`
       mileage
       city
       province
-      images { url isPrimary sortOrder }
+      images
+      isFeatured
+      isNegotiable
       condition
-      brand
-      model
+      brand { id name slug logo }
+      model { id name slug }
       variant
       transmission
       fuelType
       color
       bodyType
-      features { sunroof cruiseControl navigation leatherSeats pushStart }
+      engineCapacity
+      seatCapacity
+      features
+      category { id name slug }
       inspection {
         id
         status
         overallScore
-        createdAt
+        inspectedAt
+        reportUrl
         categories { id name score items { id name status notes } }
       }
-      seller { id name avatarUrl phone email role }
-      viewCount
+      seller { id name avatar phone email isVerified rating totalReviews joinedAt totalListings address province city }
       reviewCount
+      viewCount
+      favorites
       status
       createdAt
+      updatedAt
     }
   }
 `
@@ -154,13 +159,14 @@ export const MY_LISTINGS_QUERY = gql`
       mileage
       city
       province
-      images { url }
+      images
       status
       viewCount
-      reviewCount
+      favorites
+      isFeatured
       condition
-      brand
-      model
+      brand { id name slug }
+      model { id name slug }
       transmission
       fuelType
       createdAt
@@ -174,47 +180,21 @@ export const BRANDS_QUERY = gql`
       id
       name
       slug
+      logo
       logoUrl
       country
-      models {
-        id
-        name
-        slug
-      }
+      models { id name slug }
     }
   }
 `
 
 export const MASTER_DATA_QUERY = gql`
   query MasterData {
-    colors {
-      id
-      name
-      slug
-    }
-    bodyTypes {
-      id
-      name
-      slug
-    }
-    fuelTypes {
-      id
-      name
-      slug
-    }
-    transmissions {
-      id
-      name
-      slug
-    }
-    categories {
-      id
-      name
-      slug
-      icon
-      sortOrder
-      isActive
-    }
+    colors { id name slug }
+    bodyTypes { id name slug }
+    fuelTypes { id name slug }
+    transmissions { id name slug }
+    categories { id name slug icon sortOrder isActive }
   }
 `
 
@@ -229,13 +209,13 @@ export const TRENDING_QUERY = gql`
       mileage
       city
       province
-      images { url }
+      images
       condition
-      brand
-      model
+      brand { id name slug }
+      model { id name slug }
       transmission
       fuelType
-      seller { id name avatarUrl }
+      seller { id name avatar isVerified rating totalReviews }
       viewCount
     }
   }
@@ -247,6 +227,20 @@ export const FAVORITES_QUERY = gql`
       id
       listingId
       userId
+      listing {
+        id
+        slug
+        title
+        price
+        year
+        mileage
+        city
+        province
+        images
+        condition
+        brand { id name slug }
+        model { id name slug }
+      }
       createdAt
     }
   }
@@ -263,13 +257,13 @@ export const RECOMMENDATIONS_QUERY = gql`
       mileage
       city
       province
-      images { url }
+      images
       condition
-      brand
-      model
+      brand { id name slug }
+      model { id name slug }
       transmission
       fuelType
-      seller { id name avatarUrl }
+      seller { id name avatar isVerified rating totalReviews }
       viewCount
     }
   }
@@ -282,11 +276,7 @@ export const LISTING_REVIEWS_QUERY = gql`
       rating
       comment
       createdAt
-      user {
-        id
-        name
-        avatar
-      }
+      user { id name avatar }
     }
   }
 `
@@ -306,10 +296,10 @@ export const ORDERS_QUERY = gql`
         slug
         title
         price
-        images { url }
-        brand
-        model
         year
+        images
+        brand { id name slug }
+        model { id name slug }
         condition
       }
     }
@@ -321,9 +311,12 @@ export const TOKEN_PACKAGES_QUERY = gql`
     tokenPackages {
       id
       name
+      description
       tokens
+      tokenAmount
       price
       bonus
+      bonusTokens
       isPopular
       features
     }
@@ -337,6 +330,7 @@ export const DEALERS_QUERY = gql`
       slug
       name
       logo
+      logoUrl
       description
       address
       city
@@ -358,6 +352,7 @@ export const DEALER_BY_SLUG_QUERY = gql`
       id
       slug
       name
+      logo
       logoUrl
       coverUrl
       description
@@ -368,20 +363,12 @@ export const DEALER_BY_SLUG_QUERY = gql`
       email
       website
       rating
-      reviewCount
-      listingCount
+      totalReviews
+      totalListings
       branchCount
       isVerified
       createdAt
-      branches {
-        id
-        name
-        address
-        city
-        province
-        phone
-        isPrimary
-      }
+      branches { id name address city province phone isPrimary lat lng }
       listings {
         id
         slug
@@ -390,10 +377,10 @@ export const DEALER_BY_SLUG_QUERY = gql`
         year
         mileage
         city
-        images { url }
+        images
         condition
-        brand
-        model
+        brand { id name slug }
+        model { id name slug }
         transmission
         fuelType
       }
@@ -406,15 +393,14 @@ export const BANNERS_QUERY = gql`
     banners(position: $position) {
       id
       title
+      subtitle
+      image
       imageUrl
+      link
       linkUrl
       position
       sortOrder
       isActive
-      clickCount
-      impressions
-      startDate
-      endDate
     }
   }
 `
@@ -426,20 +412,14 @@ export const CONVERSATIONS_QUERY = gql`
       listingId
       buyerId
       sellerId
-      lastMessage
+      lastMessage { id content createdAt sender { id name } }
       lastMessageAt
       unreadCount
       status
       createdAt
-      listing {
-        id
-        slug
-        title
-        price
-        images { url }
-      }
-      buyer { id name avatarUrl }
-      seller { id name avatarUrl }
+      updatedAt
+      listing { id slug title price images }
+      participants { id name avatar isOnline }
     }
   }
 `
@@ -451,21 +431,15 @@ export const CONVERSATION_DETAIL_QUERY = gql`
       listingId
       buyerId
       sellerId
-      lastMessage
+      lastMessage { id content createdAt sender { id name } }
       lastMessageAt
       unreadCount
       status
       createdAt
-      listing {
-        id
-        slug
-        title
-        price
-        images { url }
-        seller { id name avatarUrl }
-      }
-      buyer { id name avatarUrl }
-      seller { id name avatarUrl }
+      updatedAt
+      listing { id slug title price images seller { id name avatar } }
+      participants { id name avatar isOnline lastSeen }
+      messages { id content sender { id name avatar } createdAt isRead }
     }
   }
 `
@@ -475,11 +449,7 @@ export const MESSAGES_QUERY = gql`
     messages(conversationId: $conversationId) {
       id
       content
-      sender {
-        id
-        name
-        avatar
-      }
+      sender { id name avatar }
       createdAt
       isRead
     }
@@ -494,6 +464,8 @@ export const NOTIFICATIONS_QUERY = gql`
       type
       title
       body
+      message
+      data
       isRead
       createdAt
     }
@@ -515,8 +487,6 @@ export const SYSTEM_SETTINGS_QUERY = gql`
       type
       group
       description
-      createdAt
-      updatedAt
     }
   }
 `
@@ -529,6 +499,7 @@ export const LANDING_DATA_QUERY = gql`
         name
         slug
         icon
+        listingCount
       }
       featured {
         id
@@ -540,12 +511,13 @@ export const LANDING_DATA_QUERY = gql`
         city
         province
         images
+        isFeatured
         condition
-        brand
-        model
+        brand { id name slug logo }
+        model { id name slug }
         transmission
         fuelType
-        seller { id name avatarUrl }
+        seller { id name avatar isVerified rating totalReviews }
         viewCount
       }
       latest {
@@ -558,12 +530,13 @@ export const LANDING_DATA_QUERY = gql`
         city
         province
         images
+        isFeatured
         condition
-        brand
-        model
+        brand { id name slug }
+        model { id name slug }
         transmission
         fuelType
-        seller { id name avatarUrl }
+        seller { id name avatar isVerified rating totalReviews }
         viewCount
       }
       popular {
@@ -576,12 +549,13 @@ export const LANDING_DATA_QUERY = gql`
         city
         province
         images
+        isFeatured
         condition
-        brand
-        model
+        brand { id name slug }
+        model { id name slug }
         transmission
         fuelType
-        seller { id name avatarUrl }
+        seller { id name avatar isVerified rating totalReviews }
         viewCount
       }
     }
@@ -637,7 +611,7 @@ export const CREATE_LISTING_MUTATION = gql`
 `
 
 export const UPDATE_LISTING_MUTATION = gql`
-  mutation UpdateListing($id: ID!, $input: UpdateListingInput!) {
+  mutation UpdateListing($id: ID!, $input: CreateListingInput!) {
     updateListing(id: $id, input: $input) {
       id
       slug
@@ -691,18 +665,8 @@ export const CREATE_CONVERSATION_MUTATION = gql`
   mutation CreateConversation($listingId: ID!) {
     createConversation(listingId: $listingId) {
       id
-      listing {
-        id
-        slug
-        title
-        price
-        images
-      }
-      participants {
-        id
-        name
-        avatar
-      }
+      listing { id slug title price images }
+      participants { id name avatar }
     }
   }
 `
@@ -712,11 +676,7 @@ export const SEND_MESSAGE_MUTATION = gql`
     sendMessage(conversationId: $conversationId, content: $content) {
       id
       content
-      sender {
-        id
-        name
-        avatar
-      }
+      sender { id name avatar }
       createdAt
       isRead
     }
@@ -744,17 +704,11 @@ export function useListings(variables?: { page?: number; perPage?: number; filte
 }
 
 export function useListing(id: string) {
-  return useQuery(LISTING_QUERY, {
-    variables: { id },
-    skip: !id,
-  })
+  return useQuery(LISTING_QUERY, { variables: { id }, skip: !id })
 }
 
 export function useListingBySlug(slug: string) {
-  return useQuery(LISTING_BY_SLUG_QUERY, {
-    variables: { slug },
-    skip: !slug,
-  })
+  return useQuery(LISTING_BY_SLUG_QUERY, { variables: { slug }, skip: !slug })
 }
 
 export function useMyListings(variables?: { page?: number; perPage?: number }) {
@@ -773,9 +727,7 @@ export function useMasterData() {
 }
 
 export function useTrending(limit: number = 8) {
-  return useQuery(TRENDING_QUERY, {
-    variables: { limit },
-  })
+  return useQuery(TRENDING_QUERY, { variables: { limit } })
 }
 
 export function useFavorites() {
@@ -791,10 +743,7 @@ export function useRecommendations() {
 }
 
 export function useListingReviews(listingId: string) {
-  return useQuery(LISTING_REVIEWS_QUERY, {
-    variables: { listingId },
-    skip: !listingId,
-  })
+  return useQuery(LISTING_REVIEWS_QUERY, { variables: { listingId }, skip: !listingId })
 }
 
 export function useOrders() {
@@ -814,10 +763,7 @@ export function useDealers(variables?: { page?: number; perPage?: number }) {
 }
 
 export function useDealerBySlug(slug: string) {
-  return useQuery(DEALER_BY_SLUG_QUERY, {
-    variables: { slug },
-    skip: !slug,
-  })
+  return useQuery(DEALER_BY_SLUG_QUERY, { variables: { slug }, skip: !slug })
 }
 
 export function useBanners(position?: string) {
@@ -833,17 +779,11 @@ export function useConversations() {
 }
 
 export function useConversationDetail(id: string) {
-  return useQuery(CONVERSATION_DETAIL_QUERY, {
-    variables: { id },
-    skip: !id,
-  })
+  return useQuery(CONVERSATION_DETAIL_QUERY, { variables: { id }, skip: !id })
 }
 
 export function useMessages(conversationId: string) {
-  return useQuery(MESSAGES_QUERY, {
-    variables: { conversationId },
-    skip: !conversationId,
-  })
+  return useQuery(MESSAGES_QUERY, { variables: { conversationId }, skip: !conversationId })
 }
 
 export function useNotifications(unreadOnly?: boolean) {
@@ -861,12 +801,7 @@ export function useUnreadNotificationCount() {
       skip: typeof window !== 'undefined' && !localStorage.getItem('automarket_token'),
     }
   )
-
-  return {
-    count: data?.unreadNotificationCount ?? 0,
-    loading,
-    refetch,
-  }
+  return { count: data?.unreadNotificationCount ?? 0, loading, refetch }
 }
 
 export function useSystemSettings(group?: string) {
@@ -924,55 +859,37 @@ export function useGoogleLogin() {
 }
 
 export function useUpdateProfile() {
-  return useMutation(UPDATE_PROFILE_MUTATION, {
-    refetchQueries: [{ query: ME_QUERY }],
-  })
+  return useMutation(UPDATE_PROFILE_MUTATION, { refetchQueries: [{ query: ME_QUERY }] })
 }
 
 export function useCreateListing() {
-  return useMutation(CREATE_LISTING_MUTATION, {
-    refetchQueries: [{ query: MY_LISTINGS_QUERY }],
-  })
+  return useMutation(CREATE_LISTING_MUTATION, { refetchQueries: [{ query: MY_LISTINGS_QUERY }] })
 }
 
 export function useUpdateListing() {
-  return useMutation(UPDATE_LISTING_MUTATION, {
-    refetchQueries: [{ query: MY_LISTINGS_QUERY }],
-  })
+  return useMutation(UPDATE_LISTING_MUTATION, { refetchQueries: [{ query: MY_LISTINGS_QUERY }] })
 }
 
 export function useDeleteListing() {
-  return useMutation(DELETE_LISTING_MUTATION, {
-    refetchQueries: [{ query: MY_LISTINGS_QUERY }],
-  })
+  return useMutation(DELETE_LISTING_MUTATION, { refetchQueries: [{ query: MY_LISTINGS_QUERY }] })
 }
 
 export function useToggleFavorite() {
-  return useMutation(TOGGLE_FAVORITE_MUTATION, {
-    refetchQueries: [{ query: FAVORITES_QUERY }],
-  })
+  return useMutation(TOGGLE_FAVORITE_MUTATION, { refetchQueries: [{ query: FAVORITES_QUERY }] })
 }
 
 export function useCreateReview() {
-  return useMutation(CREATE_REVIEW_MUTATION, {
-    refetchQueries: ['ListingReviews'],
-  })
+  return useMutation(CREATE_REVIEW_MUTATION, { refetchQueries: ['ListingReviews'] })
 }
 
 export function useCreateOrder() {
-  return useMutation(CREATE_ORDER_MUTATION, {
-    refetchQueries: [{ query: ORDERS_QUERY }],
-  })
+  return useMutation(CREATE_ORDER_MUTATION, { refetchQueries: [{ query: ORDERS_QUERY }] })
 }
 
 export function useCreateConversation() {
-  return useMutation(CREATE_CONVERSATION_MUTATION, {
-    refetchQueries: [{ query: CONVERSATIONS_QUERY }],
-  })
+  return useMutation(CREATE_CONVERSATION_MUTATION, { refetchQueries: [{ query: CONVERSATIONS_QUERY }] })
 }
 
 export function useSendMessage() {
-  return useMutation(SEND_MESSAGE_MUTATION, {
-    refetchQueries: ['Messages'],
-  })
+  return useMutation(SEND_MESSAGE_MUTATION, { refetchQueries: ['Messages'] })
 }

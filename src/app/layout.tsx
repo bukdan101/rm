@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { ApolloProviderWrapper } from "@/lib/apollo";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,37 +15,22 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://automarket.co.id'),
-  title: "AutoMarket - Marketplace Mobil Terpercaya | Inspeksi 160 Titik",
-  description: "Marketplace jual beli mobil terpercaya dengan sistem inspeksi 160 titik. Temukan mobil bekas berkualitas dengan jaminan kualitas terbaik.",
-  keywords: ["jual mobil", "beli mobil", "mobil bekas", "marketplace mobil", "inspeksi mobil", "mobil second", "mobil murah", "Toyota", "Honda", "BMW"],
+  title: "AutoMarket - Marketplace Mobil Terpercaya",
+  description: "Platform jual beli mobil terpercaya di Indonesia. Temukan mobil impian Anda dengan harga terbaik.",
+  keywords: ["AutoMarket", "mobil", "jual beli mobil", "marketplace mobil", "otomotif Indonesia"],
   authors: [{ name: "AutoMarket Team" }],
   icons: {
-    icon: [
-      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
-      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
-      { url: "/favicon.ico", sizes: "32x32" },
-    ],
-    apple: [
-      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
-    ],
-    other: [
-      { url: "/favicon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/favicon-512.png", sizes: "512x512", type: "image/png" },
-    ],
+    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
-  manifest: "/manifest.json",
   openGraph: {
     title: "AutoMarket - Marketplace Mobil Terpercaya",
-    description: "Jual beli mobil dengan sistem inspeksi 160 titik",
+    description: "Platform jual beli mobil terpercaya di Indonesia",
     type: "website",
-    images: ["/logo.png"],
   },
   twitter: {
     card: "summary_large_image",
     title: "AutoMarket - Marketplace Mobil Terpercaya",
-    description: "Jual beli mobil dengan sistem inspeksi 160 titik",
-    images: ["/logo.png"],
+    description: "Platform jual beli mobil terpercaya di Indonesia",
   },
 };
 
@@ -54,11 +40,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        {children}
+        <ApolloProviderWrapper>
+          {children}
+        </ApolloProviderWrapper>
         <Toaster />
       </body>
     </html>

@@ -1,13 +1,7 @@
-import { PrismaClient } from '@prisma/client'
+// Re-export Supabase client for backward compatibility
+// This file now uses Supabase instead of Prisma
+export { supabase, supabaseAdmin, getSupabaseAdmin } from './supabase'
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
-
-export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ['query'],
-  })
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+// Type alias for backward compatibility
+import type { Database } from './supabase'
+export type { Database }

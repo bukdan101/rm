@@ -14,24 +14,37 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Z.ai Code Scaffold - AI-Powered Development",
-  description: "Modern Next.js scaffold optimized for AI-powered development with Z.ai. Built with TypeScript, Tailwind CSS, and shadcn/ui.",
-  keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
-  authors: [{ name: "Z.ai Team" }],
+  metadataBase: new URL('https://automarket.co.id'),
+  title: "AutoMarket - Marketplace Mobil Terpercaya | Inspeksi 160 Titik",
+  description: "Marketplace jual beli mobil terpercaya dengan sistem inspeksi 160 titik. Temukan mobil bekas berkualitas dengan jaminan kualitas terbaik.",
+  keywords: ["jual mobil", "beli mobil", "mobil bekas", "marketplace mobil", "inspeksi mobil", "mobil second", "mobil murah", "Toyota", "Honda", "BMW"],
+  authors: [{ name: "AutoMarket Team" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: [
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon.ico", sizes: "32x32" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+    other: [
+      { url: "/favicon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/favicon-512.png", sizes: "512x512", type: "image/png" },
+    ],
   },
+  manifest: "/manifest.json",
   openGraph: {
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
-    url: "https://chat.z.ai",
-    siteName: "Z.ai",
+    title: "AutoMarket - Marketplace Mobil Terpercaya",
+    description: "Jual beli mobil dengan sistem inspeksi 160 titik",
     type: "website",
+    images: ["/logo.png"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
+    title: "AutoMarket - Marketplace Mobil Terpercaya",
+    description: "Jual beli mobil dengan sistem inspeksi 160 titik",
+    images: ["/logo.png"],
   },
 };
 
@@ -41,7 +54,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="id" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >

@@ -1275,3 +1275,143 @@ model Wallet {
 
   @@map("wallets")
 }
+
+// ==============================
+// MODULE 19: ASTRAPAY INTEGRATION
+// ==============================
+
+model AstraPayConfig {
+  id              String    @id @default(uuid())
+  key             String    @unique
+  client_id       String?
+  client_secret   String?
+  public_key      String?
+  private_key     String?
+  sandbox_url     String    @default("https://sandbox.astrapay.com")
+  production_url  String    @default("https://www.astrapay.com")
+  is_sandbox      Boolean   @default(true)
+  is_active       Boolean   @default(true)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@map("astrapay_configs")
+}
+
+model AstraPayToken {
+  id            String    @id @default(uuid())
+  access_token  String
+  token_type    String    @default("Bearer")
+  expires_in    Int       @default(900)
+  scope         String?
+  created_at    DateTime  @default(now())
+  expires_at    DateTime
+
+  @@map("astrapay_tokens")
+}
+
+model AstraPayAccountLink {
+  id              String    @id @default(uuid())
+  user_id         String
+  merchant_user_id String
+  signature       String?
+  astrapay_phone  String?
+  is_linked       Boolean   @default(false)
+  linked_at       DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@map("astrapay_account_links")
+}
+
+model AstraPayTransaction {
+  id                    String    @id @default(uuid())
+  user_id               String?
+  dealer_id             String?
+  listing_id            String?
+  credit_application_id String?   @unique
+  merchant_trx_id       String    @unique
+  astrapay_trx_id       String?
+  amount                Int
+  currency              String    @default("IDR")
+  description           String?
+  payment_type          String    @default("payment_with_linking")
+  status                String    @default("pending")
+  token                 String?
+  url_redirect          String?
+  callback_received     Boolean   @default(false)
+  callback_status       String?
+  callback_timestamp    DateTime?
+  callback_security     String?
+  paid_at               DateTime?
+  expired_at            DateTime?
+  metadata              String?
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  creditApplication     CreditApplication? @relation(fields: [credit_application_id], references: [id])
+
+  @@map("astrapay_transactions")
+}
+
+// ==============================
+// MODULE 20: CREDIT / FINANCING
+// ==============================
+
+model CreditApplication {
+  id                    String    @id @default(uuid())
+  user_id               String
+  listing_id            String?
+  dealer_id             String?
+  application_number    String?   @unique
+  vehicle_price         Int
+  down_payment          Int
+  loan_amount           Int
+  tenor_months          Int       @default(12)
+  monthly_installment   Int
+  interest_rate         Float     @default(0)
+  total_payment         Int
+  status                String    @default("draft")
+  financing_partner     String    @default("astrapay")
+  astrapay_paylater_status String?
+  rejection_reason      String?
+  approved_at           DateTime?
+  disbursed_at          DateTime?
+  completed_at          DateTime?
+  notes                 String?
+  ktp_number            String?
+  monthly_income        Int?
+  employment_type       String?
+  work_experience_years Int?
+  emergency_contact_name String?
+  emergency_contact_phone String?
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  payments              CreditPayment[]
+  astraPayTransaction   AstraPayTransaction?
+
+  @@map("credit_applications")
+}
+
+model CreditPayment {
+  id                    String    @id @default(uuid())
+  credit_application_id String
+  payment_number        Int
+  amount_due            Int
+  amount_paid           Int?
+  principal_amount      Int
+  interest_amount       Int
+  due_date              DateTime
+  paid_at               DateTime?
+  status                String    @default("upcoming")
+  astrapay_trx_id       String?
+  payment_method        String?
+  late_fee              Int       @default(0)
+  notes                 String?
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  application           CreditApplication @relation(fields: [credit_application_id], references: [id])
+
+  @@map("credit_payments")
+}

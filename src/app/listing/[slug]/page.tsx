@@ -11,6 +11,8 @@ import { ReviewSection } from '@/components/listing/ReviewSection'
 import { RelatedProducts } from '@/components/listing/RelatedProducts'
 import { SocialShareButtons } from '@/components/listing/SocialShareButtons'
 import { AdBanner } from '@/components/ads/AdBanner'
+import { CreditCalculator } from '@/components/credit/CreditCalculator'
+import { CreditApplicationDialog } from '@/components/credit/CreditApplicationDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -18,10 +20,14 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import {
+  Dialog,
+  DialogContent,
+} from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import {
   MapPin, Eye, Clock, Heart, Shield, Phone, Package, Tag, Sparkles,
-  CheckCircle, AlertTriangle, MessageCircle
+  CheckCircle, AlertTriangle, MessageCircle, CreditCard
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { id } from 'date-fns/locale'
@@ -168,6 +174,19 @@ export default function ListingDetailPage() {
   const [isSaved, setIsSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('deskripsi')
+  const [showCreditCalc, setShowCreditCalc] = useState(false)
+  const [showCreditApply, setShowCreditApply] = useState(false)
+  const [creditCalculation, setCreditCalculation] = useState<{
+    vehiclePrice: number
+    downPayment: number
+    downPaymentPercent: number
+    loanAmount: number
+    interestRate: number
+    tenorMonths: number
+    totalInterest: number
+    totalPayment: number
+    monthlyInstallment: number
+  } | null>(null)
 
   useEffect(() => {
     if (slug) {
@@ -587,6 +606,23 @@ export default function ListingDetailPage() {
                     )}
                   </div>
 
+                  {/* Credit CTA */}
+                  <div className="pt-3 border-t space-y-3">
+                    <Button
+                      onClick={() => setShowCreditCalc(true)}
+                      variant="outline"
+                      className="w-full h-12 gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                    >
+                      <CreditCard className="h-5 w-5" />
+                      Beli dengan Kredit
+                    </Button>
+                    {listing.price_credit && (
+                      <p className="text-xs text-center text-muted-foreground">
+                        Kredit mulai <span className="font-semibold text-emerald-600">{formatPrice(listing.price_credit)}/bulan</span>
+                      </p>
+                    )}
+                  </div>
+
                   {/* Quick Info */}
                   <div className="text-xs text-muted-foreground space-y-1 pt-3 border-t">
                     <div className="flex items-center justify-between">
@@ -698,6 +734,30 @@ export default function ListingDetailPage() {
           </div>
         </div>
       </div>
+      {/* Credit Calculator Dialog */}
+      <Dialog open={showCreditCalc} onOpenChange={setShowCreditCalc}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto p-0">
+          <CreditCalculator
+            vehiclePrice={listing?.price_cash || 0}
+            vehicleName={title}
+            onApplyCredit={(calc) => {
+              setCreditCalculation(calc)
+              setShowCreditCalc(false)
+              setShowCreditApply(true)
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Credit Application Dialog */}
+      <CreditApplicationDialog
+        open={showCreditApply}
+        onOpenChange={setShowCreditApply}
+        calculation={creditCalculation}
+        vehicleName={title}
+        listingId={listing?.id}
+        dealerId={listing?.dealer_id}
+      />
     </MainLayout>
   )
 }

@@ -1,8 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// ==============================================================
+// AUTOMARKET - Prisma Schema for SQLite
+// Covers core tables used by API routes
+// ==============================================================
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +12,1266 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ==============================
+// MODULE 1: USER SYSTEM
+// ==============================
+
+model Profile {
+  id             String    @id
+  email          String    @unique
+  full_name      String?
+  name           String?
+  phone          String?
+  avatar_url     String?
+  role           String    @default("buyer")
+  is_verified    Boolean   @default(false)
+  email_verified Boolean   @default(false)
+  phone_verified Boolean   @default(false)
+  is_active      Boolean   @default(true)
+  last_login     DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+  deleted_at     DateTime?
+
+  listings       CarListing[]
+  favorites      CarFavorite[]
+  conversations  Conversation[] @relation("BuyerConversations")
+  sellerConvs    Conversation[] @relation("SellerConversations")
+  messages       Message[]
+  orders         Order[]        @relation("BuyerOrders")
+  sellerOrders   Order[]        @relation("SellerOrders")
+  kyc            KycVerification?
+  notifications  Notification[]
+  dealer         Dealer?
+  dealerStaffEntries DealerStaff[]
+  inspections    CarInspection[] @relation("InspectorInspections")
+  dealerRegistration DealerRegistration?
+
+  @@map("profiles")
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ==============================
+// MODULE 2: DEALER SYSTEM
+// ==============================
+
+model Dealer {
+  id                 String    @id
+  owner_id           String?   @unique
+  name               String
+  slug               String?   @unique
+  description        String?
+  logo_url           String?
+  cover_url          String?
+  phone              String?
+  email              String?
+  website            String?
+  address            String?
+  city_id            String?
+  province_id        String?
+  postal_code        String?
+  rating             Float     @default(0)
+  review_count       Int       @default(0)
+  total_listings     Int       @default(0)
+  verified           Boolean   @default(false)
+  is_active          Boolean   @default(true)
+  subscription_tier  String    @default("free")
+  subscription_ends_at DateTime?
+  status             String?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  owner              Profile?  @relation(fields: [owner_id], references: [id])
+  listings           CarListing[]
+  staff              DealerStaff[]
+  reviews            DealerReview[]
+  offers             DealerOffer[]
+  marketplaceFavs    DealerMarketplaceFavorite[]
+
+  @@map("dealers")
+}
+
+model DealerStaff {
+  id         String   @id
+  dealer_id  String
+  user_id    String?
+  role       String   @default("sales")
+  can_edit   Boolean  @default(false)
+  can_delete Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  dealer     Dealer   @relation(fields: [dealer_id], references: [id])
+  user       Profile? @relation(fields: [user_id], references: [id])
+
+  @@map("dealer_staff")
+}
+
+model DealerReview {
+  id            String   @id
+  dealer_id     String
+  user_id       String?
+  rating        Int
+  title         String?
+  comment       String?
+  helpful_count Int      @default(0)
+  created_at    DateTime @default(now())
+
+  dealer        Dealer   @relation(fields: [dealer_id], references: [id])
+
+  @@map("dealer_reviews")
+}
+
+model DealerRegistration {
+  id                   String   @id
+  user_id              String   @unique
+  dealer_name          String
+  dealer_slug          String?
+  dealer_phone         String?
+  dealer_email         String?
+  dealer_description   String?
+  dealer_logo_url      String?
+  province_id          String?
+  city_id              String?
+  district_id          String?
+  village_id           String?
+  full_address         String?
+  postal_code          String?
+  owner_name           String
+  owner_ktp_number     String?
+  owner_phone          String?
+  owner_ktp_url        String?
+  owner_selfie_url     String?
+  npwp_number          String
+  npwp_document_url    String
+  nib_number           String
+  nib_document_url     String
+  siup_number          String?
+  siup_document_url    String?
+  domicile_letter_url  String?
+  additional_documents String?
+  status               String   @default("draft")
+  rejection_reason     String?
+  admin_notes          String?
+  submitted_at         DateTime?
+  reviewed_at          DateTime?
+  reviewed_by          String?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  user                 Profile  @relation(fields: [user_id], references: [id])
+
+  @@map("dealer_registrations")
+}
+
+// ==============================
+// MODULE 3: CAR MASTER DATA
+// ==============================
+
+model Brand {
+  id            Int       @id @default(autoincrement())
+  name          String
+  slug          String    @unique
+  logo_url      String?
+  country       String?
+  is_popular    Boolean   @default(false)
+  display_order Int       @default(0)
+  is_active     Boolean   @default(true)
+  created_at    DateTime  @default(now())
+
+  models        CarModel[]
+
+  @@map("brands")
+}
+
+model CarModel {
+  id            Int       @id @default(autoincrement())
+  brand_id      Int
+  name          String
+  slug          String?
+  body_type     String?
+  is_popular    Boolean   @default(false)
+  display_order Int       @default(0)
+  is_active     Boolean   @default(true)
+  created_at    DateTime  @default(now())
+
+  brand         Brand     @relation(fields: [brand_id], references: [id])
+  variants      CarVariant[]
+
+  @@map("car_models")
+}
+
+model CarVariant {
+  id              Int       @id @default(autoincrement())
+  model_id        Int
+  name            String
+  year_start      Int?
+  year_end        Int?
+  transmission_type String?
+  fuel_type       String?
+  engine_cc       Int?
+  engine_capacity Int?
+  transmission    String?
+  seat_count      Int?
+  price_new       Int?
+  is_active       Boolean   @default(true)
+  created_at      DateTime  @default(now())
+
+  model           CarModel  @relation(fields: [model_id], references: [id])
+
+  @@map("car_variants")
+}
+
+model CarColor {
+  id          Int       @id @default(autoincrement())
+  name        String
+  hex_code    String?
+  is_metallic Boolean   @default(false)
+  is_popular  Boolean   @default(false)
+  created_at  DateTime  @default(now())
+
+  @@map("car_colors")
+}
+
+// ==============================
+// MODULE 4: LISTING SYSTEM
+// ==============================
+
+model CarListing {
+  id                              String    @id @default(uuid())
+  listing_number                  String?   @unique
+  user_id                         String?
+  dealer_id                       String?
+  brand_id                        Int?
+  model_id                        Int?
+  variant_id                      Int?
+  generation_id                   Int?
+
+  year                            Int?
+  exterior_color_id               Int?
+  interior_color_id               Int?
+  fuel                            String?
+  transmission                    String?
+  body_type                       String?
+  engine_capacity                 Int?
+  seat_count                      Int?
+  mileage                         Int?
+  vin_number                      String?
+  plate_number                    String?
+
+  transaction_type                String    @default("jual")
+  condition                       String?
+  price_cash                      Int?
+  price_credit                    Int?
+  price_negotiable                Boolean   @default(true)
+
+  city                            String?
+  province                        String?
+  city_id                         String?
+  province_id                     String?
+
+  view_count                      Int       @default(0)
+  favorite_count                  Int       @default(0)
+  inquiry_count                   Int       @default(0)
+  share_count                     Int       @default(0)
+
+  status                          String    @default("draft")
+  marketplace_type                String?
+  visibility                      String?
+  is_banned                       Boolean   @default(false)
+  sold_at                         DateTime?
+  expired_at                      DateTime?
+  rejected_reason                 String?
+  published_to_dealer_marketplace_at DateTime?
+
+  title                           String?
+  description                     String?
+
+  meta_title                      String?
+  meta_description                String?
+  slug                            String?   @unique
+
+  published_at                    DateTime?
+  featured_until                  DateTime?
+  created_at                      DateTime  @default(now())
+  updated_at                      DateTime  @updatedAt
+  deleted_at                      DateTime?
+
+  seller                          Profile?  @relation(fields: [user_id], references: [id])
+  dealer                          Dealer?   @relation(fields: [dealer_id], references: [id])
+  images                          CarImage[]
+  videos                          CarVideo[]
+  documents                       CarDocument[]
+  features                        CarFeature[]
+  inspection                      CarInspection[]
+  rentalPrice                     CarRentalPrice?
+  favorites                       CarFavorite[]
+  conversations                   Conversation[]
+  orders                          Order[]
+  offers                          DealerOffer[]
+  priceAnalysis                   AiPriceAnalysis[]
+
+  @@map("car_listings")
+}
+
+model CarImage {
+  id              String    @id @default(uuid())
+  car_listing_id  String
+  image_url       String
+  thumbnail_url   String?
+  caption         String?
+  is_primary      Boolean   @default(false)
+  display_order   Int       @default(0)
+  created_at      DateTime  @default(now())
+
+  listing         CarListing @relation(fields: [car_listing_id], references: [id])
+
+  @@map("car_images")
+}
+
+model CarVideo {
+  id              String    @id @default(uuid())
+  car_listing_id  String
+  video_url       String
+  thumbnail_url   String?
+  title           String?
+  duration        Int?
+  is_primary      Boolean   @default(false)
+  created_at      DateTime  @default(now())
+
+  listing         CarListing @relation(fields: [car_listing_id], references: [id])
+
+  @@map("car_videos")
+}
+
+model CarDocument {
+  id              String    @id @default(uuid())
+  car_listing_id  String
+  document_type   String
+  document_number String?
+  document_url    String?
+  issue_date      DateTime?
+  expiry_date     DateTime?
+  verified        Boolean   @default(false)
+  created_at      DateTime  @default(now())
+
+  listing         CarListing @relation(fields: [car_listing_id], references: [id])
+
+  @@map("car_documents")
+}
+
+model CarFeature {
+  id                String    @id @default(uuid())
+  car_listing_id    String
+  sunroof           Boolean   @default(false)
+  cruise_control    Boolean   @default(false)
+  rear_camera       Boolean   @default(false)
+  front_camera      Boolean   @default(false)
+  keyless_start     Boolean   @default(false)
+  push_start        Boolean   @default(false)
+  service_book      Boolean   @default(false)
+  airbag            Boolean   @default(false)
+  abs               Boolean   @default(false)
+  esp               Boolean   @default(false)
+  hill_start        Boolean   @default(false)
+  auto_park         Boolean   @default(false)
+  lane_keep         Boolean   @default(false)
+  adaptive_cruise   Boolean   @default(false)
+  blind_spot        Boolean   @default(false)
+  wireless_charger   Boolean   @default(false)
+  apple_carplay     Boolean   @default(false)
+  android_auto      Boolean   @default(false)
+  bluetooth         Boolean   @default(false)
+  navigation        Boolean   @default(false)
+  created_at        DateTime  @default(now())
+
+  listing           CarListing @relation(fields: [car_listing_id], references: [id])
+
+  @@map("car_features")
+}
+
+model CarFavorite {
+  id              String    @id @default(uuid())
+  user_id         String
+  car_listing_id  String
+  notes           String?
+  created_at      DateTime  @default(now())
+
+  user            Profile   @relation(fields: [user_id], references: [id])
+  listing         CarListing @relation(fields: [car_listing_id], references: [id])
+
+  @@unique([user_id, car_listing_id])
+  @@map("car_favorites")
+}
+
+model CarRentalPrice {
+  id                     String    @id @default(uuid())
+  car_listing_id         String   @unique
+  price_per_hour         Int?
+  price_per_day          Int?
+  price_per_week         Int?
+  price_per_month        Int?
+  min_rental_days        Int       @default(1)
+  max_rental_days        Int?
+  deposit_amount         Int?
+  includes_driver        Boolean   @default(false)
+  includes_fuel          Boolean   @default(false)
+  mileage_limit_per_day  Int?
+  excess_mileage_charge  Int?
+  terms                  String?
+  daily_price            Int?
+  weekly_price           Int?
+  monthly_price          Int?
+  min_rent_days          Int?
+  created_at             DateTime  @default(now())
+  updated_at             DateTime  @updatedAt
+
+  listing                CarListing @relation(fields: [car_listing_id], references: [id])
+
+  @@map("car_rental_prices")
+}
+
+// ==============================
+// MODULE 5: INSPECTION SYSTEM
+// ==============================
+
+model InspectionCategory {
+  id           Int       @id @default(autoincrement())
+  name         String
+  slug         String?
+  description  String?
+  icon         String?
+  order_index  Int       @default(0)
+  display_order Int      @default(0)
+  total_items  Int       @default(0)
+  created_at   DateTime  @default(now())
+
+  items        InspectionItem[]
+
+  @@map("inspection_categories")
+}
+
+model InspectionItem {
+  id            Int       @id @default(autoincrement())
+  category_id   Int?
+  name          String
+  description   String?
+  order_index   Int       @default(0)
+  display_order Int       @default(0)
+  is_active     Boolean   @default(true)
+  is_critical   Boolean   @default(false)
+  category      String?
+  created_at    DateTime  @default(now())
+
+  inspectionCategory InspectionCategory? @relation(fields: [category_id], references: [id])
+  results            InspectionResult[]
+
+  @@map("inspection_items")
+}
+
+model CarInspection {
+  id                    String    @id @default(uuid())
+  car_listing_id        String
+  inspector_id          String?
+  inspector_name        String?
+  inspection_place      String?
+  inspection_date       DateTime?
+  total_points          Int       @default(160)
+  passed_points         Int?
+  failed_points         Int       @default(0)
+  inspection_score      Float?
+  accident_free         Boolean   @default(true)
+  flood_free            Boolean   @default(true)
+  fire_free             Boolean   @default(true)
+  odometer_tampered     Boolean   @default(false)
+  risk_level            String?
+  overall_grade         String?
+  recommended           Boolean   @default(false)
+  recommendation_notes  String?
+  certificate_number    String?
+  certificate_url       String?
+  certificate_issued_at DateTime?
+  certificate_expires_at DateTime?
+  status                String    @default("pending")
+  booking_id            String?
+  inspection_type       String?
+  purchase_price        Int?
+  ai_price_min          Int?
+  ai_price_max          Int?
+  ai_price_recommended  Int?
+  ai_profit_margin      Float?
+  ai_demand_level       String?
+  days_to_sell_estimate Int?
+  has_certificate       Boolean   @default(false)
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  listing               CarListing @relation(fields: [car_listing_id], references: [id])
+  inspector             Profile?   @relation("InspectorInspections", fields: [inspector_id], references: [id])
+  results               InspectionResult[]
+
+  @@map("car_inspections")
+}
+
+model InspectionResult {
+  id                  String    @id @default(uuid())
+  inspection_id       String
+  item_id             Int
+  status              String    @default("baik")
+  notes               String?
+  image_url           String?
+  photo_url           String?
+  severity            String?
+  repair_cost_estimate Int?
+  created_at          DateTime  @default(now())
+
+  inspection          CarInspection @relation(fields: [inspection_id], references: [id])
+  item                InspectionItem @relation(fields: [item_id], references: [id])
+
+  @@map("inspection_results")
+}
+
+model InspectionBooking {
+  id          String    @id @default(uuid())
+  user_id     String?
+  car_listing_id String?
+  inspector_id String?
+  scheduled_date DateTime?
+  status      String    @default("pending")
+  notes       String?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  @@map("inspection_bookings")
+}
+
+model InspectionPricing {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  price       Int
+  duration_days Int?
+  is_active   Boolean   @default(true)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  @@map("inspection_pricing")
+}
+
+model CertificatePurchase {
+  id              String    @id @default(uuid())
+  inspection_id   String
+  user_id         String
+  price           Int
+  status          String    @default("pending")
+  payment_id      String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@map("certificate_purchases")
+}
+
+// ==============================
+// MODULE 6: KYC SYSTEM
+// ==============================
+
+model KycVerification {
+  id               String    @id @default(uuid())
+  user_id          String   @unique
+  full_name        String?
+  ktp_number       String?
+  phone_number     String?
+  province_id      String?
+  city_id          String?
+  district_id      String?
+  village_id       String?
+  full_address     String?
+  ktp_image_url    String?
+  selfie_image_url String?
+  status           String    @default("not_submitted")
+  rejection_reason String?
+  reviewed_at      DateTime?
+  reviewed_by      String?
+  submitted_at     DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  user             Profile   @relation(fields: [user_id], references: [id])
+
+  @@map("kyc_verifications")
+}
+
+// ==============================
+// MODULE 7: CREDIT / TOKEN SYSTEM
+// ==============================
+
+model UserCredit {
+  id           String    @id @default(uuid())
+  user_id      String?   @unique
+  dealer_id    String?
+  balance      Int       @default(0)
+  total_earned Int       @default(0)
+  total_spent  Int       @default(0)
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  transactions CreditTransaction[]
+
+  @@map("user_credits")
+}
+
+model CreditTransaction {
+  id              String    @id @default(uuid())
+  user_credit_id  String?
+  user_id         String?
+  type            String
+  amount          Int
+  balance_before  Int?
+  balance_after   Int?
+  description     String?
+  reference_type  String?
+  reference_id    String?
+  created_at      DateTime  @default(now())
+
+  userCredit      UserCredit? @relation(fields: [user_credit_id], references: [id])
+
+  @@map("credit_transactions")
+}
+
+model CreditPackage {
+  id              String    @id @default(uuid())
+  name            String
+  description     String?
+  tokens          Int
+  bonus_tokens    Int       @default(0)
+  price           Int
+  is_popular      Boolean   @default(false)
+  is_dealer       Boolean   @default(false)
+  is_active       Boolean   @default(true)
+  display_order   Int       @default(0)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@map("credit_packages")
+}
+
+model CreditUsageLog {
+  id              String    @id @default(uuid())
+  user_id         String?
+  listing_id      String?
+  marketplace_type String?
+  tokens_used     Int
+  duration_days   Int?
+  created_at      DateTime  @default(now())
+
+  @@map("credit_usage_log")
+}
+
+model RegistrationBonusTracker {
+  id            String    @id @default(uuid())
+  is_active     Boolean   @default(true)
+  bonus_amount  Int
+  max_bonus     Int
+  total_given   Int       @default(0)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  @@map("registration_bonus_tracker")
+}
+
+model TokenSetting {
+  id            String    @id @default(uuid())
+  key           String    @unique
+  name          String
+  tokens        Int
+  category      String    @default("listing")
+  description   String?
+  is_active     Boolean   @default(true)
+  display_order Int       @default(0)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  @@map("token_settings")
+}
+
+model TokenPackage {
+  id            String    @id @default(uuid())
+  name          String
+  tokens        Int
+  price_rupiah  Int
+  is_active     Boolean   @default(true)
+  display_order Int       @default(0)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  @@map("token_packages")
+}
+
+model TokenTransaction {
+  id              String    @id @default(uuid())
+  user_id         String
+  type            String
+  amount          Int
+  balance_after   Int?
+  description     String?
+  reference_type  String?
+  reference_id    String?
+  created_at      DateTime  @default(now())
+
+  @@map("token_transactions")
+}
+
+model TokenBalance {
+  id          String    @id @default(uuid())
+  user_id     String    @unique
+  balance     Int       @default(0)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  @@map("token_balances")
+}
+
+model UserToken {
+  id          String    @id @default(uuid())
+  user_id     String    @unique
+  balance     Int       @default(0)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  @@map("user_tokens")
+}
+
+// ==============================
+// MODULE 8: PAYMENT SYSTEM
+// ==============================
+
+model Payment {
+  id               String    @id @default(uuid())
+  user_id          String?
+  dealer_id        String?
+  amount           Int?
+  credits_awarded  Int?
+  status           String    @default("pending")
+  payment_method   String?
+  payment_provider String?
+  provider_reference String?
+  proof_url        String?
+  va_number        String?
+  platform_fee     Int       @default(0)
+  processing_fee   Int       @default(0)
+  paid_at          DateTime?
+  verified_at      DateTime?
+  failed_at        DateTime?
+  refunded_at      DateTime?
+  failure_reason   String?
+  metadata         String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  @@map("payments")
+}
+
+model ListingBoost {
+  id               String    @id @default(uuid())
+  listing_id       String
+  user_id          String?
+  dealer_id        String?
+  boost_feature_id String?
+  credits_spent    Int       @default(0)
+  is_active        Boolean   @default(true)
+  starts_at        DateTime?
+  expires_at       DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  @@map("listing_boosts")
+}
+
+model BoostFeature {
+  id            String    @id @default(uuid())
+  name          String
+  description   String?
+  credits       Int
+  duration_days Int
+  is_active     Boolean   @default(true)
+  display_order Int       @default(0)
+  created_at    DateTime  @default(now())
+
+  @@map("boost_features")
+}
+
+// ==============================
+// MODULE 9: CHAT SYSTEM
+// ==============================
+
+model Conversation {
+  id               String    @id @default(uuid())
+  car_listing_id   String?
+  buyer_id         String?
+  seller_id        String?
+  status           String    @default("active")
+  last_message     String?
+  last_message_at  DateTime?
+  last_message_by  String?
+  buyer_unread     Int       @default(0)
+  seller_unread    Int       @default(0)
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  listing          CarListing? @relation(fields: [car_listing_id], references: [id])
+  buyer            Profile?    @relation("BuyerConversations", fields: [buyer_id], references: [id])
+  seller           Profile?    @relation("SellerConversations", fields: [seller_id], references: [id])
+  messages         Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id               String    @id @default(uuid())
+  conversation_id  String
+  sender_id        String?
+  message          String?
+  message_type     String    @default("text")
+  is_read          Boolean   @default(false)
+  read_at          DateTime?
+  deleted_for_sender   Boolean @default(false)
+  deleted_for_receiver Boolean @default(false)
+  metadata         String?
+  created_at       DateTime  @default(now())
+
+  conversation     Conversation @relation(fields: [conversation_id], references: [id])
+  sender           Profile?     @relation(fields: [sender_id], references: [id])
+
+  @@map("messages")
+}
+
+// ==============================
+// MODULE 10: ORDER SYSTEM
+// ==============================
+
+model Order {
+  id                String    @id @default(uuid())
+  order_number      String?   @unique
+  buyer_id          String?
+  seller_id         String?
+  car_listing_id    String?
+  agreed_price      Int?
+  platform_fee      Int?
+  seller_fee        Int?
+  buyer_fee         Int?
+  total_amount      Int?
+  status            String    @default("pending")
+  escrow_id         String?
+  escrow_status     String?
+  notes             String?
+  confirmed_at      DateTime?
+  processing_at     DateTime?
+  completed_at      DateTime?
+  cancelled_at      DateTime?
+  cancelled_by      String?
+  cancellation_reason String?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  buyer             Profile?    @relation("BuyerOrders", fields: [buyer_id], references: [id])
+  seller            Profile?    @relation("SellerOrders", fields: [seller_id], references: [id])
+  listing           CarListing? @relation(fields: [car_listing_id], references: [id])
+
+  @@map("orders")
+}
+
+// ==============================
+// MODULE 11: NOTIFICATION SYSTEM
+// ==============================
+
+model Notification {
+  id          String    @id @default(uuid())
+  user_id     String
+  type        String    @default("info")
+  title       String
+  message     String?
+  read        Boolean   @default(false)
+  read_at     DateTime?
+  action_url  String?
+  data        String?
+  created_at  DateTime  @default(now())
+
+  user        Profile   @relation(fields: [user_id], references: [id])
+
+  @@map("notifications")
+}
+
+// ==============================
+// MODULE 12: DEALER MARKETPLACE
+// ==============================
+
+model DealerOffer {
+  id                   String    @id @default(uuid())
+  dealer_id            String
+  car_listing_id       String
+  user_id              String?
+  offer_price          Int?
+  original_price       Int?
+  message              String?
+  financing_available  Boolean   @default(false)
+  financing_notes      String?
+  inspection_included  Boolean   @default(false)
+  pickup_service       Boolean   @default(false)
+  pickup_location      String?
+  status               String    @default("pending")
+  counter_offer_price  Int?
+  counter_offer_message String?
+  counter_offer_by     String?
+  counter_offer_at     DateTime?
+  expires_at           DateTime?
+  viewed_at            DateTime?
+  accepted_at          DateTime?
+  rejected_at          DateTime?
+  withdrawn_at         DateTime?
+  rejection_reason     String?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+
+  dealer               Dealer    @relation(fields: [dealer_id], references: [id])
+  listing              CarListing @relation(fields: [car_listing_id], references: [id])
+  histories            DealerOfferHistory[]
+
+  @@map("dealer_offers")
+}
+
+model DealerOfferHistory {
+  id             String    @id @default(uuid())
+  offer_id       String
+  action         String
+  previous_price Int?
+  new_price      Int?
+  message        String?
+  actor_id       String?
+  actor_type     String?
+  created_at     DateTime  @default(now())
+
+  offer          DealerOffer @relation(fields: [offer_id], references: [id])
+
+  @@map("dealer_offer_histories")
+}
+
+model DealerMarketplaceFavorite {
+  id              String    @id @default(uuid())
+  dealer_id       String
+  car_listing_id  String
+  created_at      DateTime  @default(now())
+
+  dealer          Dealer    @relation(fields: [dealer_id], references: [id])
+
+  @@unique([dealer_id, car_listing_id])
+  @@map("dealer_marketplace_favorites")
+}
+
+model DealerMarketplaceSettings {
+  id                          String    @id @default(uuid())
+  default_offer_duration_hours Int      @default(72)
+  max_counter_offers          Int       @default(5)
+  auto_reject_hours           Int       @default(48)
+  created_at                  DateTime  @default(now())
+  updated_at                  DateTime  @updatedAt
+
+  @@map("dealer_marketplace_settings")
+}
+
+model DealerOfferSettings {
+  id                  String    @id @default(uuid())
+  key                 String    @unique
+  value               String
+  description         String?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  @@map("dealer_offer_settings")
+}
+
+model DealerMarketplaceView {
+  id              String    @id @default(uuid())
+  dealer_id       String
+  car_listing_id  String
+  viewed_at       DateTime  @default(now())
+
+  @@map("dealer_marketplace_views")
+}
+
+// ==============================
+// MODULE 13: AI PREDICTION SYSTEM
+// ==============================
+
+model AiPrediction {
+  id                        String    @id @default(uuid())
+  user_id                   String?
+  dealer_id                 String?
+  brand_id                  Int?
+  model_id                  Int?
+  variant_id                Int?
+  year                      Int?
+  transmission              String?
+  fuel_type                 String?
+  mileage                   Int?
+  exterior_color_id         Int?
+  interior_color_id         Int?
+  province_id               String?
+  city_id                   String?
+  location_text             String?
+  purchase_price            Int?
+  purchase_year             Int?
+  purchase_from             String?
+  inspection_id             String?
+  car_listing_id            String?
+  condition_score           Float?
+  condition_grade           String?
+  exterior_grade            String?
+  interior_grade            String?
+  vlm_analysis              String?
+  vlm_condition_score       Float?
+  vlm_damages               String?
+  vlm_confidence            Float?
+  inspection_score          Float?
+  inspection_grade          String?
+  inspection_items_total    Int?
+  inspection_items_passed   Int?
+  inspection_items_failed   Int?
+  market_avg_price          Int?
+  market_low_price          Int?
+  market_high_price         Int?
+  market_median_price       Int?
+  market_listings_analyzed  Int?
+  market_trend              String?
+  market_trend_percentage   Float?
+  market_data_json          String?
+  seller_type               String?
+  seller_rating             Float?
+  seller_trust_score        Int?
+  seller_verified           Boolean?
+  seller_total_transactions Int?
+  seller_trust_adjustment   Float?
+  predicted_price_low       Int?
+  predicted_price_high      Int?
+  predicted_price_recommended Int?
+  prediction_confidence     Float?
+  prediction_factors        String?
+  quick_sale_price          Int?
+  optimal_price             Int?
+  status                    String    @default("processing")
+  expires_at                DateTime?
+  created_at                DateTime  @default(now())
+  updated_at                DateTime  @updatedAt
+
+  photos                    PredictionPhoto[]
+  factors                   PredictionFactor[]
+
+  @@map("ai_predictions")
+}
+
+model PredictionPhoto {
+  id                  String    @id @default(uuid())
+  prediction_id       String
+  photo_type          String
+  photo_url           String
+  vlm_analyzed        Boolean   @default(false)
+  vlm_analysis        String?
+  vlm_condition_score Float?
+  vlm_detections      String?
+  created_at          DateTime  @default(now())
+
+  prediction          AiPrediction @relation(fields: [prediction_id], references: [id])
+
+  @@map("prediction_photos")
+}
+
+model PredictionFactor {
+  id                String    @id @default(uuid())
+  prediction_id     String
+  factor_category   String
+  factor_name       String
+  factor_value      String?
+  impact_type       String?
+  impact_percentage Float?
+  impact_amount     Int?
+  weight            Float?
+  score             Float?
+  description       String?
+  created_at        DateTime  @default(now())
+
+  prediction        AiPrediction @relation(fields: [prediction_id], references: [id])
+
+  @@map("prediction_factors")
+}
+
+model AiPriceAnalysis {
+  id                    String    @id @default(uuid())
+  inspection_id         String?
+  car_listing_id        String?   @unique
+  purchase_price        Int?
+  estimated_price_min   Int?
+  estimated_price_max   Int?
+  recommended_price     Int?
+  market_average_price  Int?
+  condition_score       Float?
+  market_demand         String?
+  days_to_sell_estimate Int?
+  profit_margin_percent Float?
+  recommendation        String?
+  created_at            DateTime  @default(now())
+
+  listing               CarListing? @relation(fields: [car_listing_id], references: [id])
+
+  @@map("ai_price_analysis")
+}
+
+// ==============================
+// MODULE 14: LOCATION SYSTEM
+// ==============================
+
+model Country {
+  id            String    @id @default(uuid())
+  code          String    @unique
+  name          String
+  phone_code    String?
+  currency_code String?
+  currency_name String?
+  is_active     Boolean   @default(true)
+  created_at    DateTime  @default(now())
+
+  @@map("countries")
+}
+
+model Province {
+  id         String    @id @default(uuid())
+  country_id String?
+  code       String?
+  name       String
+  slug       String?
+  is_active  Boolean   @default(true)
+  created_at DateTime  @default(now())
+
+  cities     City[]
+
+  @@map("provinces")
+}
+
+model City {
+  id           String    @id @default(uuid())
+  province_id  String?
+  name         String
+  slug         String?
+  type         String    @default("kota")
+  postal_codes String?
+  latitude     Float?
+  longitude    Float?
+  is_active    Boolean   @default(true)
+  created_at   DateTime  @default(now())
+
+  province     Province? @relation(fields: [province_id], references: [id])
+  districts    District[]
+
+  @@map("cities")
+}
+
+model District {
+  id          String    @id @default(uuid())
+  city_id     String?
+  name        String
+  postal_code String?
+  latitude    Float?
+  longitude   Float?
+  is_active   Boolean   @default(true)
+  created_at  DateTime  @default(now())
+
+  city        City?     @relation(fields: [city_id], references: [id])
+  villages    Village[]
+
+  @@map("districts")
+}
+
+model Village {
+  id          String    @id @default(uuid())
+  district_id String?
+  name        String
+  postal_code String?
+  is_active   Boolean   @default(true)
+  created_at  DateTime  @default(now())
+
+  district    District? @relation(fields: [district_id], references: [id])
+
+  @@map("villages")
+}
+
+// ==============================
+// MODULE 15: BANNER SYSTEM
+// ==============================
+
+model Banner {
+  id          String    @id @default(uuid())
+  title       String
+  image_url   String
+  target_url  String?
+  position    String?
+  impressions Int       @default(0)
+  clicks      Int       @default(0)
+  is_active   Boolean   @default(true)
+  created_at  DateTime  @default(now())
+
+  @@map("banners")
+}
+
+// ==============================
+// MODULE 16: USER SETTINGS
+// ==============================
+
+model UserSetting {
+  id                String    @id @default(uuid())
+  user_id           String    @unique
+  theme             String    @default("system")
+  language          String    @default("id")
+  notification_push Boolean   @default(true)
+  notification_email Boolean  @default(true)
+  notification_sms  Boolean   @default(false)
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  @@map("user_settings")
+}
+
+// ==============================
+// MODULE 17: ANALYTICS
+// ==============================
+
+model AnalyticsPageView {
+  id          String    @id @default(uuid())
+  page_path   String
+  user_id     String?
+  referrer    String?
+  ip_address  String?
+  user_agent  String?
+  created_at  DateTime  @default(now())
+
+  @@map("analytics_page_views")
+}
+
+model CarView {
+  id          String    @id @default(uuid())
+  listing_id  String
+  user_id     String?
+  ip_address  String?
+  created_at  DateTime  @default(now())
+
+  @@map("car_views")
+}
+
+// ==============================
+// MODULE 18: WALLET
+// ==============================
+
+model Wallet {
+  id          String    @id @default(uuid())
+  user_id     String    @unique
+  balance     Int       @default(0)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  @@map("wallets")
 }

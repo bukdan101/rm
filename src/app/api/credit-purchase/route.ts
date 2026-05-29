@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
+import { getSupabaseAdmin } from '@/lib/supabase'
+import { errorResponse, successResponse } from '@/lib/api-utils'
 
 // POST - Process credit purchase
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const adminClient = getSupabaseAdmin()
     const body = await request.json()
     const { packageId, paymentMethod, userId } = body
 
     if (!packageId || !userId) {
-      return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
-        { status: 400 }
-      )
+      return errorResponse('Missing required fields', 400)
     }
 
     // Get package details
@@ -48,8 +49,8 @@ export async function POST(request: NextRequest) {
 
     const totalCredits = credits + bonusCredits
 
-    // Create purchase transaction record
-    const { data: transaction, error: transactionError } = await supabase
+    // Create purchase transaction record using admin client
+    const { data: transaction, error: transactionError } = await adminClient
       .from('credit_transactions')
       .insert({
         user_id: userId,
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
     // For online payment, immediately add credits
     if (paymentMethod === 'online') {
       // Check if user has credit record
-      const { data: userCredit, error: creditError } = await supabase
+      const { data: userCredit, error: creditError } = await adminClient
         .from('user_credits')
         .select('*')
         .eq('user_id', userId)
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
       if (userCredit) {
         // Update existing credit
         const newBalance = userCredit.balance + totalCredits
-        await supabase
+        await adminClient
           .from('user_credits')
           .update({
             balance: newBalance,
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
 
         // Update transaction with balance info
         if (transaction) {
-          await supabase
+          await adminClient
             .from('credit_transactions')
             .update({
               balance_before: userCredit.balance,
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
         }
       } else {
         // Create new credit record
-        await supabase
+        await adminClient
           .from('user_credits')
           .insert({
             user_id: userId,
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
 
         // Update transaction with balance info
         if (transaction) {
-          await supabase
+          await adminClient
             .from('credit_transactions')
             .update({
               balance_before: 0,
@@ -121,8 +122,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      return NextResponse.json({
-        success: true,
+      return successResponse({
         creditsAdded: totalCredits,
         transactionId: transaction?.id,
         message: 'Credits added successfully'
@@ -130,8 +130,7 @@ export async function POST(request: NextRequest) {
     }
 
     // For manual payment, return bank details
-    return NextResponse.json({
-      success: true,
+    return successResponse({
       status: 'pending',
       creditsToAdd: totalCredits,
       amount: price,
@@ -145,24 +144,19 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Credit purchase error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    )
+    return errorResponse('Internal server error', 500)
   }
 }
 
 // GET - Get purchase history
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
 
     if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'User ID required' },
-        { status: 400 }
-      )
+      return errorResponse('User ID required', 400)
     }
 
     const { data: transactions, error } = await supabase
@@ -174,21 +168,12 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching transactions:', error)
-      return NextResponse.json({
-        success: true,
-        transactions: []
-      })
+      return successResponse({ transactions: [] })
     }
 
-    return NextResponse.json({
-      success: true,
-      transactions: transactions || []
-    })
+    return successResponse({ transactions: transactions || [] })
   } catch (error) {
     console.error('Transaction fetch error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    )
+    return errorResponse('Internal server error', 500)
   }
 }

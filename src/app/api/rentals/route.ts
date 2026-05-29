@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
+import { errorResponse, successResponse } from '@/lib/api-utils'
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '12')
     const offset = (page - 1) * limit
-    const cityId = searchParams.get('city_id')
     const priceMin = searchParams.get('price_min')
     const priceMax = searchParams.get('price_max')
 
@@ -19,8 +20,11 @@ export async function GET(request: NextRequest) {
       .eq('status', 'active')
       .eq('transaction_type', 'rental')
 
-    if (cityId) {
-      query = query.eq('city_id', cityId)
+    if (priceMin) {
+      query = query.gte('price', parseInt(priceMin))
+    }
+    if (priceMax) {
+      query = query.lte('price', parseInt(priceMax))
     }
 
     query = query
@@ -31,23 +35,22 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
-    // Get rental prices for these listings
+    // Get rental prices for these listings using correct column name (listing_id)
     let rentalData = data
     if (data && data.length > 0) {
       const listingIds = data.map(l => l.id)
       const { data: rentalPrices } = await supabase
         .from('car_rental_prices')
         .select('*')
-        .in('car_listing_id', listingIds)
+        .in('listing_id', listingIds)
       
       rentalData = data.map(listing => ({
         ...listing,
-        rental_prices: rentalPrices?.find(r => r.car_listing_id === listing.id) || null
+        rental_prices: rentalPrices?.find(r => r.listing_id === listing.id) || null
       }))
     }
 
-    return NextResponse.json({
-      success: true,
+    return successResponse({
       data: rentalData,
       pagination: {
         page,
@@ -58,9 +61,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error fetching rentals:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch rentals' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to fetch rentals', 500)
   }
 }

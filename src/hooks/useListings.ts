@@ -43,7 +43,7 @@ export function useListings(options: UseListingsOptions = {}): UseListingsReturn
       if (options.fuel) params.set('fuel', options.fuel)
       if (options.transmission) params.set('transmission', options.transmission)
       if (options.body_type) params.set('body_type', options.body_type)
-      if (options.city) params.set('city', options.city)
+      if (options.city_id) params.set('city_id', options.city_id)
       if (options.year_min) params.set('year_min', options.year_min.toString())
       if (options.year_max) params.set('year_max', options.year_max.toString())
       if (options.price_min) params.set('price_min', options.price_min.toString())
@@ -54,7 +54,7 @@ export function useListings(options: UseListingsOptions = {}): UseListingsReturn
       const data = await response.json()
 
       if (data.success) {
-        setListings(data.data)
+        setListings(data.listings || [])
         setPagination(data.pagination)
       } else {
         setError(data.error || 'Failed to fetch listings')

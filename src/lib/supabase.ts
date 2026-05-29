@@ -5,11 +5,17 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 // Check if required env vars are set
-const hasSupabaseConfig = supabaseUrl && supabaseAnonKey
+const hasSupabaseConfig = !!(supabaseUrl && supabaseAnonKey)
 
-// Log warning instead of throwing - allow app to render without Supabase
+// Validate required environment variables with specific error messages
+if (!supabaseUrl) {
+  console.error('ERROR: NEXT_PUBLIC_SUPABASE_URL is not set. Please add it to your .env.local file. Auth and database features will not work.')
+}
+if (!supabaseAnonKey) {
+  console.error('ERROR: NEXT_PUBLIC_SUPABASE_ANON_KEY is not set. Please add it to your .env.local file. Auth and database features will not work.')
+}
 if (!hasSupabaseConfig) {
-  console.warn('Warning: Supabase environment variables not configured. Using fallback mode.')
+  console.warn('Warning: Supabase environment variables not configured. Auth and database features will not work.')
 }
 
 // Database types for Supabase
@@ -590,17 +596,21 @@ export interface Database {
 }
 
 // Client-side Supabase client (uses anon key)
-// Use placeholder values for development if env vars not set
-const fallbackUrl = 'https://placeholder-project.supabase.co'
-const fallbackKey = 'placeholder-anon-key'
-
+// If env vars are missing, we still need a valid client to avoid module-level crashes.
+// API calls will fail with network errors, which is preferable to an import crash.
+const fallbackUrl = 'https://placeholder.supabase.co'
+const fallbackKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NDYzNjEwMTUsImV4cCI6MTk2MTkzNzAxNX0.placeholder'
 export const supabase = createClient<Database>(
   supabaseUrl || fallbackUrl, 
   supabaseAnonKey || fallbackKey
 )
 
+// Export flag so consuming code can check configuration at runtime
+export const isSupabaseConfigured = hasSupabaseConfig
+
 // Server-side Supabase client with elevated privileges (uses service role key)
-// Only create this on the server side
+// DEPRECATED: Use getSupabaseAdmin() instead for explicit server-side usage.
+// This module-level export may fail if env vars are not set at import time.
 const isServer = typeof window === 'undefined'
 
 export const supabaseAdmin = isServer && supabaseServiceKey && supabaseUrl
@@ -611,6 +621,10 @@ export const supabaseAdmin = isServer && supabaseServiceKey && supabaseUrl
       },
     })
   : null
+
+if (isServer && (!supabaseServiceKey || !supabaseUrl)) {
+  console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL is not set. Server-side admin operations will fail.')
+}
 
 // Helper to get admin client (throws if used on client or without service key)
 export function getSupabaseAdmin() {

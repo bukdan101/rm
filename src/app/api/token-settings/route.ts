@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
-
-const supabase = getSupabaseAdmin()
+import { errorResponse, successResponse } from '@/lib/api-utils'
 
 // Default token settings - will be seeded if not exists
 const DEFAULT_TOKEN_SETTINGS = [
@@ -26,6 +25,7 @@ const DEFAULT_TOKEN_SETTINGS = [
 // GET: Fetch all token settings (public)
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin()
     const searchParams = request.nextUrl.searchParams
     const category = searchParams.get('category')
     const activeOnly = searchParams.get('active_only') === 'true'
@@ -63,31 +63,31 @@ export async function GET(request: NextRequest) {
       if (insertError) {
         console.error('Error seeding token settings:', insertError)
         // Return defaults anyway
-        return NextResponse.json({ 
+        return successResponse({ 
           settings: DEFAULT_TOKEN_SETTINGS.map((s, i) => ({ ...s, id: `default-${i}`, display_order: i })),
           seeded: false 
         })
       }
       
-      return NextResponse.json({ settings: insertedData, seeded: true })
+      return successResponse({ settings: insertedData, seeded: true })
     }
     
     if (error) {
       // If table doesn't exist, return defaults
       if (error.code === '42P01') {
-        return NextResponse.json({ 
+        return successResponse({ 
           settings: DEFAULT_TOKEN_SETTINGS.map((s, i) => ({ ...s, id: `default-${i}`, display_order: i })),
           seeded: false,
           table_exists: false
         })
       }
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return errorResponse(error.message, 500)
     }
     
-    return NextResponse.json({ settings: data, seeded: false })
+    return successResponse({ settings: data, seeded: false })
   } catch (error) {
     console.error('Error fetching token settings:', error)
-    return NextResponse.json({ 
+    return successResponse({ 
       settings: DEFAULT_TOKEN_SETTINGS.map((s, i) => ({ ...s, id: `default-${i}`, display_order: i })),
       seeded: false 
     })
@@ -97,11 +97,12 @@ export async function GET(request: NextRequest) {
 // POST: Create or update token setting (admin only)
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin()
     const body = await request.json()
     const { key, name, tokens, category, description, is_active, display_order } = body
     
     if (!key || !name || tokens === undefined) {
-      return NextResponse.json({ error: 'Key, name, and tokens are required' }, { status: 400 })
+      return errorResponse('Key, name, and tokens are required', 400)
     }
     
     const { data, error } = await supabase
@@ -121,27 +122,28 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return errorResponse(error.message, 500)
     }
     
-    return NextResponse.json({ setting: data })
+    return successResponse({ setting: data })
   } catch (error) {
     console.error('Error creating/updating token setting:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return errorResponse('Internal server error', 500)
   }
 }
 
 // PUT: Update token setting (admin only)
 export async function PUT(request: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin()
     const body = await request.json()
     const { id, name, tokens, category, description, is_active, display_order } = body
     
     if (!id) {
-      return NextResponse.json({ error: 'Setting ID is required' }, { status: 400 })
+      return errorResponse('Setting ID is required', 400)
     }
     
-    const updateData: any = { updated_at: new Date().toISOString() }
+    const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (name !== undefined) updateData.name = name
     if (tokens !== undefined) updateData.tokens = tokens
     if (category !== undefined) updateData.category = category
@@ -157,24 +159,25 @@ export async function PUT(request: NextRequest) {
       .single()
     
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return errorResponse(error.message, 500)
     }
     
-    return NextResponse.json({ setting: data })
+    return successResponse({ setting: data })
   } catch (error) {
     console.error('Error updating token setting:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return errorResponse('Internal server error', 500)
   }
 }
 
 // DELETE: Delete token setting (admin only)
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin()
     const searchParams = request.nextUrl.searchParams
     const id = searchParams.get('id')
     
     if (!id) {
-      return NextResponse.json({ error: 'Setting ID is required' }, { status: 400 })
+      return errorResponse('Setting ID is required', 400)
     }
     
     const { error } = await supabase
@@ -183,12 +186,12 @@ export async function DELETE(request: NextRequest) {
       .eq('id', id)
     
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return errorResponse(error.message, 500)
     }
     
-    return NextResponse.json({ success: true })
+    return successResponse({ deleted: true })
   } catch (error) {
     console.error('Error deleting token setting:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return errorResponse('Internal server error', 500)
   }
 }

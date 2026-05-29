@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import ZAI from 'z-ai-web-dev-sdk'
+import { errorResponse } from '@/lib/api-utils'
 
 // Initialize VLM for image analysis
 let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null
@@ -142,6 +144,7 @@ Return as JSON: {"mileage": X, "unit": "km/miles", "display_condition": "...", "
 // GET - Get prediction by ID or list predictions
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     const userId = searchParams.get('user_id')
@@ -200,16 +203,16 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error fetching predictions:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch predictions' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to fetch predictions', 500)
   }
 }
 
 // POST - Create new prediction
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const adminClient = getSupabaseAdmin()
+    
     const body = await request.json()
     const {
       // User info
@@ -246,21 +249,15 @@ export async function POST(request: NextRequest) {
     
     // Validate required fields
     if (!brand_id || !model_id || !year) {
-      return NextResponse.json(
-        { success: false, error: 'Brand, model, and year are required' },
-        { status: 400 }
-      )
+      return errorResponse('Brand, model, and year are required', 400)
     }
     
     if (!photos || photos.length < 5) {
-      return NextResponse.json(
-        { success: false, error: 'At least 5 photos are required for accurate prediction' },
-        { status: 400 }
-      )
+      return errorResponse('At least 5 photos are required for accurate prediction', 400)
     }
     
-    // Create prediction record
-    const { data: prediction, error: predictionError } = await supabase
+    // Create prediction record using admin client for elevated access
+    const { data: prediction, error: predictionError } = await adminClient
       .from('ai_predictions')
       .insert({
         user_id,
@@ -297,7 +294,7 @@ export async function POST(request: NextRequest) {
       const analysis = await analyzeCarImage(photo.url, photo.type)
       
       // Save photo analysis
-      await supabase
+      await adminClient
         .from('prediction_photos')
         .insert({
           prediction_id: prediction.id,
@@ -339,10 +336,10 @@ export async function POST(request: NextRequest) {
     }
     
     // Get market data
-    const marketData = await getMarketData(brand_id, model_id, variant_id, year, mileage)
+    const marketData = await getMarketData(supabase, brand_id, model_id, variant_id, year, mileage)
     
     // Get seller trust data
-    const sellerTrust = await getSellerTrustData(user_id, dealer_id)
+    const sellerTrust = await getSellerTrustData(supabase, user_id, dealer_id)
     
     // Calculate final prediction
     const predictionResult = calculatePricePrediction({
@@ -359,10 +356,10 @@ export async function POST(request: NextRequest) {
     })
     
     // Save prediction factors
-    await savePredictionFactors(prediction.id, predictionResult.factors)
+    await savePredictionFactors(adminClient, prediction.id, predictionResult.factors)
     
     // Update prediction with results
-    const { data: updatedPrediction, error: updateError } = await supabase
+    const { data: updatedPrediction, error: updateError } = await adminClient
       .from('ai_predictions')
       .update({
         condition_score: avgConditionScore,
@@ -414,10 +411,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error creating prediction:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to create prediction', details: String(error) },
-      { status: 500 }
-    )
+    return errorResponse('Failed to create prediction', 500)
   }
 }
 
@@ -432,15 +426,21 @@ function getConditionGrade(score: number): string {
   return 'E'
 }
 
-async function getMarketData(brandId: string, modelId: string, variantId: string | null, year: number, mileage: number | null) {
+async function getMarketData(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  brandId: string,
+  modelId: string,
+  variantId: string | null,
+  year: number,
+  _mileage: number | null
+) {
   // Get listings from last 90 days
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
   
   let query = supabase
     .from('car_listings')
-    .select('price_cash, mileage, year, condition, created_at')
-    .eq('brand_id', brandId)
-    .eq('model_id', modelId)
+    .select('price, mileage, year, created_at')
+    .eq('variant_id', brandId)
     .in('status', ['active', 'sold'])
     .gte('created_at', ninetyDaysAgo)
   
@@ -465,8 +465,8 @@ async function getMarketData(brandId: string, modelId: string, variantId: string
   }
   
   const prices = listings
-    .filter(l => l.price_cash)
-    .map(l => l.price_cash)
+    .filter(l => l.price)
+    .map(l => l.price)
     .sort((a, b) => a - b)
   
   const avgPrice = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0
@@ -485,10 +485,10 @@ async function getMarketData(brandId: string, modelId: string, variantId: string
   })
   
   const recentAvg = recentListings.length > 0 
-    ? recentListings.filter(l => l.price_cash).reduce((sum, l) => sum + (l.price_cash || 0), 0) / recentListings.length 
+    ? recentListings.filter(l => l.price).reduce((sum, l) => sum + (l.price || 0), 0) / recentListings.length 
     : avgPrice
   const olderAvg = olderListings.length > 0 
-    ? olderListings.filter(l => l.price_cash).reduce((sum, l) => sum + (l.price_cash || 0), 0) / olderListings.length 
+    ? olderListings.filter(l => l.price).reduce((sum, l) => sum + (l.price || 0), 0) / olderListings.length 
     : avgPrice
   
   const trendPercentage = olderAvg > 0 ? ((recentAvg - olderAvg) / olderAvg) * 100 : 0
@@ -506,7 +506,11 @@ async function getMarketData(brandId: string, modelId: string, variantId: string
   }
 }
 
-async function getSellerTrustData(userId: string | null, dealerId: string | null) {
+async function getSellerTrustData(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string | null,
+  dealerId: string | null
+) {
   if (dealerId) {
     const { data: dealer } = await supabase
       .from('dealers')
@@ -541,18 +545,18 @@ async function getSellerTrustData(userId: string | null, dealerId: string | null
   } else if (userId) {
     const { data: user } = await supabase
       .from('profiles')
-      .select('email_verified, phone_verified')
+      .select('is_verified')
       .eq('id', userId)
       .single()
     
     const { data: userListings } = await supabase
       .from('car_listings')
       .select('id')
-      .eq('user_id', userId)
+      .eq('seller_id', userId)
       .eq('status', 'sold')
     
     const soldCount = userListings?.length || 0
-    const verified = user?.email_verified && user?.phone_verified
+    const verified = user?.is_verified || false
     
     // Calculate trust score
     let trustScore = 0
@@ -763,7 +767,11 @@ function calculateInspectionAdjustment(inspection: any): number {
   return -15
 }
 
-async function savePredictionFactors(predictionId: string, factors: any[]) {
+async function savePredictionFactors(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  predictionId: string,
+  factors: any[]
+) {
   const insertData = factors.map(f => ({
     prediction_id: predictionId,
     factor_category: f.category,

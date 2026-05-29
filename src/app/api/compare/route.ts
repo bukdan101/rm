@@ -1,25 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
+import { errorResponse } from '@/lib/api-utils'
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const ids = searchParams.get('ids')
 
     if (!ids) {
-      return NextResponse.json(
-        { success: false, error: 'Car IDs required' },
-        { status: 400 }
-      )
+      return errorResponse('Car IDs required', 400)
     }
 
     const carIds = ids.split(',').filter(Boolean)
 
     if (carIds.length === 0 || carIds.length > 4) {
-      return NextResponse.json(
-        { success: false, error: 'Please provide 1-4 car IDs' },
-        { status: 400 }
-      )
+      return errorResponse('Please provide 1-4 car IDs', 400)
     }
 
     const { data, error } = await supabase
@@ -44,11 +40,11 @@ export async function GET(request: NextRequest) {
       const { data: inspections } = await supabase
         .from('car_inspections')
         .select('*')
-        .in('car_listing_id', listingIds)
+        .in('listing_id', listingIds)
       
       const dataWithInspections = data.map(listing => ({
         ...listing,
-        inspection: inspections?.find(i => i.car_listing_id === listing.id) || null
+        inspection: inspections?.find(i => i.listing_id === listing.id) || null
       }))
       
       return NextResponse.json({
@@ -63,9 +59,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error fetching compare data:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch comparison data' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to fetch comparison data', 500)
   }
 }

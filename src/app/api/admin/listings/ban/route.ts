@@ -1,31 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { createClient } from '@/lib/supabase/server'
+import { checkAuth } from '@/lib/api-auth'
 import { autoRejectOffersForListing } from '@/lib/dealer-offer-service'
-
-const supabase = getSupabaseAdmin()
 
 // POST - Ban/Unban a listing
 export async function POST(request: NextRequest) {
   try {
-    // Check admin access
-    const supabaseClient = await createClient()
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Verify admin access
+    const authResult = await checkAuth(request, 'admin')
+    if (!authResult.authorized) {
+      return authResult.response
     }
 
-    // Check if user is admin
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile || profile.role !== 'admin') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-    }
+    const supabase = getSupabaseAdmin()
 
     const body = await request.json()
     const { listing_id, is_banned, ban_reason } = body
@@ -46,11 +33,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Update listing
-    const updateData: Record<string, any> = {
+    const updateData: Record<string, unknown> = {
       is_banned: is_banned,
       ban_reason: is_banned ? ban_reason : null,
       banned_at: is_banned ? new Date().toISOString() : null,
-      banned_by: is_banned ? user.id : null,
+      banned_by: is_banned ? authResult.userId : null,
       updated_at: new Date().toISOString()
     }
 
@@ -90,7 +77,7 @@ export async function POST(request: NextRequest) {
             listing_id,
             listing_title: currentListing.title,
             ban_reason: is_banned ? ban_reason : null,
-            admin_id: user.id
+            admin_id: authResult.userId
           }
         })
     } catch {

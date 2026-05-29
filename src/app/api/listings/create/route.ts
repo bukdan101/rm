@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { checkAuth } from '@/lib/api-auth'
 import { v4 as uuidv4 } from 'uuid'
-
-const supabase = getSupabaseAdmin()
 
 // Default fallback values (used if database fetch fails)
 const DEFAULT_MARKETPLACE_COSTS: Record<string, number> = {
@@ -96,6 +95,12 @@ async function getTokenSettings(): Promise<{
 // POST - Create listing with token deduction
 export async function POST(request: NextRequest) {
   try {
+    // Verify the user is authenticated
+    const authResult = await checkAuth(request)
+    if (!authResult.authorized) {
+      return authResult.response
+    }
+
     const body = await request.json()
     
     // Validate required fields
@@ -119,6 +124,14 @@ export async function POST(request: NextRequest) {
         success: false,
         error: 'Missing required fields'
       }, { status: 400 })
+    }
+
+    // Verify user_id matches authenticated user (prevent impersonation)
+    if (user_id !== authResult.userId) {
+      return NextResponse.json({
+        success: false,
+        error: 'User ID does not match authenticated user'
+      }, { status: 403 })
     }
 
     // Validate images
@@ -148,6 +161,8 @@ export async function POST(request: NextRequest) {
       // Fallback to marketplace_type
       tokenCost = marketplaceCosts[marketplace_type] || marketplaceCosts['marketplace_umum'] || 3
     }
+
+    const supabase = getSupabaseAdmin()
 
     // Check user's credit balance
     const { data: userCreditsData, error: creditsError } = await supabase

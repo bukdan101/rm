@@ -128,23 +128,40 @@ export function useTokenSettings(): CreditSettingsHook {
 // Alias for backward compatibility
 export const useCreditSettings = useTokenSettings
 
+// Cache invalidation - call after updating settings
+export function invalidateCreditSettingsCache() {
+  cachedSettings = null
+  cachedRawSettings = []
+}
+
 // Server-side function to get credit costs (for API routes)
+// Uses direct Supabase query instead of HTTP fetch to itself
 export async function getTokenSettings(): Promise<CreditSettings> {
+  // Return cached if available
+  if (cachedSettings) return cachedSettings
+
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/token-settings?active_only=true`)
-    const data = await res.json()
-    
-    if (data.settings && Array.isArray(data.settings)) {
+    const { getSupabaseAdmin } = await import('@/lib/supabase')
+    const admin = getSupabaseAdmin()
+    const { data, error } = await admin
+      .from('credit_settings')
+      .select('*')
+      .eq('is_active', true)
+      .order('display_order')
+
+    if (!error && data && data.length > 0) {
       const mapped: Record<string, number> = {}
-      data.settings.forEach((setting: CreditSetting) => {
-        mapped[setting.key] = setting.credits ?? (setting as any).tokens ?? 0
+      data.forEach((setting: Record<string, unknown>) => {
+        mapped[setting.key as string] = (setting.credits as number) ?? (setting.tokens as number) ?? 0
       })
-      return { ...DEFAULT_SETTINGS, ...mapped } as CreditSettings
+      const newSettings = { ...DEFAULT_SETTINGS, ...mapped } as CreditSettings
+      cachedSettings = newSettings
+      return newSettings
     }
   } catch (error) {
-    console.error('Error fetching credit settings:', error)
+    console.error('Error fetching credit settings via Supabase:', error)
   }
-  
+
   return DEFAULT_SETTINGS
 }
 

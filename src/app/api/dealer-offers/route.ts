@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
+import { getSupabaseAdmin } from '@/lib/supabase'
+import { errorResponse } from '@/lib/api-utils'
 
 // GET - Get dealer offers
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     const sellerId = searchParams.get('seller_id')
@@ -19,7 +22,7 @@ export async function GET(request: NextRequest) {
         .from('dealer_offers')
         .select(`
           *,
-          seller:profiles!dealer_offers_seller_id_fkey(id, name, phone, email),
+          seller:profiles!dealer_offers_seller_id_fkey(id, full_name, phone, email),
           dealer:dealers(id, name, slug, logo_url, rating, phone, email, address)
         `)
         .eq('id', id)
@@ -35,7 +38,7 @@ export async function GET(request: NextRequest) {
       .from('dealer_offers')
       .select(`
         *,
-        seller:profiles!dealer_offers_seller_id_fkey(id, name, phone),
+        seller:profiles!dealer_offers_seller_id_fkey(id, full_name, phone),
         dealer:dealers(id, name, slug, logo_url, rating)
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
@@ -61,16 +64,15 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error fetching dealer offers:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch dealer offers' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to fetch dealer offers', 500)
   }
 }
 
 // POST - Create new dealer offer (Sell to Dealer)
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const adminClient = getSupabaseAdmin()
     const body = await request.json()
     const {
       prediction_id,
@@ -98,17 +100,11 @@ export async function POST(request: NextRequest) {
     
     // Validate
     if (!seller_id) {
-      return NextResponse.json(
-        { success: false, error: 'Seller ID is required' },
-        { status: 400 }
-      )
+      return errorResponse('Seller ID is required', 400)
     }
     
     if (!dealer_ids || dealer_ids.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'At least one dealer must be selected' },
-        { status: 400 }
-      )
+      return errorResponse('At least one dealer must be selected', 400)
     }
     
     // Get prediction data if available
@@ -148,8 +144,8 @@ export async function POST(request: NextRequest) {
       
       if (!dealer || !dealer.is_active) continue
       
-      // Create offer
-      const { data: offer, error: offerError } = await supabase
+      // Create offer using admin client for elevated access
+      const { data: offer, error: offerError } = await adminClient
         .from('dealer_offers')
         .insert({
           prediction_id,
@@ -194,16 +190,15 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error creating dealer offers:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to create dealer offers' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to create dealer offers', 500)
   }
 }
 
 // PUT - Update offer (dealer response, counter offer, accept/reject)
 export async function PUT(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const adminClient = getSupabaseAdmin()
     const body = await request.json()
     const {
       id,
@@ -227,10 +222,7 @@ export async function PUT(request: NextRequest) {
     } = body
     
     if (!id || !action) {
-      return NextResponse.json(
-        { success: false, error: 'Offer ID and action are required' },
-        { status: 400 }
-      )
+      return errorResponse('Offer ID and action are required', 400)
     }
     
     // Get current offer
@@ -339,13 +331,10 @@ export async function PUT(request: NextRequest) {
         break
         
       default:
-        return NextResponse.json(
-          { success: false, error: 'Invalid action' },
-          { status: 400 }
-        )
+        return errorResponse('Invalid action', 400)
     }
     
-    const { data: updatedOffer, error: updateError } = await supabase
+    const { data: updatedOffer, error: updateError } = await adminClient
       .from('dealer_offers')
       .update(updateData)
       .eq('id', id)
@@ -360,24 +349,20 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error updating dealer offer:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to update dealer offer' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to update dealer offer', 500)
   }
 }
 
 // DELETE - Delete/cancel an offer
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const adminClient = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     
     if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'Offer ID is required' },
-        { status: 400 }
-      )
+      return errorResponse('Offer ID is required', 400)
     }
     
     // Check if offer can be cancelled
@@ -388,21 +373,15 @@ export async function DELETE(request: NextRequest) {
       .single()
     
     if (!offer) {
-      return NextResponse.json(
-        { success: false, error: 'Offer not found' },
-        { status: 404 }
-      )
+      return errorResponse('Offer not found', 404)
     }
     
     if (offer.status === 'accepted') {
-      return NextResponse.json(
-        { success: false, error: 'Cannot cancel an accepted offer' },
-        { status: 400 }
-      )
+      return errorResponse('Cannot cancel an accepted offer', 400)
     }
     
     // Update status to cancelled instead of deleting
-    const { error } = await supabase
+    const { error } = await adminClient
       .from('dealer_offers')
       .update({
         status: 'cancelled',
@@ -419,9 +398,6 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error cancelling dealer offer:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to cancel dealer offer' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to cancel dealer offer', 500)
   }
 }

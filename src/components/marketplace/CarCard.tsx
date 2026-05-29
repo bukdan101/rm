@@ -37,23 +37,24 @@ export function CarCard({ listing, highlighted = false, showWishlist = true }: C
     setIsWishlisted(!isWishlisted)
   }
 
-  // Map condition to badge variant
-  const getConditionVariant = (condition: string): "success" | "info" | "warning" | "secondary" => {
+  // Map condition to badge variant (Indonesian values)
+  const getConditionVariant = (condition: string | null | undefined): "success" | "info" | "warning" | "secondary" => {
+    if (!condition) return 'secondary'
     const variants: Record<string, "success" | "info" | "warning" | "secondary"> = {
-      'new': 'success',
-      'like_new': 'info',
-      'good': 'secondary',
-      'fair': 'warning',
+      'baru': 'success',
+      'istimewa': 'info',
+      'sedang': 'warning',
+      'bekas': 'secondary',
     }
     return variants[condition] || 'secondary'
   }
 
-  // Transaction type styling
+  // Transaction type styling (Indonesian keys matching TransactionType)
   const transactionStyles: Record<string, string> = {
-    'sale': 'from-blue-600 via-purple-600 to-purple-700 shadow-[0_4px_14px_0_rgba(147,51,234,0.5)]',
-    'credit': 'from-cyan-500 via-blue-500 to-indigo-500 shadow-[0_4px_14px_0_rgba(59,130,246,0.5)]',
-    'lease': 'from-emerald-500 via-teal-500 to-cyan-500 shadow-[0_4px_14px_0_rgba(16,185,129,0.5)]',
-    'rent': 'from-amber-500 via-orange-500 to-red-500 shadow-[0_4px_14px_0_rgba(245,158,11,0.5)]',
+    'jual': 'from-blue-600 via-purple-600 to-purple-700 shadow-[0_4px_14px_0_rgba(147,51,234,0.5)]',
+    'beli': 'from-amber-500 via-orange-500 to-red-500 shadow-[0_4px_14px_0_rgba(245,158,11,0.5)]',
+    'rental': 'from-emerald-500 via-teal-500 to-cyan-500 shadow-[0_4px_14px_0_rgba(16,185,129,0.5)]',
+    'kredit': 'from-cyan-500 via-blue-500 to-indigo-500 shadow-[0_4px_14px_0_rgba(59,130,246,0.5)]',
   }
 
   return (
@@ -83,10 +84,10 @@ export function CarCard({ listing, highlighted = false, showWishlist = true }: C
           <div className={cn(
             "absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-bold text-white",
             "bg-gradient-to-r",
-            transactionStyles[listing.transaction_type] || transactionStyles['sale'],
+            transactionStyles[listing.transaction_type || 'jual'] || transactionStyles['jual'],
             "shadow-lg hover:shadow-xl transition-shadow"
           )}>
-            {getTransactionTypeLabel(listing.transaction_type)}
+            {getTransactionTypeLabel(listing.transaction_type || 'jual')}
           </div>
 
           {/* Condition Badge - Top Right */}
@@ -95,8 +96,8 @@ export function CarCard({ listing, highlighted = false, showWishlist = true }: C
               variant={getConditionVariant(listing.condition)}
               className="shadow-lg"
             >
-              {listing.condition === 'new' && <Sparkles className="w-3 h-3 mr-1" />}
-              {getConditionLabel(listing.condition)}
+              {listing.condition === 'baru' && <Sparkles className="w-3 h-3 mr-1" />}
+              {getConditionLabel(listing.condition || 'bekas')}
             </Badge>
           </div>
 

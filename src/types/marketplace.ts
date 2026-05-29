@@ -30,16 +30,15 @@ export type VisibilityType = 'public' | 'dealer_marketplace' | 'both'
 
 export interface Profile {
   id: string
-  name: string | null
+  email: string
+  full_name: string | null
   phone: string | null
   avatar_url: string | null
-  role: 'user' | 'dealer' | 'admin' | 'inspector'
-  email_verified: boolean
-  phone_verified: boolean
-  is_active: boolean
-  last_login: string | null
+  role: 'buyer' | 'seller' | 'dealer' | 'admin'
+  is_verified: boolean
   created_at: string
   updated_at: string
+  deleted_at: string | null
 }
 
 export interface UserAddress {
@@ -154,37 +153,35 @@ export interface DealerReview {
 // ==============================
 
 export interface Brand {
-  id: string
+  id: number
   name: string
-  slug: string | null
+  slug: string
   logo_url: string | null
-  country: string | null
-  is_popular: boolean
-  display_order: number
+  is_active: boolean
   created_at: string
 }
 
 export interface CarModel {
-  id: string
-  brand_id: string | null
+  id: number
+  brand_id: number
   name: string
-  slug: string | null
-  body_type: BodyType | null
-  is_popular: boolean
-  display_order: number
+  slug: string
+  body_type: string
+  is_active: boolean
   created_at: string
   brand?: Brand
 }
 
 export interface CarVariant {
-  id: string
-  model_id: string | null
+  id: number
+  model_id: number
   name: string
-  engine_capacity: number | null
-  transmission: TransmissionType | null
-  fuel_type: FuelType | null
-  seat_count: number | null
-  price_new: number | null
+  year_start: number
+  year_end: number | null
+  transmission_type: string
+  fuel_type: string
+  engine_cc: number
+  is_active: boolean
   created_at: string
   model?: CarModel
 }
@@ -200,11 +197,9 @@ export interface CarGeneration {
 }
 
 export interface CarColor {
-  id: string
+  id: number
   name: string
-  hex_code: string | null
-  is_metallic: boolean
-  is_popular: boolean
+  hex_code: string
   created_at: string
 }
 
@@ -213,55 +208,34 @@ export interface CarColor {
 // ==============================
 
 export interface InspectionCategory {
-  id: string
+  id: number
   name: string
+  slug: string
   description: string | null
-  icon: string | null
-  display_order: number
-  total_items: number
+  order_index: number
   created_at: string
 }
 
 export interface InspectionItem {
   id: number
-  category_id: string | null
+  category_id: number | null
   name: string
   description: string | null
-  display_order: number
-  is_critical: boolean
+  order_index: number
+  is_active: boolean
   created_at: string
   category?: InspectionCategory
 }
 
 export interface CarInspection {
   id: string
-  car_listing_id: string | null
+  listing_id: string
   inspector_id: string | null
-  inspector_name: string | null
-  inspection_place: string | null
-  inspection_date: string
-  total_points: number
-  passed_points: number | null
-  failed_points: number
-  inspection_score: number | null
-  
-  accident_free: boolean
-  flood_free: boolean
-  fire_free: boolean
-  odometer_tampered: boolean
-  
-  risk_level: RiskLevel
-  overall_grade: 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'E' | null
-  
-  recommended: boolean
-  recommendation_notes: string | null
-  
-  certificate_number: string | null
-  certificate_url: string | null
-  certificate_issued_at: string | null
-  certificate_expires_at: string | null
-  
-  status: 'pending' | 'in_progress' | 'completed' | 'verified'
+  status: string
+  overall_score: number | null
+  risk_level: RiskLevel | null
+  notes: string | null
+  inspected_at: string | null
   created_at: string
   updated_at: string
   
@@ -276,9 +250,7 @@ export interface InspectionResult {
   item_id: number
   status: InspectionStatus
   notes: string | null
-  image_url: string | null
-  severity: 'minor' | 'moderate' | 'major' | 'critical' | null
-  repair_cost_estimate: number | null
+  photo_url: string | null
   created_at: string
   item?: InspectionItem
 }

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -233,6 +233,37 @@ export default function AdminLayout({
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { user, profile, loading } = useAuth()
+  const router = useRouter()
+
+  // Auth guard: redirect non-admin users
+  useEffect(() => {
+    if (!loading && (!user || profile?.role !== 'admin')) {
+      router.replace('/dashboard')
+    }
+  }, [loading, user, profile, router])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 rounded-full bg-gradient-to-br from-violet-600 to-purple-700 animate-pulse" />
+          <p className="text-muted-foreground text-sm">Memuat...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user || profile?.role !== 'admin') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <Shield className="h-12 w-12 text-muted-foreground" />
+          <p className="text-muted-foreground">Akses ditolak. Mengalihkan...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">

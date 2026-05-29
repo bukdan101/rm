@@ -183,7 +183,14 @@ export function DashboardLayout({ children, title, description }: DashboardLayou
   }, [user])
 
   const handleSignOut = async () => {
-    await signOut()
+    try {
+      const { error } = await signOut()
+      if (error) {
+        console.error('Error signing out:', error.message)
+      }
+    } catch (err) {
+      console.error('Error signing out:', err)
+    }
   }
 
   const NavLink = ({ item, mobile = false }: { item: typeof menuItems[0]; mobile?: boolean }) => {

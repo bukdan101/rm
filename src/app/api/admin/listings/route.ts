@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-
-const supabase = getSupabaseAdmin()
+import { checkAuth } from '@/lib/api-auth'
 
 // GET - Fetch all listings for admin
 export async function GET(request: NextRequest) {
   try {
+    // Verify admin access
+    const authResult = await checkAuth(request, 'admin')
+    if (!authResult.authorized) {
+      return authResult.response
+    }
+
+    const supabase = getSupabaseAdmin()
+
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status')
     const search = searchParams.get('search')
@@ -125,7 +132,7 @@ export async function GET(request: NextRequest) {
       }
     }) || []
 
-    // Get stats - use unique variable names to avoid any conflicts
+    // Get stats
     const [
       statsTotal, 
       statsActive, 
@@ -163,6 +170,13 @@ export async function GET(request: NextRequest) {
 // PUT - Update listing status (ban/unban)
 export async function PUT(request: NextRequest) {
   try {
+    // Verify admin access
+    const authResult = await checkAuth(request, 'admin')
+    if (!authResult.authorized) {
+      return authResult.response
+    }
+
+    const supabase = getSupabaseAdmin()
     const body = await request.json()
     const { listing_id, status, reason } = body
 
@@ -214,6 +228,13 @@ export async function PUT(request: NextRequest) {
 // DELETE - Delete listing permanently
 export async function DELETE(request: NextRequest) {
   try {
+    // Verify admin access
+    const authResult = await checkAuth(request, 'admin')
+    if (!authResult.authorized) {
+      return authResult.response
+    }
+
+    const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
     const listing_id = searchParams.get('id')
 

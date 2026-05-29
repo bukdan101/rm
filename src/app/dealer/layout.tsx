@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
@@ -132,12 +132,30 @@ export default function DealerLayout({ children }: DealerLayoutProps) {
     )
   }
 
-  if (!mounted) {
+  // Auth guard: redirect non-logged-in users
+  useEffect(() => {
+    if (mounted && !loading && !user) {
+      router.replace('/auth')
+    }
+  }, [mounted, loading, user, router])
+
+  if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center">
         <div className="animate-pulse flex flex-col items-center gap-4">
           <div className="h-12 w-12 rounded-full bg-muted" />
           <div className="h-4 w-32 bg-muted rounded" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Shield className="h-12 w-12 text-muted-foreground" />
+          <p className="text-muted-foreground">Silakan masuk terlebih dahulu...</p>
         </div>
       </div>
     )

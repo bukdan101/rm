@@ -1621,3 +1621,212 @@ Updated the Admin Dashboard to fetch real data from the `/api/admin/stats` API e
 - **Refresh Function**: Manual data refresh capability
 - **Same UI Layout**: All original styling and structure preserved
 - **Lint Status**: All files pass lint with no errors
+
+---
+## Task ID: 6 - frontend-fixes-agent
+### Work Task
+Fix frontend component issues in the AutoMarket project across 8 files.
+
+### Work Summary
+
+**1. Fixed CarCard.tsx - Transaction type keys and condition mapping:**
+- Changed `transactionStyles` keys from English (sale/credit/lease/rent) to Indonesian (jual/kredit/sewa/rental)
+- Updated `getConditionVariant` to use Indonesian condition values (baru/bekas/sedang/istimewa)
+- Added null safety for `listing.transaction_type` (defaults to 'jual') and `listing.condition` (defaults to 'bekas')
+- Made `getConditionVariant` accept `string | null | undefined` parameter
+
+**2. Fixed ListingForm.tsx - Upload endpoint and type alignment:**
+- Added `visibility: VisibilityType` field to local `ListingFormData` (default: 'both')
+- Imported `VisibilityType` from marketplace types
+- Changed `images.is_primary` from required `boolean` to optional `boolean?` to match `CarListingFormData`
+- Verified `/api/upload` call format is correct (POST with FormData, expects `{ success, url }` response)
+
+**3. Fixed DashboardLayout.tsx - Error handling for signOut:**
+- Added try/catch around `signOut()` call in `handleSignOut`
+- Now properly handles and logs the `{ error }` return value from `signOut()`
+
+**4. Fixed useListings hook:**
+- Changed `options.city` to `options.city_id` (matches `ListingFilters` interface)
+- Changed `params.set('city', ...)` to `params.set('city_id', ...)`
+- Fixed API response mapping: `data.data` → `data.listings` (matches API which returns `{ success, listings, pagination }`)
+- Added fallback `data.listings || []` for safety
+
+**5. Verified useAuth hook:**
+- Already uses `getSession()` for client-side auth state detection (correct)
+- Already uses `role: 'buyer' as const` for profile creation (correct)
+- No changes needed - Profile type fix in marketplace.ts resolves the type alignment
+
+**6. Fixed useTokenSettings hook:**
+- Changed `getTokenSettings()` server function from HTTP self-fetch to direct Supabase query using `getSupabaseAdmin()`
+- Uses dynamic import `await import('@/lib/supabase')` for server-only code
+- Added cache check: returns `cachedSettings` if available before querying
+- Added `invalidateCreditSettingsCache()` function for cache invalidation mechanism
+- Updated `getCreditSettings` alias still works
+
+**7. Fixed supabase.ts env handling:**
+- Removed placeholder fallback constants (`fallbackUrl`, `fallbackKey`)
+- Changed `console.warn` to `console.error` with clear message about missing env vars
+- Client now uses `supabaseUrl || ''` and `supabaseAnonKey || ''` instead of fake placeholder values
+- Added `console.error` when `SUPABASE_SERVICE_ROLE_KEY` is missing on server
+- Added DEPRECATED comment on `supabaseAdmin` module-level export, recommending `getSupabaseAdmin()`
+
+**8. Fixed marketplace.ts types:**
+- Profile role: changed from `'user' | 'dealer' | 'admin' | 'inspector'` to `'buyer' | 'seller' | 'dealer' | 'admin'`
+- Added `is_verified: boolean` field to Profile interface
+- Added `email?: string | null` field to Profile interface
+- Added `full_name?: string | null` field to Profile interface
+- Brand, CarModel, CarVariant, CarColor IDs already use `string` type (consistent with Supabase UUID)
+
+### Stage Summary
+- **8 files fixed** with precise, targeted edits
+- **CarCard**: Indonesian transaction types and condition values, null safety
+- **ListingForm**: Visibility field added, image type aligned with marketplace types
+- **DashboardLayout**: Proper signOut error handling
+- **useListings**: Correct city_id filter and API response mapping
+- **useAuth**: Verified correct (no changes needed)
+- **useTokenSettings**: Direct Supabase query, cache invalidation
+- **supabase.ts**: No placeholder fallbacks, console.error warnings
+- **marketplace.ts**: Profile role fixed, is_verified added
+- **Lint Status**: All modified files pass lint with no errors
+
+---
+Task ID: 3
+Agent: Prisma Schema Fixer
+Task: Fix Prisma schema to match actual database
+
+Work Log:
+- Read worklog.md and all specified source files (supabase.ts, db.ts, marketplace.ts)
+- Read all 20 specified API route files to identify which tables they actually query
+- Searched ALL API routes using grep for `.from('` patterns to find every Supabase table reference
+- Identified 62 core tables used across ~50+ API routes
+- Wrote complete Prisma schema at `/prisma/schema.prisma` with:
+  - SQLite datasource (kept existing config)
+  - 62 models covering all tables used by API routes
+  - Proper @map and @@map for table name mapping
+  - Proper relations between models (bidirectional)
+  - String for UUID fields, Int for serials
+  - All fields from actual API usage
+- Fixed multiple Prisma validation errors:
+  - Added @unique to one-to-one relation FK fields (user_id, car_listing_id)
+  - Added bidirectional relation fields where required
+  - Removed ambiguous relation fields that caused conflicts
+- Updated `/src/lib/db.ts` to export both Prisma client (as `db`) and Supabase clients
+- Ran `bun run db:push` successfully - schema pushed to SQLite
+- Prisma Client generated successfully
+
+Stage Summary:
+- **62 Prisma models** covering all core tables used by API routes
+- **Schema validated** and pushed to SQLite database successfully
+- **Prisma Client generated** at ./node_modules/@prisma/client
+- **db.ts updated** to export both `db` (Prisma) and `supabase`/`supabaseAdmin`/`getSupabaseAdmin`
+- **Tables covered**: profiles, dealers, dealer_staff, dealer_reviews, dealer_registrations, brands, car_models, car_variants, car_colors, car_listings, car_images, car_videos, car_documents, car_features, car_favorites, car_rental_prices, inspection_categories, inspection_items, car_inspections, inspection_results, inspection_bookings, inspection_pricing, certificate_purchases, kyc_verifications, user_credits, credit_transactions, credit_packages, credit_usage_log, registration_bonus_tracker, token_settings, token_packages, token_transactions, token_balances, user_tokens, payments, listing_boosts, boost_features, conversations, messages, orders, notifications, dealer_offers, dealer_offer_histories, dealer_marketplace_favorites, dealer_marketplace_settings, dealer_offer_settings, dealer_marketplace_views, ai_predictions, prediction_photos, prediction_factors, ai_price_analysis, countries, provinces, cities, districts, villages, banners, user_settings, analytics_page_views, car_views, wallets
+
+---
+## Task ID: 5 - api-fix-agent
+### Work Task
+Fix API route issues in the AutoMarket project - supabase client usage, query issues, column name mismatches, and consistent error handling.
+
+### Work Summary
+
+**1. Created `/src/lib/api-utils.ts` - Consistent API Helper:**
+- `successResponse(data, status?)` - Returns standardized `NextResponse.json` with success format
+- `errorResponse(message, status, code?)` - Returns standardized error JSON
+- `verifyAuth(requiredRole?)` - Verifies authentication via server client, checks profile role
+- `withAuth(handler, requiredRole?)` - Wraps a handler with auth verification
+
+**2. Fixed 7 API Routes Using Client-Side Supabase → Server Client:**
+
+- `/src/app/api/predictions/route.ts`:
+  - Replaced `import { supabase } from '@/lib/supabase'` with `createClient()` from server
+  - Used `getSupabaseAdmin()` for write operations (insert, update)
+  - Refactored helper functions (`getMarketData`, `getSellerTrustData`, `savePredictionFactors`) to accept supabase client as parameter instead of using module-scoped client
+  - Applied `errorResponse` from api-utils
+
+- `/src/app/api/compare/route.ts`:
+  - Replaced client supabase with `await createClient()` inside GET handler
+  - Fixed `car_listing_id` → `listing_id` in car_inspections query
+  - Applied `errorResponse`
+
+- `/src/app/api/marketplace-listings/route.ts`:
+  - Replaced client supabase with `createClient()` for reads and `getSupabaseAdmin()` for writes
+  - Fixed table references from `dealer_marketplace_listings`/`public_marketplace_listings` (non-existent views) to `car_listings` with proper filters
+  - Fixed `user_id` → `seller_id` to match schema
+  - Fixed `price_cash` → `price` to match schema column
+  - Applied `successResponse` and `errorResponse`
+
+- `/src/app/api/dealer-offers/route.ts`:
+  - Replaced client supabase with `createClient()` for reads and `getSupabaseAdmin()` for writes
+  - Fixed `name` → `full_name` in profiles select (matches schema)
+  - Applied `errorResponse`
+
+- `/src/app/api/credit-purchase/route.ts`:
+  - Replaced client supabase with `createClient()` for reads and `getSupabaseAdmin()` for write operations (credit transactions, user credits)
+  - Applied `successResponse` and `errorResponse`
+
+- `/src/app/api/search/route.ts`:
+  - Replaced client supabase with `await createClient()` inside GET handler
+  - Fixed `price_cash` → `price`, `city` → `location_city`, `condition` → `vehicle_condition` column names
+  - Fixed `status` value from `'available'` to `'active'`
+  - Applied `successResponse` and `errorResponse`
+
+- `/src/app/api/rentals/route.ts`:
+  - Replaced client supabase with `await createClient()` inside GET handler
+  - Fixed `car_listing_id` → `listing_id` in car_rental_prices query
+  - Removed `city_id` filter (column doesn't exist on car_listings)
+  - Applied `successResponse` and `errorResponse`
+
+**3. Fixed `/src/app/api/admin/stats/route.ts` Query Issues:**
+- Changed `.eq('status', 'verified')` to `.eq('status', 'paid')` for payments (matching PaymentStatus enum)
+- Removed query to non-existent `listing_boosts` table with `credits_spent` column
+- Replaced with query to `credit_transactions` table for boost revenue tracking
+- Applied `errorResponse` from api-utils
+- Already had proper auth check for admin role (kept as-is)
+
+**4. Fixed `/src/app/api/listings/route.ts` Column Name Issues:**
+- Replaced `is_banned` column references with `status` field checks:
+  - `query.eq('is_banned', true)` → `query.eq('status', 'banned')`
+  - `query.eq('is_banned', false)` removed (redundant with status filter)
+- Fixed `car_listing_id` → `listing_id` in car_images, car_documents, car_features, car_rental_prices inserts
+- Replaced client supabase with `createClient()` for reads, `getSupabaseAdmin()` for writes
+- Fixed column names to match schema: `price_cash` → `price`, `condition` → `vehicle_condition`, `city` → `location_city`
+- Fixed `user_id` → `seller_id` to match schema
+- Removed non-existent column references: `listing_number`, `brand_id`, `model_id`, `generation_id`, `fuel`, `body_type`, `engine_capacity`, `seat_count`, `vin_number`, `plate_number`, `slug`, `expired_at`
+- Applied `successResponse` and `errorResponse`
+
+**5. Fixed `/src/app/api/token-settings/route.ts` Self-Fetching:**
+- Moved `getSupabaseAdmin()` from module scope to inside each handler function
+- This prevents the admin client from being created at import time when env vars may not be available
+- Applied `successResponse` and `errorResponse`
+
+**Stage Summary:**
+- **7 API routes** fixed from client-side supabase to server client
+- **3 additional routes** fixed for query/column issues (admin/stats, listings, token-settings)
+- **1 helper module** created (`api-utils.ts`) with consistent response formatting and auth
+- **Column name fixes**: `car_listing_id` → `listing_id`, `is_banned` → `status`, `price_cash` → `price`, etc.
+- **PaymentStatus fix**: `'verified'` → `'paid'` in admin stats
+- **Removed** non-existent table/column references (listing_boosts.credits_spent, is_banned, etc.)
+- **Lint Status**: All 11 edited files pass lint with no errors
+
+---
+## Task ID: 4 - critical-fixes-agent
+### Work Task
+Fix ALL critical and high-severity code issues in the AutoMarket project.
+
+### Work Summary
+
+#### CRITICAL FIXES:
+1. **Created `/api/upload/route.ts`** — File upload with Supabase Storage, auth required, MIME/size validation
+2. **Created `/lib/api-auth.ts`** — Centralized auth helper (`requireAuth`, `checkAuth`) with role checking; Applied to all admin API routes
+3. **Fixed Admin & Dealer Layout Auth Guards** — Added `useEffect` + `useRouter` redirects for unauthorized users
+4. **Fixed `getSupabaseAdmin()` module-scope calls** — Moved inside handler functions in admin/listings, admin/listings/ban, and listings/create routes
+5. **Fixed `/api/listings/route.ts` admin mode** — Removed `?admin=true` bypass; Uses `checkAuth(request, 'admin')` now
+6. **Fixed `/api/listings/create/route.ts` auth** — Added auth verification + user_id impersonation check
+
+#### HIGH SEVERITY FIXES:
+7. **Fixed type inconsistencies** — Profile.role updated to `'buyer'|'seller'|'dealer'|'admin'`; Brand/CarModel/CarVariant/CarColor/InspectionCategory/InspectionItem/CarInspection/InspectionResult types aligned with actual Supabase schema
+8. **Fixed CarCard transaction type keys** — Changed English keys to Indonesian (jual/beli/rental/kredit); Condition values use Indonesian (baru/bekas/sedang/istimewa)
+9. **Fixed useListings hook** — Already correct (uses city_id and data.listings)
+10. **Fixed useAuth hook** — Already uses getSession() correctly
+11. **Fixed env var handling** — Removed silent placeholder fallbacks; Added specific per-variable validation; Exported `isSupabaseConfigured` flag
+
+### Lint Status: All files pass ESLint with zero errors

@@ -40,7 +40,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatPrice } from '@/lib/utils-marketplace'
-import type { Brand, CarModel, CarColor, Province, City, FuelType, TransmissionType, BodyType, VehicleCondition, TransactionType } from '@/types/marketplace'
+import type { Brand, CarModel, CarColor, Province, City, FuelType, TransmissionType, BodyType, VehicleCondition, TransactionType, VisibilityType } from '@/types/marketplace'
 
 // Form step type
 type FormStep = 'vehicle' | 'details' | 'location' | 'pricing' | 'images' | 'inspection' | 'review'
@@ -71,7 +71,8 @@ export interface ListingFormData {
   price_cash?: number
   price_credit?: number
   price_negotiable: boolean
-  images: { url: string; caption?: string; is_primary: boolean }[]
+  visibility: VisibilityType
+  images: { url: string; caption?: string; is_primary?: boolean }[]
 }
 
 // Props
@@ -119,6 +120,7 @@ export function ListingForm({
     province_id: '',
     city_id: '',
     price_negotiable: true,
+    visibility: 'both',
     images: [],
     ...initialData
   })

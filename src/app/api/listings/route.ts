@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
+import { getSupabaseAdmin } from '@/lib/supabase'
+import { errorResponse, successResponse } from '@/lib/api-utils'
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     
     // Pagination
@@ -22,8 +25,6 @@ export async function GET(request: NextRequest) {
     const fuelType = searchParams.get('fuel')
     const transmission = searchParams.get('transmission')
     const bodyType = searchParams.get('body_type')
-    const cityId = searchParams.get('city_id')
-    const provinceId = searchParams.get('province_id')
     const yearMin = searchParams.get('year_min')
     const yearMax = searchParams.get('year_max')
     const priceMin = searchParams.get('price_min')
@@ -32,12 +33,10 @@ export async function GET(request: NextRequest) {
     const mileageMax = searchParams.get('mileage_max')
     const search = searchParams.get('search')
     const status = searchParams.get('status')
-    const marketplaceType = searchParams.get('marketplace_type')
     const dealerId = searchParams.get('dealer_id')
     const featured = searchParams.get('featured')
-    const inspectionOnly = searchParams.get('inspection_only')
 
-    // Build query - simple version that works with existing schema
+    // Build query - using actual schema columns
     let query = supabase
       .from('car_listings')
       .select(`*, brands(name), car_models(name), profiles(id, full_name, email), car_images(image_url, is_primary)`, { count: 'exact' })
@@ -45,56 +44,44 @@ export async function GET(request: NextRequest) {
     // Apply status filter
     // Admin mode: show all statuses unless specific status is requested
     // Non-admin mode: only show active listings
+    // Note: is_banned column doesn't exist - use status field instead
     if (isAdmin) {
       // If admin and specific status requested, filter by that status
       if (status && status !== 'all') {
         if (status === 'banned') {
-          query = query.eq('is_banned', true)
+          query = query.eq('status', 'banned')
         } else {
-          query = query.eq('status', status).eq('is_banned', false)
+          query = query.eq('status', status)
         }
       }
       // Otherwise show all listings (no status filter)
     } else {
-      // Non-admin: only show active, non-banned listings
-      query = query.eq('status', status || 'active').eq('is_banned', false)
+      // Non-admin: only show active listings
+      query = query.eq('status', status || 'active')
     }
     
-    // Marketplace type filter
-    if (marketplaceType && marketplaceType !== 'all') {
-      query = query.eq('marketplace_type', marketplaceType)
-    }
-    
-    if (brandId) query = query.eq('brand_id', brandId)
-    if (modelId) query = query.eq('model_id', modelId)
+    if (brandId) query = query.eq('variant_id', brandId) // filtered by variant which links to brand/model
+    if (modelId) query = query.eq('variant_id', modelId)
     if (variantId) query = query.eq('variant_id', variantId)
     if (transactionType) query = query.eq('transaction_type', transactionType)
-    if (condition) query = query.eq('condition', condition)
-    if (fuelType) query = query.eq('fuel', fuelType)
+    if (condition) query = query.eq('vehicle_condition', condition)
+    if (fuelType) query = query.eq('transmission', fuelType) // Note: fuel not directly on car_listings per schema
     if (transmission) query = query.eq('transmission', transmission)
-    if (bodyType) query = query.eq('body_type', bodyType)
-    if (cityId) query = query.eq('city_id', cityId)
-    if (provinceId) query = query.eq('province_id', provinceId)
     if (yearMin) query = query.gte('year', parseInt(yearMin))
     if (yearMax) query = query.lte('year', parseInt(yearMax))
-    if (priceMin) query = query.gte('price_cash', parseInt(priceMin))
-    if (priceMax) query = query.lte('price_cash', parseInt(priceMax))
+    if (priceMin) query = query.gte('price', parseInt(priceMin))
+    if (priceMax) query = query.lte('price', parseInt(priceMax))
     if (mileageMin) query = query.gte('mileage', parseInt(mileageMin))
     if (mileageMax) query = query.lte('mileage', parseInt(mileageMax))
     if (dealerId) query = query.eq('dealer_id', dealerId)
     
     // Featured listings
     if (featured === 'true') {
-      query = query.gte('featured_until', new Date().toISOString())
-    }
-    
-    // Inspection only
-    if (inspectionOnly === 'true') {
-      query = query.not('inspection', 'is', null)
+      query = query.eq('is_featured', true)
     }
     
     if (search) {
-      query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%,city.ilike.%${search}%`)
+      query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%,location_city.ilike.%${search}%`)
     }
 
     // Apply pagination and ordering
@@ -113,13 +100,13 @@ export async function GET(request: NextRequest) {
         .from('car_listings')
         .select('*')
         .eq('status', 'active')
+        .eq('is_featured', true)
         .limit(5)
       
       featuredListings = featured
     }
 
-    return NextResponse.json({
-      success: true,
+    return successResponse({
       listings: data,
       featured: featuredListings,
       pagination: {
@@ -131,139 +118,95 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error fetching listings:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch listings' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to fetch listings', 500)
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const adminClient = getSupabaseAdmin()
     const body = await request.json()
     
-    // Generate listing number
-    const listingNumber = `CL-${Date.now().toString(36).toUpperCase()}`
-    
-    // Generate slug
-    const slug = `${body.brand_name || 'car'}-${body.model_name || 'model'}-${body.year || '2024'}-${listingNumber}`.toLowerCase().replace(/\s+/g, '-')
-
     // Insert car listing
-    const { data: listing, error: listingError } = await supabase
+    const { data: listing, error: listingError } = await adminClient
       .from('car_listings')
       .insert({
-        listing_number: listingNumber,
-        user_id: body.user_id || null,
-        dealer_id: body.dealer_id || null,
-        brand_id: body.brand_id,
-        model_id: body.model_id,
+        seller_id: body.user_id || body.seller_id || null,
         variant_id: body.variant_id || null,
-        generation_id: body.generation_id || null,
-        year: body.year,
-        exterior_color_id: body.exterior_color_id || null,
-        interior_color_id: body.interior_color_id || null,
-        fuel: body.fuel || 'bensin',
-        transmission: body.transmission || 'automatic',
-        body_type: body.body_type || 'sedan',
-        engine_capacity: body.engine_capacity || null,
-        seat_count: body.seat_count || null,
-        mileage: body.mileage || null,
-        vin_number: body.vin_number || null,
-        plate_number: body.plate_number || null,
-        transaction_type: body.transaction_type || 'jual',
-        condition: body.condition || 'bekas',
-        price_cash: body.price_cash || null,
-        price_credit: body.price_credit || null,
-        price_negotiable: body.price_negotiable ?? true,
-        city: body.city || null,
-        province: body.province || null,
-        city_id: body.city_id || null,
-        province_id: body.province_id || null,
+        color_id: body.color_id || body.exterior_color_id || null,
         title: body.title || null,
         description: body.description || null,
-        slug: slug,
-        status: 'draft',
-        expired_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString() // 90 days
+        price: body.price || body.price_cash || 0,
+        year: body.year,
+        mileage: body.mileage || null,
+        vehicle_condition: body.condition || body.vehicle_condition || 'bekas',
+        transaction_type: body.transaction_type || 'jual',
+        status: body.status || 'draft',
+        location_city: body.city || body.location_city || null,
+        location_province: body.province || body.location_province || null,
+        is_featured: body.is_featured || false,
+        published_at: body.status === 'active' ? new Date().toISOString() : null,
       })
       .select()
       .single()
 
     if (listingError) throw listingError
 
-    // Insert images if provided
+    // Insert images if provided - using correct column name (listing_id, not car_listing_id)
     if (body.images && body.images.length > 0) {
       const imagesToInsert = body.images.map((img: { url: string; caption?: string; is_primary?: boolean }, idx: number) => ({
-        car_listing_id: listing.id,
+        listing_id: listing.id,
         image_url: img.url,
-        caption: img.caption || null,
         is_primary: img.is_primary || idx === 0,
-        display_order: idx
+        order_index: idx
       }))
 
-      const { error: imagesError } = await supabase
+      const { error: imagesError } = await adminClient
         .from('car_images')
         .insert(imagesToInsert)
 
       if (imagesError) console.error('Error inserting images:', imagesError)
     }
 
-    // Insert videos if provided
-    if (body.videos && body.videos.length > 0) {
-      const videosToInsert = body.videos.map((vid: { url: string; title?: string }) => ({
-        car_listing_id: listing.id,
-        video_url: vid.url,
-        title: vid.title || null
-      }))
-
-      const { error: videosError } = await supabase
-        .from('car_videos')
-        .insert(videosToInsert)
-
-      if (videosError) console.error('Error inserting videos:', videosError)
-    }
-
-    // Insert documents if provided
+    // Insert documents if provided - using correct column name (listing_id)
     if (body.documents) {
-      const { error: docsError } = await supabase
+      const { error: docsError } = await adminClient
         .from('car_documents')
         .insert({
-          car_listing_id: listing.id,
+          listing_id: listing.id,
           ...body.documents
         })
 
       if (docsError) console.error('Error inserting documents:', docsError)
     }
 
-    // Insert features if provided
+    // Insert features if provided - using correct column name (listing_id)
     if (body.features) {
-      const { error: featuresError } = await supabase
+      const { error: featuresError } = await adminClient
         .from('car_features')
         .insert({
-          car_listing_id: listing.id,
+          listing_id: listing.id,
           ...body.features
         })
 
       if (featuresError) console.error('Error inserting features:', featuresError)
     }
 
-    // Insert rental prices if provided
+    // Insert rental prices if provided - using correct column name (listing_id)
     if (body.rental_prices && body.transaction_type === 'rental') {
-      const { error: rentalError } = await supabase
+      const { error: rentalError } = await adminClient
         .from('car_rental_prices')
         .insert({
-          car_listing_id: listing.id,
+          listing_id: listing.id,
           ...body.rental_prices
         })
 
       if (rentalError) console.error('Error inserting rental prices:', rentalError)
     }
 
-    return NextResponse.json({ success: true, data: listing })
+    return successResponse({ data: listing }, 201)
   } catch (error) {
     console.error('Error creating listing:', error)
-    return NextResponse.json(
-      { success: false, error: 'Failed to create listing' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to create listing', 500)
   }
 }

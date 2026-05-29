@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { errorResponse } from '@/lib/api-utils'
 
 // GET: Get admin dashboard stats (admin only)
 export async function GET(request: NextRequest) {
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return errorResponse('Unauthorized', 401)
     }
     
     const { data: profile } = await supabase
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
       .single()
     
     if (!profile || profile.role !== 'admin') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+      return errorResponse('Admin access required', 403)
     }
     
     // Get total users count
@@ -52,36 +53,30 @@ export async function GET(request: NextRequest) {
       .eq('verified', false)
       .eq('is_active', true)
     
-    // Get total revenue from verified payments
+    // Get total revenue from paid payments (status = 'paid', matching PaymentStatus enum)
     const { data: paymentsData } = await supabase
       .from('payments')
       .select('amount')
-      .eq('status', 'verified')
+      .eq('status', 'paid')
     
     const totalRevenue = paymentsData?.reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0
     
-    // Get token sales count (total credits awarded from verified payments)
+    // Get token sales count (total credits awarded from paid payments)
     const { data: creditsData } = await supabase
       .from('payments')
       .select('credits_awarded')
-      .eq('status', 'verified')
+      .eq('status', 'paid')
     
     const tokenSales = creditsData?.reduce((sum, payment) => sum + (payment.credits_awarded || 0), 0) || 0
     
-    // Get boost revenue (total credits spent on boosts)
-    const { data: boostData } = await supabase
-      .from('listing_boosts')
-      .select('credits_spent')
-      .eq('is_active', true)
+    // Get boost revenue from credit_transactions
+    const { data: boostTransactions } = await supabase
+      .from('credit_transactions')
+      .select('amount')
+      .eq('type', 'boost')
     
-    const boostRevenue = boostData?.reduce((sum, boost) => sum + (boost.credits_spent || 0), 0) || 0
-    
-    // Get active boosts count
-    const { count: activeBoosts } = await supabase
-      .from('listing_boosts')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
-    
+    const boostRevenue = boostTransactions?.reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0) || 0
+
     // Calculate monthly growth (users created this month vs last month)
     const now = new Date()
     const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -162,7 +157,6 @@ export async function GET(request: NextRequest) {
       totalRevenue,
       tokenSales,
       boostRevenue,
-      activeBoosts: activeBoosts || 0,
       monthlyGrowth,
       
       // Chart data
@@ -199,7 +193,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error fetching admin stats:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return errorResponse('Internal server error', 500)
   }
 }
 
@@ -209,7 +203,7 @@ async function fetchMonthlyRevenueData(supabase: Awaited<ReturnType<typeof creat
   const { data: payments, error } = await supabase
     .from('payments')
     .select('amount, created_at, credits_awarded')
-    .eq('status', 'verified')
+    .eq('status', 'paid')
     .gte('created_at', `${year}-01-01`)
     .lte('created_at', `${year}-12-31`)
     .order('created_at', { ascending: true })

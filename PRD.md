@@ -8,6 +8,15 @@
 1. [Visi & Misi Produk](#1-visi--misi-produk)
 2. [User Roles & Personas](#2-user-roles--personas)
 3. [Arsitektur Sistem](#3-arsitektur-sistem)
+   - [3.1 Infrastructure](#31-infrastructure)
+   - [3.2 Tech Stack](#32-tech-stack)
+   - [3.3 Database — 67 Models](#33-database--67-models-20-modul)
+   - [3.4 API Routes — 127 Endpoints](#34-api-routes--127-endpoints)
+   - [3.5 Frontend Pages — 76 Pages](#35-frontend-pages--76-pages)
+   - [3.6 Entity Relationship Diagram](#36-entity-relationship-diagram)
+   - [3.7 Non-Functional Requirements](#37-non-functional-requirements)
+   - [3.8 API Security & Rate Limiting](#38-api-security--rate-limiting)
+   - [3.9 Business Model & Revenue](#39-business-model--revenue)
 4. [User Flow — Lengkap](#4-user-flow--lengkap)
 5. [Feature Matrix — Per Role](#5-feature-matrix--per-role)
 6. [Detail Fitur Per Modul](#6-detail-fitur-per-modul)
@@ -571,32 +580,624 @@ INSPECTOR (assigned by system/admin)
 | 39 | `Message` | CHAT | Pesan dalam percakapan (text, is_read) |
 | 40 | `Order` | ORDER | Transaksi jual-beli (escrow, fee breakdown) |
 | 41 | `Notification` | NOTIFICATION | Notifikasi user (type, action_url) |
-| 42 | `DealerOffer` | DEALER MKT | Penawaran dealer ke listing (counter-offer, financing) |
-| 43 | `DealerOfferHistory` | DEALER MKT | Riwayat negosiasi offer |
-| 44 | `DealerMarketplaceFavorite` | DEALER MKT | Favorit dealer di marketplace |
-| 45 | `DealerMarketplaceSettings` | DEALER MKT | Setting marketplace (offer_duration, max_counter) |
-| 46 | `DealerOfferSettings` | DEALER MKT | Setting offer (key-value) |
-| 47 | `DealerMarketplaceView` | DEALER MKT | Log view listing oleh dealer |
-| 48 | `AiPrediction` | AI | Prediksi harga AI (VLM analysis, market data, confidence) |
-| 49 | `PredictionPhoto` | AI | Foto untuk prediksi (VLM analyzed) |
-| 50 | `PredictionFactor` | AI | Faktor yang mempengaruhi prediksi (impact, weight) |
-| 51 | `AiPriceAnalysis` | AI | Analisis harga dari inspeksi |
+| 42 | `DealerOffer` | DEALER MARKETPLACE | Penawaran dealer ke listing (amount, status, counter_offers, expires) |
+| 43 | `DealerOfferHistory` | DEALER MARKETPLACE | Riwayat perubahan offer (status change log) |
+| 44 | `DealerMarketplaceFavorite` | DEALER MARKETPLACE | Favorit listing di dealer marketplace |
+| 45 | `DealerMarketplaceSettings` | DEALER MARKETPLACE | Setting marketplace per dealer (offer_duration, auto_reject) |
+| 46 | `DealerOfferSettings` | DEALER MARKETPLACE | Setting offer per dealer (max_counter, notification) |
+| 47 | `DealerMarketplaceView` | DEALER MARKETPLACE | Tracking view listing di dealer marketplace |
+| 48 | `AiPrediction` | AI | Prediksi harga AI (price, confidence, factors, recommendation) |
+| 49 | `PredictionPhoto` | AI | Foto yang dianalisis AI (VLM input) |
+| 50 | `PredictionFactor` | AI | Faktor prediksi (brand, model, year, mileage, condition, weight) |
+| 51 | `AiPriceAnalysis` | AI | Analisis harga pasar (market_avg, min, max, position) |
 | 52 | `Country` | LOCATION | Data negara |
-| 53 | `Province` | LOCATION | Data provinsi Indonesia |
-| 54 | `City` | LOCATION | Data kota/kabupaten |
-| 55 | `District` | LOCATION | Data kecamatan |
-| 56 | `Village` | LOCATION | Data kelurahan/desa |
-| 57 | `Banner` | BANNER | Banner promosi (position, impressions, clicks) |
-| 58 | `UserSetting` | SETTINGS | Pengaturan user (theme, language, notifications) |
-| 59 | `AnalyticsPageView` | ANALYTICS | Page view tracking |
-| 60 | `CarView` | ANALYTICS | Listing view tracking |
-| 61 | `Wallet` | WALLET | Saldo dompet user |
-| 62 | `AstraPayConfig` | ASTRAPAY | Konfigurasi AstraPay (client_id, keys, sandbox) |
-| 63 | `AstraPayToken` | ASTRAPAY | Audit trail OAuth token AstraPay |
-| 64 | `AstraPayAccountLink` | ASTRAPAY | User yang sudah link akun AstraPay |
-| 65 | `AstraPayTransaction` | ASTRAPAY | Transaksi pembayaran AstraPay (full lifecycle) |
-| 66 | `CreditApplication` | CREDIT/FIN | Aplikasi kredit kendaraan (bunga flat, tenor 1-84 bulan) |
-| 67 | `CreditPayment` | CREDIT/FIN | Jadwal cicilan bulanan (principal + interest + late fee) |
+| 53 | `Province` | LOCATION | Data provinsi Indonesia (34 provinsi) |
+| 54 | `City` | LOCATION | Data kota/kabupaten per provinsi |
+| 55 | `District` | LOCATION | Data kecamatan per kota |
+| 56 | `Village` | LOCATION | Data kelurahan/desa per kecamatan |
+| 57 | `Banner` | MARKETING | Banner promo (image, link, position, active, click_count) |
+| 58 | `UserSetting` | USER | Pengaturan user (notifications, privacy, language) |
+| 59 | `AnalyticsPageView` | ANALYTICS | Tracking page view (page, referrer, device, browser) |
+| 60 | `CarView` | ANALYTICS | Tracking listing view (listing_id, viewer, source, device) |
+| 61 | `Wallet` | FINANCIAL | Dompet digital user (balance, pending, available) |
+| 62 | `AstraPayConfig` | ASTRAPAY | Konfigurasi AstraPay (client_id, secret, private_key, env) |
+| 63 | `AstraPayToken` | ASTRAPAY | OAuth token cache (access_token, expires_at, token_type) |
+| 64 | `AstraPayAccountLink` | ASTRAPAY | Account linking user↔AstraPay (link_status, partner_id) |
+| 65 | `AstraPayTransaction` | ASTRAPAY | Riwayat transaksi AstraPay (payment_url, status, amount, method) |
+| 66 | `CreditApplication` | CREDIT | Pengajuan kredit (loan_amount, tenor, interest_rate, status, DP) |
+| 67 | `CreditPayment` | CREDIT | Jadwal cicilan kredit (month, amount_due, paid, status, late_fee) |
+
+### 3.4 API Routes — 127 Endpoints
+
+#### Auth Module (4)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/auth/check-role` | Cek role user saat ini |
+| GET/PUT | `/api/profile` | Profil user (read/update) |
+| GET/PUT | `/api/users/[id]` | User by ID (read/update) |
+| GET/PUT | `/api/user-settings` | Pengaturan user (read/update) |
+
+#### Listing Module (8)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/listings` | Daftar semua listing (filter, pagination) |
+| POST | `/api/listings/create` | Buat listing baru |
+| GET/PUT/DELETE | `/api/listings/[id]` | CRUD listing by ID |
+| POST | `/api/listings/[id]/view` | Tracking view listing |
+| GET | `/api/my-listings` | Listing milik user login |
+| GET | `/api/user/listings` | Listing by user ID |
+| GET | `/api/marketplace-listings` | Listing untuk marketplace |
+| POST | `/api/compare` | Bandingkan beberapa listing |
+
+#### Search Module (1)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/search` | Global search (listing, dealer, brand) |
+
+#### Car Master Data (4)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/brands` | Daftar merk mobil |
+| POST | `/api/brands/seed` | Seed data merk mobil |
+| GET | `/api/models` | Daftar model mobil |
+| GET | `/api/colors` | Daftar warna mobil |
+
+#### Dealer Module (7)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/dealers` | Daftar dealer |
+| GET | `/api/dealers/[slug]` | Detail dealer by slug |
+| GET/POST | `/api/dealer/team` | Kelola staf dealer |
+| GET | `/api/dealer/reviews` | Review dealer |
+| GET | `/api/dealer/stats` | Statistik dealer |
+| POST | `/api/dealer-registration` | Pendaftaran dealer baru |
+| GET/POST | `/api/admin/dealers` | Admin: kelola dealer |
+
+#### Dealer Marketplace (7)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/dealer-marketplace/listings` | Listing di dealer marketplace |
+| GET/POST | `/api/dealer-marketplace/offers` | Offer di dealer marketplace |
+| GET | `/api/dealer-marketplace/offers/count` | Hitung jumlah offer |
+| GET/POST | `/api/dealer-marketplace/favorites` | Favorit dealer marketplace |
+| GET/PUT | `/api/dealer-marketplace/settings` | Setting dealer marketplace |
+| GET/POST | `/api/dealer-offers` | Dealer offer management |
+| GET | `/api/dealer-marketplace/check-db` | Cek database DM |
+
+#### Inspection Module (10)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET/POST | `/api/inspections` | Daftar / buat inspeksi |
+| POST | `/api/inspections/submit` | Submit hasil inspeksi |
+| GET | `/api/inspections/bookings` | Daftar booking inspeksi |
+| GET | `/api/inspections/pricing` | Paket harga inspeksi |
+| GET | `/api/inspections/certificate` | Sertifikat inspeksi |
+| GET | `/api/inspections/[id]/certificate` | Sertifikat by inspeksi ID |
+| GET | `/api/inspections/export-pdf` | Export sertifikat PDF |
+| GET | `/api/inspection-items` | Item inspeksi per kategori |
+| GET/POST | `/api/admin/categories` | Admin: kategori inspeksi |
+| GET/PUT/DELETE | `/api/admin/categories/[id]` | Admin: CRUD kategori |
+
+#### Credit/Financing Module (6)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| POST | `/api/credit/calculator` | Simulasi kredit (bunga flat) |
+| POST | `/api/credit/apply` | Ajukan kredit |
+| GET | `/api/credit/apply` | Daftar aplikasi kredit |
+| GET/PUT | `/api/credit/[id]` | Detail / update kredit |
+| POST | `/api/credit/pay-monthly` | Bayar cicilan bulanan |
+| GET | `/api/credit-packages` | Paket kredit tersedia |
+
+#### AstraPay Module (6)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/astrapay/auth` | OAuth2 authorize AstraPay |
+| POST | `/api/astrapay/payment` | Buat pembayaran AstraPay |
+| POST | `/api/astrapay/callback` | Webhook callback AstraPay |
+| GET | `/api/astrapay/transaction-status` | Cek status transaksi |
+| POST | `/api/astrapay/account-link` | Link akun AstraPay |
+| GET | `/api/astrapay/account-link` | Cek status account linking |
+
+#### Token Module (6)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/token-costs` | Biaya token per aksi |
+| GET | `/api/token-settings` | Setting token platform |
+| GET | `/api/token-packages` | Paket token tersedia |
+| POST | `/api/token-purchase` | Beli token |
+| GET | `/api/token-transactions` | Riwayat transaksi token |
+| GET | `/api/user-tokens` | Saldo token user |
+
+#### Credits Module (9)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/credits/balance` | Saldo kredit |
+| GET | `/api/credits/transactions` | Riwayat transaksi kredit |
+| GET | `/api/credits/packages` | Paket kredit tersedia |
+| POST | `/api/credits/deduct` | Potong kredit |
+| GET | `/api/credits/boosts` | Daftar boost tersedia |
+| GET/POST | `/api/credits/payments` | Pembayaran kredit |
+| POST | `/api/credits/registration-bonus` | Bonus registrasi |
+| POST | `/api/credit-purchase` | Beli kredit |
+| GET | `/api/boost-features` | Fitur boost listing |
+
+#### Chat Module (2)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET/POST | `/api/conversations` | Daftar / buat percakapan |
+| GET/POST | `/api/conversations/[id]/messages` | Pesan dalam percakapan |
+
+#### Order Module (2)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET/POST | `/api/orders` | Daftar / buat order |
+| GET | `/api/admin/orders` | Admin: semua order |
+
+#### AI Prediction Module (2)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| POST | `/api/predictions` | Buat prediksi harga AI |
+| GET | `/api/my-predictions` | Riwayat prediksi user |
+
+#### KYC Module (2)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET/POST | `/api/kyc` | Submit / cek KYC |
+| GET | `/api/admin/kyc` | Admin: review KYC |
+
+#### Wallet Module (3)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET/POST | `/api/wallet` | Cek saldo / top-up wallet |
+| GET | `/api/wallet/transactions` | Riwayat transaksi wallet |
+
+#### Location Module (5)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/locations` | Data lokasi (semua level) |
+| GET | `/api/locations/provinces` | Data provinsi |
+| GET | `/api/locations/cities` | Data kota/kabupaten |
+| GET | `/api/locations/districts` | Data kecamatan |
+| GET | `/api/locations/villages` | Data kelurahan/desa |
+
+#### Notification Module (2)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/notifications` | Daftar notifikasi user |
+| GET/POST | `/api/admin/notifications` | Admin: kelola notifikasi |
+
+#### Banner Module (3)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/banners` | Daftar banner aktif |
+| GET/PUT | `/api/banners/[id]` | Detail / update banner |
+| POST | `/api/banners/[id]/click` | Tracking klik banner |
+
+#### Dashboard Module (3)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/dashboard/stats` | Statistik dashboard |
+| GET | `/api/dashboard/charts` | Data chart dashboard |
+| GET | `/api/dashboard/activity` | Aktivitas terbaru |
+
+#### Favorites Module (3)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET/POST | `/api/favorites` | Daftar / tambah favorit |
+| DELETE | `/api/favorites/[id]` | Hapus favorit |
+| GET | `/api/my-favorites` | Favorit user login |
+
+#### Stats Module (1)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/stats` | Statistik platform |
+
+#### Rentals Module (1)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/rentals` | Daftar rental |
+
+#### Admin Module (24)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET/POST | `/api/admin/listings` | Admin: kelola listing |
+| POST | `/api/admin/listings/ban` | Admin: ban listing |
+| GET/POST | `/api/admin/users` | Admin: kelola user |
+| GET/POST | `/api/admin/dealers` | Admin: kelola dealer |
+| GET | `/api/admin/orders` | Admin: semua order |
+| GET/POST | `/api/admin/payments` | Admin: verifikasi pembayaran |
+| GET/POST | `/api/admin/credits` | Admin: kelola kredit |
+| GET/POST | `/api/admin/tokens` | Admin: kelola token |
+| GET/PUT | `/api/admin/token-settings` | Admin: setting token |
+| GET | `/api/admin/analytics` | Admin: analytics |
+| GET | `/api/admin/revenue` | Admin: laporan revenue |
+| GET/POST | `/api/admin/banners` | Admin: kelola banner |
+| GET/POST | `/api/admin/coupons` | Admin: kelola kupon |
+| GET/POST | `/api/admin/settings` | Admin: setting platform |
+| GET/PUT | `/api/admin/fee-settings` | Admin: setting fee |
+| GET | `/api/admin/activity` | Admin: aktivitas |
+| GET | `/api/admin/activity-logs` | Admin: log aktivitas detail |
+| GET/POST | `/api/admin/withdrawals` | Admin: pencairan dana |
+| GET/POST | `/api/admin/topup` | Admin: manual topup |
+| GET/POST | `/api/admin/boost` | Admin: kelola boost |
+| GET/POST | `/api/admin/tickets` | Admin: tiket support |
+| GET/POST | `/api/admin/notifications` | Admin: kelola notifikasi |
+| POST | `/api/admin/migrate-inspection-items` | Admin: migrasi item inspeksi |
+| GET | `/api/admin/reports` | Admin: laporan |
+| GET/POST | `/api/admin/transactions` | Admin: semua transaksi |
+| GET | `/api/admin/schema-inspect` | Admin: inspeksi schema DB |
+| GET | `/api/admin/db-check` | Admin: cek database |
+
+#### Utility/Seed Endpoints (13)
+| Method | Route | Deskripsi |
+|--------|-------|-----------|
+| GET | `/api/db-status` | Status database |
+| GET | `/api/check-db` | Cek koneksi database |
+| GET | `/api/db-check` | Validasi database |
+| GET | `/api/test-db` | Test query database |
+| POST | `/api/seed` | Seed data umum |
+| POST | `/api/seed-data` | Seed data lengkap |
+| POST | `/api/seed-simple` | Seed data minimal |
+| POST | `/api/seed-full` | Seed data penuh |
+| POST | `/api/seed-locations` | Seed data lokasi |
+| POST | `/api/seed-dealers` | Seed data dealer |
+| POST | `/api/seed-listings` | Seed data listing |
+| POST | `/api/seed-test-data` | Seed data testing |
+| POST | `/api/seed-districts` | Seed data kecamatan |
+| POST | `/api/setup-token-tables` | Setup tabel token |
+| POST | `/api/setup-dealer-schema` | Setup schema dealer |
+| POST | `/api/run-schema` | Jalankan schema migration |
+| POST | `/api/update-photos` | Update foto listing |
+| POST | `/api/fix-listings-visibility` | Fix visibilitas listing |
+| GET | `/api/schema-status` | Status schema database |
+
+### 3.5 Frontend Pages — 76 Pages
+
+#### Public Pages (16)
+| Route | Halaman |
+|-------|---------|
+| `/` | Landing Page |
+| `/auth` | Login / Register |
+| `/onboarding` | Onboarding wizard |
+| `/marketplace` | Browse semua listing |
+| `/dealer-marketplace` | Dealer B2B marketplace |
+| `/listing/[slug]` | Detail listing + credit calculator |
+| `/listing/create` | Buat listing wizard |
+| `/prediction` | AI Price Prediction |
+| `/inspections` | Browse inspeksi |
+| `/inspection-preview` | Preview inspeksi |
+| `/certificate/[id]` | Sertifikat inspeksi |
+| `/tokens` | Paket token |
+| `/credits` | Paket kredit |
+| `/user/[id]` | Profil user publik |
+| `/dealer/[slug]` | Profil dealer publik |
+| `/cara-kerja` | Cara kerja (statis) |
+| `/kategori` | Browse kategori |
+| `/inspector` | Info inspektor |
+
+#### Dashboard Pages (24)
+| Route | Halaman |
+|-------|---------|
+| `/dashboard` | Dashboard utama |
+| `/dashboard/profile` | Edit profil |
+| `/dashboard/listings` | Listing saya |
+| `/dashboard/listings/create` | Buat listing |
+| `/dashboard/listings/[id]/edit` | Edit listing |
+| `/dashboard/favorites` | Mobil tersimpan |
+| `/dashboard/messages` | Chat inbox |
+| `/dashboard/orders` | Pesanan saya |
+| `/dashboard/inspeksi` | Overview inspeksi |
+| `/dashboard/inspeksi/list` | Daftar inspeksi |
+| `/dashboard/inspeksi/baru` | Buat inspeksi baru |
+| `/dashboard/inspeksi/[id]` | Detail inspeksi |
+| `/dashboard/predictions` | Prediksi AI |
+| `/dashboard/prediction` | Prediksi baru |
+| `/dashboard/tokens` | Saldo token |
+| `/dashboard/credits` | Kredit + Kredit Aktif |
+| `/dashboard/wallet` | Wallet |
+| `/dashboard/withdraw` | Tarik dana |
+| `/dashboard/kyc` | Submit KYC |
+| `/dashboard/notifications` | Notifikasi |
+| `/dashboard/settings` | Pengaturan |
+| `/dashboard/offers` | Offer dealer |
+| `/dashboard/coupons` | Kupon saya |
+| `/dashboard/support` | Support / tiket |
+| `/dashboard/dealer-marketplace-workflow` | Panduan DM workflow |
+
+#### Dealer Pages (8)
+| Route | Halaman |
+|-------|---------|
+| `/dealer/dashboard` | Dashboard dealer |
+| `/dealer/inventory` | Manajemen inventory |
+| `/dealer/offers` | Offer masuk/keluar |
+| `/dealer/profile` | Edit profil dealer |
+| `/dealer/stats` | Analytics dealer |
+| `/dealer/team` | Manajemen staf |
+| `/dealer/marketplace` | Dealer marketplace |
+| `/dealer/reviews` | Review dealer |
+
+#### Admin Pages (27)
+| Route | Halaman |
+|-------|---------|
+| `/admin` | Dashboard admin |
+| `/admin/users` | Manajemen user |
+| `/admin/listings` | Manajemen listing |
+| `/admin/dealers` | Manajemen dealer |
+| `/admin/orders` | Manajemen order |
+| `/admin/payments` | Verifikasi pembayaran |
+| `/admin/credits` | Manajemen kredit |
+| `/admin/tokens` | Manajemen token |
+| `/admin/tokens/pricing` | Setting harga token |
+| `/admin/kyc` | Review KYC |
+| `/admin/analytics` | Dashboard analytics |
+| `/admin/revenue` | Laporan revenue |
+| `/admin/banners` | Manajemen banner |
+| `/admin/coupons` | Manajemen kupon |
+| `/admin/settings` | Setting platform |
+| `/admin/activity` | Log aktivitas |
+| `/admin/activity-logs` | Log detail |
+| `/admin/withdrawals` | Permintaan pencairan |
+| `/admin/topup` | Topup manual |
+| `/admin/boost` | Fitur boost |
+| `/admin/tickets` | Tiket support |
+| `/admin/inspeksi/pricing` | Harga inspeksi |
+| `/admin/categories` | Kategori inspeksi |
+| `/admin/dealer-marketplace` | Setting DM |
+| `/admin/broadcast` | Broadcast notifikasi |
+| `/admin/reports` | Laporan |
+| `/admin/transactions` | Semua transaksi |
+
+#### Utility Pages (4)
+| Route | Halaman |
+|-------|---------|
+| `/db-status` | Status database |
+| `/test-db` | Test database |
+| `/database-setup` | Setup database |
+| `/demo/stats` | Demo statistik |
+
+### 3.6 Entity Relationship Diagram
+
+```
+Profile ←── Dealer ←── DealerStaff
+   │          │
+   │     DealerRegistration
+   │          │
+   ├── KycVerification
+   │
+   ├── CarListing ←── CarImage
+   │       │    ←── CarVideo
+   │       │    ←── CarDocument
+   │       │    ←── CarFeature
+   │       │    ←── CarFavorite
+   │       │    ←── CarRentalPrice
+   │       │    ←── CarView
+   │       │    ←── CarInspection ←── InspectionResult
+   │       │                          InspectionBooking
+   │       │
+   ├── DealerOffer ←── DealerOfferHistory
+   │       │
+   │  DealerMarketplaceFavorite
+   │  DealerMarketplaceSettings
+   │  DealerMarketplaceView
+   │
+   ├── Conversation ←── Message
+   │
+   ├── Order
+   │
+   ├── AiPrediction ←── PredictionPhoto
+   │       │    ←── PredictionFactor
+   │       │    ←── AiPriceAnalysis
+   │
+   ├── Wallet
+   │
+   ├── UserCredit ←── CreditTransaction
+   │       CreditPackage
+   │       CreditUsageLog
+   │
+   ├── TokenBalance ←── TokenTransaction
+   │       TokenPackage
+   │       UserToken
+   │
+   ├── Payment
+   │   ListingBoost
+   │   BoostFeature
+   │
+   ├── AstraPayConfig
+   │   AstraPayToken
+   │   AstraPayAccountLink
+   │   AstraPayTransaction
+   │
+   ├── CreditApplication ←── CreditPayment
+   │
+   ├── Notification
+   │   Banner
+   │   UserSetting
+   │
+   └── Province → City → District → Village
+```
+
+**Key Relationships:**
+- `Profile` → Central user model; 1:1 with `Dealer`, `KycVerification`, `Wallet`, `UserCredit`, `TokenBalance`
+- `CarListing` → Core marketplace entity; 1:N with images, features, inspections, offers
+- `Dealer` → 1:N with `DealerStaff`, `DealerOffer`, `CarListing`
+- `CarInspection` → 1:N with `InspectionResult`; N:1 with `CarListing` and `Profile` (inspector)
+- `CreditApplication` → 1:N with `CreditPayment` (amortization schedule)
+- `Province` → `City` → `District` → `Village` (4-level location hierarchy)
+- `Conversation` → N:2 with `Profile` (buyer + seller); 1:N with `Message`
+
+### 3.7 Non-Functional Requirements
+
+#### Performance
+| Aspek | Target | Implementasi |
+|-------|--------|-------------|
+| Page Load | < 3s (First Contentful Paint) | SSR + ISR via Next.js App Router |
+| API Response | < 500ms (p95) | Prisma query optimization, connection pooling |
+| Time to Interactive | < 5s | Code splitting, lazy loading, React Suspense |
+| Image Loading | Lazy load + WebP | Next.js `<Image>` dengan optimization |
+| Bundle Size | < 300KB (initial JS) | Tree shaking, dynamic imports |
+| Database Query | < 100ms (simple), < 300ms (complex) | Prisma query logging, index optimization |
+
+#### Security
+| Aspek | Implementasi |
+|-------|-------------|
+| Authentication | NextAuth.js JWT session, Google OAuth, Supabase Auth |
+| Authorization | RBAC 5 role (ADMIN, DEALER, SELLER, BUYER, INSPECTOR) |
+| CSRF Protection | Next.js built-in CSRF token |
+| Input Validation | Zod schema di semua API endpoint |
+| SQL Injection | Prisma ORM parameterized queries (automatic) |
+| XSS Prevention | React auto-escaping, CSP headers |
+| Password | Hashed via NextAuth/Supabase (bcrypt) |
+| Session | JWT httpOnly cookie, 24h expiry |
+
+#### Scalability
+| Aspek | Strategi |
+|-------|----------|
+| API | Stateless REST API, horizontal scaling ready |
+| Database | SQLite (dev) → PostgreSQL (prod) via Prisma migration |
+| File Storage | Local filesystem (dev) → CDN/S3 ready (prod) |
+| Caching | TanStack Query (client), ISR (server) |
+| Search | Full-text search → ready for Elasticsearch integration |
+| Rate Limiting | ⚠️ Not yet implemented (TODO) |
+
+#### Availability
+| Aspek | Target |
+|-------|--------|
+| Uptime | 99.9% target |
+| Health Check | `/api/db-status`, `/api/check-db` |
+| Error Handling | Global error boundary, API error standard format |
+| Monitoring | Console logging → ready for Sentry/DataDog |
+| Backup | SQLite file backup → PostgreSQL pg_dump (prod) |
+
+#### Accessibility
+| Aspek | Target |
+|-------|--------|
+| Standard | WCAG 2.1 AA compliance |
+| Semantic HTML | Proper heading hierarchy, landmarks |
+| Keyboard Navigation | All interactive elements focusable |
+| Color Contrast | Minimum 4.5:1 ratio |
+| Screen Reader | ARIA labels on interactive components |
+| Form Labels | All form inputs have associated labels |
+
+### 3.8 API Security & Rate Limiting
+
+#### Authentication
+| Metode | Implementasi | Digunakan di |
+|--------|-------------|-------------|
+| NextAuth.js JWT | Session-based JWT (httpOnly cookie) | Semua protected endpoint |
+| Google OAuth | One-tap sign-in | Login/register flow |
+| Supabase Auth | Legacy auth provider | Auth fallback |
+
+#### Authorization — RBAC
+```
+ADMIN        → Full access (all 127 endpoints)
+DEALER       → Dealer module + Listing + DM + Inspection + Chat + Credits + Token
+SELLER       → Listing (own) + Inspection + Chat + Credits + Token + KYC
+BUYER        → Browse + Chat + Order + Credit + Favorites + Prediction
+INSPECTOR    → Inspection module only (create, submit, certificate)
+```
+
+**Route Middleware:** Setiap `/api/*` route dilindungi oleh `withAuth()` middleware yang memvalidasi session dan role sebelum handler dieksekusi.
+
+#### Rate Limiting
+| Status | Detail |
+|--------|--------|
+| ⚠️ **Not Implemented** | Belum ada rate limiting di production |
+| TODO | Implement IP-based rate limiting (per-endpoint) |
+| Rekomendasi | `upstash/ratelimit` atau custom middleware |
+| Priority Endpoints | `/api/auth/*`, `/api/predictions`, `/api/astrapay/*` |
+
+#### Input Validation
+| Layer | Implementasi |
+|-------|-------------|
+| API Route | Zod schema validation di setiap POST/PUT handler |
+| Form Client | React Hook Form + Zod resolver |
+| Database | Prisma schema-level constraints |
+| File Upload | Image type validation (jpeg, png, webp), max size 5MB |
+
+#### CORS & Headers
+| Aspek | Implementasi |
+|-------|-------------|
+| CORS | Next.js default same-origin policy |
+| Security Headers | X-Frame-Options, X-Content-Type-Options |
+| Content-Type | JSON for API, multipart for file upload |
+
+#### AstraPay Security
+| Aspek | Implementasi |
+|-------|-------------|
+| OAuth2 | Client Credentials flow (server-to-server) |
+| API Key | `client_id` + `client_secret` + `private_key` |
+| Signature | RSA-SHA256 signature per SNAP specification |
+| Callback | Webhook signature verification |
+| Environment | Sandbox (dev) / Production toggle via `AstraPayConfig.env` |
+
+#### File Upload Security
+| Aspek | Implementasi |
+|-------|-------------|
+| Type Validation | Only jpeg, png, webp allowed |
+| Size Limit | Max 5MB per file |
+| Storage | Local filesystem (`/public/uploads/`) |
+| Filename | UUID-based naming (no user-supplied filenames) |
+| Scan | ⚠️ No malware scanning (TODO) |
+
+### 3.9 Business Model & Revenue
+
+#### Token Economy
+| Komponen | Nilai |
+|----------|-------|
+| Harga Token | Rp 10.000 per token |
+| Listing Fee | 1 token per 30 hari |
+| Featured Boost | 2 token/hari |
+| Urgent Boost | 3 token/hari |
+
+#### Revenue Streams
+| Stream | Model | Estimasi |
+|--------|-------|----------|
+| **Listing Fee** | 1 token (Rp 10.000) per listing/30 hari | Volume-based |
+| **Boost Fee** | Featured 2 token/hari, Urgent 3 token/hari | Recurring |
+| **Platform Fee** | 1% dari transaksi (dipotong dari seller proceeds) | GMV-based |
+| **Credit Financing** | Interest spread dari AstraPay partnership | Spread-based |
+| **Inspection Fee** | Rp 250.000 - 500.000 per inspeksi | Per-service |
+| **Certificate Purchase** | Rp 50.000 per sertifikat PDF | Per-document |
+| **Dealer Subscription** | Free tier + Premium tier (future) | Subscription |
+
+#### Unit Economics
+```
+Per Listing (Seller Side):
+  Listing Fee:   Rp 10.000  (1 token / 30 hari)
+  Boost 7 hari:  Rp 70.000  (Featured, 2 token/hari)
+  Inspeksi:      Rp 250.000 (optional)
+  ──────────────────────────
+  Total Seller:  Rp 330.000
+
+Per Transaksi (Platform Side):
+  Platform Fee:  1% dari harga jual
+  Contoh (Rp 200jt): Rp 2.000.000
+  ──────────────────────────
+  Net Revenue:   Rp 2.000.000 + Rp 330.000 = Rp 2.330.000
+
+Per Kredit (Financing Side):
+  Contoh: Rp 150jt, tenor 36 bulan, bunga 5% flat
+  Total bunga:   Rp 7.500.000
+  Spread AstraPay: ~1-2% = Rp 1.500.000 - 3.000.000
+```
+
+#### Token Purchase Packages
+| Paket | Token | Harga | Bonus | Harga/Token |
+|-------|-------|-------|-------|-------------|
+| Starter | 5 | Rp 50.000 | - | Rp 10.000 |
+| Basic | 10 | Rp 95.000 | 5% | Rp 9.500 |
+| Pro | 25 | Rp 225.000 | 10% | Rp 9.000 |
+| Enterprise | 50 | Rp 400.000 | 20% | Rp 8.000 |
+| Dealer Pack | 100 | Rp 750.000 | 25% | Rp 7.500 |
+
+#### Credit Packages
+| Paket | Kredit | Harga | Bonus |
+|-------|--------|-------|-------|
+| Free | 5 | Rp 0 | Registration bonus |
+| Bronze | 50 | Rp 50.000 | - |
+| Silver | 200 | Rp 180.000 | 10% |
+| Gold | 500 | Rp 400.000 | 20% |
+| Platinum | 1000 | Rp 700.000 | 30% |
 
 ---
 

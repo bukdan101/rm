@@ -93,7 +93,7 @@ export function ListingsSection({
                   <div className="relative h-28 sm:h-36 bg-gray-100 overflow-hidden">
                     <Image
                       src={primaryImage}
-                      alt={`${listing.brand?.name} ${listing.model?.name}`}
+                      alt={`${listing.brand?.name} ${listing.carModel?.name}`}
                       fill
                       className="object-cover group-hover:scale-105 transition-transform duration-500"
                       sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
@@ -149,7 +149,7 @@ export function ListingsSection({
                   <CardContent className="p-2.5 sm:p-3">
                     {/* Title */}
                     <h3 className="font-semibold text-xs sm:text-sm text-gray-800 dark:text-gray-100 line-clamp-1 mb-1 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-                      {listing.brand?.name} {listing.model?.name}
+                      {listing.brand?.name} {listing.carModel?.name}
                     </h3>
 
                     {/* Price with Gradient */}

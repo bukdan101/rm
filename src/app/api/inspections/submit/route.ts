@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       where: { id: car_listing_id },
       include: {
         brand: { select: { name: true } },
-        model: { select: { name: true } },
+        carModel: { select: { name: true } },
         variant: { select: { name: true, year_start: true } }
       }
     })

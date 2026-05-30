@@ -63,7 +63,7 @@ export function PremiumListingsSection({ listings = [], highlightedIds = [] }: P
                   <div className="relative h-40 bg-gray-100">
                     <Image
                       src={primaryImage}
-                      alt={`${listing.brand?.name} ${listing.model?.name}`}
+                      alt={`${listing.brand?.name} ${listing.carModel?.name}`}
                       fill
                       className="object-cover group-hover:scale-105 transition-transform duration-300"
                       sizes="(max-width: 1024px) 280px, 25vw"
@@ -96,7 +96,7 @@ export function PremiumListingsSection({ listings = [], highlightedIds = [] }: P
                   <CardContent className="p-3">
                     {/* Title */}
                     <h3 className="font-semibold text-sm text-gray-800 dark:text-gray-100 line-clamp-1 mb-1">
-                      {listing.brand?.name} {listing.model?.name}
+                      {listing.brand?.name} {listing.carModel?.name}
                     </h3>
 
                     {/* Price */}

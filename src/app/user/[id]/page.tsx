@@ -55,7 +55,7 @@ async function getUserData(id: string) {
         created_at,
         sold_at,
         brand:brands ( id, name, slug, logo_url ),
-        model:car_models ( id, name, slug, body_type ),
+        carModel:car_models ( id, name, slug, body_type ),
         variant:car_variants ( id, name, transmission, fuel_type ),
         exterior_color:car_colors!car_listings_exterior_color_id_fkey ( id, name, hex_code ),
         images:car_images ( id, image_url, is_primary, display_order ),

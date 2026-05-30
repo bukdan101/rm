@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
           published_to_dealer_marketplace_at: true,
           created_at: true,
           brand: { select: { id: true, name: true } },
-          model: { select: { id: true, name: true } },
+          carModel: { select: { id: true, name: true } },
           images: {
             select: { image_url: true, is_primary: true, display_order: true },
             orderBy: { display_order: 'asc' },
@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
       return {
         ...listing,
         brand_name: listing.brand?.name,
-        model_name: listing.model?.name,
+        model_name: listing.carModel?.name,
         primary_image_url: primaryImage,
         inspection_grade: inspection?.overall_grade,
         inspection_score: inspection?.inspection_score,

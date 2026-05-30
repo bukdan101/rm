@@ -46,6 +46,7 @@ model Profile {
   dealerStaffEntries DealerStaff[]
   inspections    CarInspection[] @relation("InspectorInspections")
   dealerRegistration DealerRegistration?
+  inspectionBookings InspectionBooking[]
   @@map("profiles")
 }
 
@@ -177,6 +178,7 @@ model Brand {
   created_at    DateTime  @default(now())
 
   models        CarModel[]
+  listings      CarListing[]
 
   @@map("brands")
 }
@@ -194,6 +196,7 @@ model CarModel {
 
   brand         Brand     @relation(fields: [brand_id], references: [id])
   variants      CarVariant[]
+  listings      CarListing[]
 
   @@map("car_models")
 }
@@ -215,6 +218,7 @@ model CarVariant {
   created_at      DateTime  @default(now())
 
   model           CarModel  @relation(fields: [model_id], references: [id])
+  listings        CarListing[]
 
   @@map("car_variants")
 }
@@ -294,6 +298,9 @@ model CarListing {
   updated_at                      DateTime  @updatedAt
   deleted_at                      DateTime?
 
+  brand                           Brand?      @relation(fields: [brand_id], references: [id])
+  carModel                        CarModel?   @relation(fields: [model_id], references: [id])
+  variant                         CarVariant? @relation(fields: [variant_id], references: [id])
   seller                          Profile?  @relation(fields: [user_id], references: [id])
   dealer                          Dealer?   @relation(fields: [dealer_id], references: [id])
   images                          CarImage[]
@@ -307,6 +314,7 @@ model CarListing {
   orders                          Order[]
   offers                          DealerOffer[]
   priceAnalysis                   AiPriceAnalysis[]
+  bookings                        InspectionBooking[]
 
   @@map("car_listings")
 }
@@ -540,7 +548,9 @@ model InspectionBooking {
   cancelled_at     DateTime?
   cancellation_reason String?
   created_at       DateTime  @default(now())
-  updated_at       DateTime  @updatedAt
+  listing         CarListing? @relation(fields: [car_listing_id], references: [id])
+  user            Profile?    @relation(fields: [user_id], references: [id])
+  updated_at      DateTime    @updatedAt
 
   @@map("inspection_bookings")
 }

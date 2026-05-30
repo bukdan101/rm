@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
         where,
         include: {
           brand: { select: { name: true } },
-          model: { select: { name: true } },
+          carModel: { select: { name: true } },
           seller: { select: { id: true, full_name: true, email: true } },
           images: { select: { image_url: true, is_primary: true } }
         },

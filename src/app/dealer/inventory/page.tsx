@@ -49,7 +49,7 @@ interface InventoryItem {
   id: string
   title: string
   brand: { name: string }
-  model: { name: string }
+  carModel: { name: string }
   year: number
   price_cash: number
   status: string
@@ -173,7 +173,7 @@ function InventoryCard({ item, onAction }: {
       <CardContent className="p-4">
         <div className="space-y-2">
           <h3 className="font-semibold line-clamp-1">
-            {item.brand?.name} {item.model?.name} {item.year}
+            {item.brand?.name} {item.carModel?.name} {item.year}
           </h3>
           <p className="text-xl font-bold text-primary">
             {formatShortCurrency(item.price_cash || 0)}
@@ -285,7 +285,7 @@ export default function DealerInventoryPage() {
     searchQuery === '' || 
     item.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.brand?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.model?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+    item.carModel?.name?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   // Stats

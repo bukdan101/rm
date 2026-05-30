@@ -25,7 +25,7 @@ export async function GET(
             city: true,
             province: true,
             brand: { select: { id: true, name: true } },
-            model: { select: { id: true, name: true } },
+            carModel: { select: { id: true, name: true } },
             images: { select: { image_url: true, is_primary: true } }
           }
         }

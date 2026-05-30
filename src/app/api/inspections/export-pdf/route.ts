@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 import { spawn } from 'child_process'
 import { writeFile, readFile, unlink } from 'fs/promises'
 import { tmpdir } from 'os'
@@ -12,10 +12,10 @@ interface InspectionResultExport {
   notes: string | null
   item?: {
     id: number
-    category: string
     name: string
-    description: string
+    description: string | null
     display_order: number
+    category?: string
   }
 }
 
@@ -24,7 +24,7 @@ interface InspectionExportData {
   car_listing_id: string
   inspector_name: string | null
   inspection_place: string | null
-  inspection_date: string
+  inspection_date: Date | null
   total_points: number
   passed_points: number | null
   inspection_score: number | null
@@ -32,14 +32,14 @@ interface InspectionExportData {
   flood_free: boolean
   fire_free: boolean
   odometer_tampered: boolean
-  risk_level: string
+  risk_level: string | null
   overall_grade: string | null
   certificate_number: string | null
   results?: InspectionResultExport[]
   car_listing?: {
     title: string | null
-    brand?: { name: string }
-    model?: { name: string }
+    brand?: { name: string } | null
+    carModel?: { name: string } | null
     year: number | null
     plate_number: string | null
     vin_number: string | null
@@ -55,52 +55,90 @@ export async function POST(request: NextRequest) {
 
     // If inspection_id provided, fetch from database
     if (inspection_id) {
-      const { data, error } = await supabase
-        .from('car_inspections')
-        .select(`
-          *,
-          results:inspection_results(
-            item_id,
-            status,
-            notes,
-            item:inspection_items(id, category, name, description, display_order)
-          ),
-          car_listing:car_listings(
-            title,
-            year,
-            plate_number,
-            vin_number,
-            brand:brands(name),
-            model:car_models(name)
-          )
-        `)
-        .eq('id', inspection_id)
-        .single()
+      const data = await db.carInspection.findUnique({
+        where: { id: inspection_id },
+        include: {
+          results: {
+            include: {
+              item: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  display_order: true,
+                  inspectionCategory: {
+                    select: { name: true }
+                  }
+                }
+              }
+            }
+          },
+          listing: {
+            select: {
+              title: true,
+              year: true,
+              plate_number: true,
+              vin_number: true,
+              brand: { select: { name: true } },
+              carModel: { select: { name: true } }
+            }
+          }
+        }
+      })
 
-      if (error) throw error
-      inspection = data
-    } 
+      if (data) {
+        inspection = {
+          ...data,
+          results: data.results.map(r => ({
+            item_id: r.item_id,
+            status: r.status as InspectionResultExport['status'],
+            notes: r.notes,
+            item: r.item ? {
+              id: r.item.id,
+              name: r.item.name,
+              description: r.item.description,
+              display_order: r.item.display_order,
+              category: r.item.inspectionCategory?.name || undefined
+            } : undefined
+          })),
+          car_listing: data.listing ? {
+            title: data.listing.title,
+            brand: data.listing.brand,
+            carModel: data.listing.carModel,
+            year: data.listing.year,
+            plate_number: data.listing.plate_number,
+            vin_number: data.listing.vin_number
+          } : undefined
+        }
+      }
+    }
     // If inspection_data provided directly (for preview before save)
     else if (inspection_data) {
       inspection = inspection_data
-      
+
       // Fetch car listing info if car_listing_id provided
       if (car_listing_id) {
-        const { data: listing } = await supabase
-          .from('car_listings')
-          .select(`
-            title,
-            year,
-            plate_number,
-            vin_number,
-            brand:brands(name),
-            model:car_models(name)
-          `)
-          .eq('id', car_listing_id)
-          .single()
-        
-        if (listing) {
-          inspection.car_listing = listing
+        const listing = await db.carListing.findUnique({
+          where: { id: car_listing_id },
+          select: {
+            title: true,
+            year: true,
+            plate_number: true,
+            vin_number: true,
+            brand: { select: { name: true } },
+            carModel: { select: { name: true } }
+          }
+        })
+
+        if (listing && inspection) {
+          inspection.car_listing = {
+            title: listing.title,
+            brand: listing.brand,
+            carModel: listing.carModel,
+            year: listing.year,
+            plate_number: listing.plate_number,
+            vin_number: listing.vin_number
+          }
         }
       }
     } else {
@@ -122,7 +160,7 @@ export async function POST(request: NextRequest) {
 
     // Return PDF as download
     const filename = `inspeksi-${inspection.certificate_number || inspection.id.slice(0, 8)}.pdf`
-    
+
     return new NextResponse(pdfBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
@@ -171,7 +209,7 @@ async function generateInspectionPdf(inspection: InspectionExportData): Promise<
 
         // Read generated PDF
         const pdfBuffer = await readFile(outputFile)
-        
+
         // Clean up output file
         await unlink(outputFile).catch(() => {})
 

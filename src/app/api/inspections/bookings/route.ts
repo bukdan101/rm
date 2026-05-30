@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
             year: true,
             price_cash: true,
             brand: { select: { name: true } },
-            model: { select: { name: true } }
+            carModel: { select: { name: true } }
           }
         }
       },

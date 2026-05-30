@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const data = await db.carInspection.findUnique({
+    const data = await db.carInspection.findFirst({
       where: { car_listing_id },
       include: {
         results: {

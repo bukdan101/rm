@@ -90,7 +90,7 @@ export async function GET(
       },
       include: {
         brand: { select: { id: true, name: true, slug: true, logo_url: true } },
-        model: { select: { id: true, name: true, slug: true, body_type: true } },
+        carModel: { select: { id: true, name: true, slug: true, body_type: true } },
         variant: { select: { id: true, name: true, transmission: true, fuel_type: true } },
         exteriorColor: { select: { id: true, name: true, hex_code: true } },
         interiorColor: { select: { id: true, name: true, hex_code: true } },

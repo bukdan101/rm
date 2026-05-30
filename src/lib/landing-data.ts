@@ -87,7 +87,7 @@ export async function getLandingData(): Promise<LandingData> {
       where: { status: 'active' },
       include: {
         brand: { select: { id: true, name: true, slug: true, logo_url: true, country: true, is_popular: true, display_order: true, created_at: true } },
-        model: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
+        carModel: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
         images: {
           select: { id: true, car_listing_id: true, image_url: true, thumbnail_url: true, caption: true, is_primary: true, display_order: true, created_at: true },
           orderBy: { display_order: 'asc' },
@@ -178,7 +178,7 @@ export async function getFeaturedaListings(): Promise<CarListing[]> {
       },
       include: {
         brand: { select: { id: true, name: true, slug: true, logo_url: true, country: true, is_popular: true, display_order: true, created_at: true } },
-        model: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
+        carModel: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
         images: {
           select: { id: true, car_listing_id: true, image_url: true, thumbnail_url: true, caption: true, is_primary: true, display_order: true, created_at: true },
           orderBy: { display_order: 'asc' },
@@ -201,7 +201,7 @@ export async function getPopularListings(): Promise<CarListing[]> {
       where: { status: 'active' },
       include: {
         brand: { select: { id: true, name: true, slug: true, logo_url: true, country: true, is_popular: true, display_order: true, created_at: true } },
-        model: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
+        carModel: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
         images: {
           select: { id: true, car_listing_id: true, image_url: true, thumbnail_url: true, caption: true, is_primary: true, display_order: true, created_at: true },
           orderBy: { display_order: 'asc' },
@@ -225,7 +225,7 @@ export async function getListingsByBodyType(bodyType: string): Promise<CarListin
       where: { status: 'active', body_type: bodyType },
       include: {
         brand: { select: { id: true, name: true, slug: true, logo_url: true, country: true, is_popular: true, display_order: true, created_at: true } },
-        model: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
+        carModel: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
         images: {
           select: { id: true, car_listing_id: true, image_url: true, thumbnail_url: true, caption: true, is_primary: true, display_order: true, created_at: true },
           orderBy: { display_order: 'asc' },

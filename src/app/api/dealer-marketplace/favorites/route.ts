@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
               city: true,
               province: true,
               brand: { select: { name: true } },
-              model: { select: { name: true } },
+              carModel: { select: { name: true } },
               images: { select: { image_url: true, is_primary: true } }
             }
           }
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
         listing: {
           ...listing,
           brand_name: listing?.brand?.name,
-          model_name: listing?.model?.name,
+          model_name: listing?.carModel?.name,
           primary_image_url: primaryImage
         }
       }

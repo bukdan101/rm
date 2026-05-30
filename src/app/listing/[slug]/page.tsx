@@ -139,7 +139,7 @@ interface Listing {
   seller_id?: string
   dealer_id?: string
   brand?: Brand
-  model?: Model
+  carModel?: Model
   variant?: Variant
   exterior_color?: Color
   interior_color?: Color
@@ -294,7 +294,7 @@ export default function ListingDetailPage() {
 
   const conditionData = conditionConfig[listing.condition] || conditionConfig.bekas
   const location = [listing.city, listing.province].filter(Boolean).join(', ') || 'Indonesia'
-  const title = `${listing.brand?.name || ''} ${listing.model?.name || ''} ${listing.year || ''} ${listing.variant?.name || ''}`.trim()
+  const title = `${listing.brand?.name || ''} ${listing.carModel?.name || ''} ${listing.year || ''} ${listing.variant?.name || ''}`.trim()
 
   // Sort images
   const sortedImages = listing.images?.sort((a, b) => (a.display_order || 0) - (b.display_order || 0)) || []
@@ -385,8 +385,8 @@ export default function ListingDetailPage() {
                         </Badge>
                       </Link>
                     )}
-                    {listing.model && (
-                      <Badge variant="outline">{listing.model.name}</Badge>
+                    {listing.carModel && (
+                      <Badge variant="outline">{listing.carModel.name}</Badge>
                     )}
                     <Badge className={conditionData.color}>{conditionData.label}</Badge>
                     {listing.price_negotiable && (
@@ -489,7 +489,7 @@ export default function ListingDetailPage() {
                   mileage={listing.mileage}
                   fuel={listing.fuel}
                   transmission={listing.transmission}
-                  bodyType={listing.model?.body_type}
+                  bodyType={listing.carModel?.body_type}
                   seatCount={listing.seat_count}
                   color={listing.exterior_color?.name}
                   engineCapacity={listing.engine_capacity}

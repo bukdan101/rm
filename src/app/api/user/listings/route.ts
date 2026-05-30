@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
           visibility: true,
           view_count: true,
           brand: { select: { id: true, name: true } },
-          model: { select: { id: true, name: true } },
+          carModel: { select: { id: true, name: true } },
           images: {
             select: { car_listing_id: true, image_url: true, is_primary: true },
             where: { is_primary: true },
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
     // Transform listings with details
     const listingsWithDetails = listings.map(listing => {
       const brandName = listing.brand?.name || ''
-      const modelName = listing.model?.name || ''
+      const modelName = listing.carModel?.name || ''
       const title = `${brandName} ${modelName} ${listing.year || ''}`.trim()
 
       return {

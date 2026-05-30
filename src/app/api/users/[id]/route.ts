@@ -32,7 +32,7 @@ export async function GET(
       take: 20,
       include: {
         brand: { select: { id: true, name: true, slug: true, logo_url: true } },
-        model: { select: { id: true, name: true, slug: true, body_type: true } },
+        carModel: { select: { id: true, name: true, slug: true, body_type: true } },
         variant: { select: { id: true, name: true, transmission: true, fuel_type: true } },
         images: { select: { id: true, image_url: true, is_primary: true, display_order: true } },
         inspection: {

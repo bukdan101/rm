@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,65 +7,54 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') || 'all'
 
     if (type === 'provinces') {
-      const { data, error } = await supabase
-        .from('provinces')
-        .select('*')
-        .eq('is_active', true)
-        .order('name')
-
-      if (error) throw error
+      const data = await db.province.findMany({
+        where: { is_active: true },
+        orderBy: { name: 'asc' }
+      })
       return NextResponse.json({ success: true, data })
     }
 
     if (type === 'cities') {
       const provinceId = searchParams.get('province_id')
-      
-      let query = supabase
-        .from('cities')
-        .select(`
-          *,
-          province:provinces(id, name)
-        `)
-        .eq('is_active', true)
-        .order('name')
 
-      if (provinceId) {
-        query = query.eq('province_id', provinceId)
-      }
+      const data = await db.city.findMany({
+        where: {
+          is_active: true,
+          ...(provinceId ? { province_id: provinceId } : {})
+        },
+        include: {
+          province: { select: { id: true, name: true } }
+        },
+        orderBy: { name: 'asc' }
+      })
 
-      const { data, error } = await query
-
-      if (error) throw error
       return NextResponse.json({ success: true, data })
     }
 
     if (type === 'districts') {
       const cityId = searchParams.get('city_id')
-      
-      const { data, error } = await supabase
-        .from('districts')
-        .select('*')
-        .eq('city_id', cityId)
-        .eq('is_active', true)
-        .order('name')
 
-      if (error) throw error
+      const data = await db.district.findMany({
+        where: {
+          is_active: true,
+          ...(cityId ? { city_id: cityId } : {})
+        },
+        orderBy: { name: 'asc' }
+      })
+
       return NextResponse.json({ success: true, data })
     }
 
     // Return all locations grouped by province
-    const { data: provinces, error: provincesError } = await supabase
-      .from('provinces')
-      .select(`
-        *,
-        cities:cities(id, name, type, latitude, longitude)
-      `)
-      .eq('is_active', true)
-      .order('name')
+    const data = await db.province.findMany({
+      where: { is_active: true },
+      include: {
+        cities: { select: { id: true, name: true, type: true, latitude: true, longitude: true } }
+      },
+      orderBy: { name: 'asc' }
+    })
 
-    if (provincesError) throw provincesError
-
-    return NextResponse.json({ success: true, data: provinces })
+    return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error('Error fetching locations:', error)
     return NextResponse.json(

@@ -25,7 +25,7 @@ export function RentalCard({ listing, onSelect }: RentalCardProps) {
       <div className="relative h-48 bg-gray-100">
         <Image
           src={primaryImage}
-          alt={`${listing.brand?.name} ${listing.model?.name}`}
+          alt={`${listing.brand?.name} ${listing.carModel?.name}`}
           fill
           className="object-cover"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -42,7 +42,7 @@ export function RentalCard({ listing, onSelect }: RentalCardProps) {
 
       <CardContent className="p-4">
         <h3 className="font-bold text-lg text-gray-900 mb-1 line-clamp-1">
-          {listing.brand?.name} {listing.model?.name}
+          {listing.brand?.name} {listing.carModel?.name}
         </h3>
 
         {rentalPrice ? (

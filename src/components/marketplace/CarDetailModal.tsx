@@ -119,7 +119,7 @@ export function CarDetailModal({ carId, isOpen, onClose }: CarDetailModalProps) 
               <div className="relative h-64 sm:h-80 lg:h-full">
                 <Image
                   src={listing.images?.[currentImageIndex]?.image_url || 'https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=800'}
-                  alt={`${listing.brand?.name} ${listing.model?.name}`}
+                  alt={`${listing.brand?.name} ${listing.carModel?.name}`}
                   fill
                   className="object-cover"
                 />
@@ -190,7 +190,7 @@ export function CarDetailModal({ carId, isOpen, onClose }: CarDetailModalProps) 
                 <div className="flex items-start justify-between">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">
-                      {listing.brand?.name} {listing.model?.name}
+                      {listing.brand?.name} {listing.carModel?.name}
                     </h2>
                     {listing.variant?.name && (
                       <p className="text-gray-500">{listing.variant.name}</p>

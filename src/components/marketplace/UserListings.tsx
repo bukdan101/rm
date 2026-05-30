@@ -39,7 +39,7 @@ interface UserListing {
   year?: number
   mileage?: number
   brand?: string
-  model?: string
+  carModel?: string
 }
 
 interface UserListingsProps {
@@ -112,7 +112,7 @@ function ListingItem({ listing, viewMode }: { listing: UserListing; viewMode: Vi
                       {listing.title}
                     </h3>
                     <p className="text-sm text-gray-500 mt-0.5">
-                      {listing.category || `${listing.brand || ''} ${listing.model || ''}`}
+                      {listing.category || `${listing.brand || ''} ${listing.carModel || ''}`}
                     </p>
                   </div>
                   {listing.condition && (
@@ -193,7 +193,7 @@ function ListingItem({ listing, viewMode }: { listing: UserListing; viewMode: Vi
                 {listing.title}
               </h3>
               <p className="text-sm text-gray-500 mt-0.5 line-clamp-1">
-                {listing.category || `${listing.brand || ''} ${listing.model || ''}`}
+                {listing.category || `${listing.brand || ''} ${listing.carModel || ''}`}
               </p>
             </div>
           </div>

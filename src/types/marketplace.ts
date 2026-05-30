@@ -325,7 +325,7 @@ export interface CarListing {
   
   // Relations
   brand?: Brand
-  model?: CarModel
+  carModel?: CarModel
   variant?: CarVariant
   exterior_color?: CarColor
   interior_color?: CarColor
@@ -699,7 +699,7 @@ export interface District {
 
 export interface CarListingWithDetails extends CarListing {
   brand?: Brand
-  model?: CarModel
+  carModel?: CarModel
   variant?: CarVariant
   exterior_color?: CarColor
   interior_color?: CarColor
@@ -717,7 +717,7 @@ export interface CarListingWithDetails extends CarListing {
 
 export interface CarListingCard extends CarListing {
   brand?: Brand
-  model?: CarModel
+  carModel?: CarModel
   exterior_color?: CarColor
   images?: CarImage[]
   inspection?: Pick<CarInspection, 'risk_level' | 'overall_grade' | 'inspection_score' | 'passed_points' | 'total_points'>

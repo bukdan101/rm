@@ -70,7 +70,7 @@ interface ListingDetail {
   created_at: string
   user_id: string
   brand?: { id: string; name: string }
-  model?: { id: string; name: string }
+  carModel?: { id: string; name: string }
   color?: { id: string; name: string }
   images?: Array<{ id: string; image_url: string; is_primary: boolean; display_order: number }>
   user?: {

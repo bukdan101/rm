@@ -24,7 +24,7 @@ import {
 interface Prediction {
   id: string
   brand: { name: string } | null
-  model: { name: string } | null
+  carModel: { name: string } | null
   variant: { name: string } | null
   year: number
   predicted_price_min: number
@@ -79,7 +79,7 @@ function PredictionCard({ prediction }: { prediction: Prediction }) {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h3 className="font-semibold">
-                  {prediction.brand?.name || 'Unknown'} {prediction.model?.name || ''} {prediction.year}
+                  {prediction.brand?.name || 'Unknown'} {prediction.carModel?.name || ''} {prediction.year}
                 </h3>
                 {prediction.variant?.name && (
                   <p className="text-sm text-muted-foreground">{prediction.variant.name}</p>

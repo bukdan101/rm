@@ -34,7 +34,7 @@ interface RelatedListing {
   view_count: number
   created_at: string
   brand?: { name: string; slug: string }
-  model?: { name: string }
+  carModel?: { name: string }
   images?: Array<{ image_url: string; is_primary: boolean }>
   inspection?: { overall_grade: string } | null
 }
@@ -221,7 +221,7 @@ export function RelatedProducts({
       view_count: 150,
       created_at: new Date().toISOString(),
       brand: { name: 'Toyota', slug: 'toyota' },
-      model: { name: 'Avanza' },
+      carModel: { name: 'Avanza' },
       images: [],
       inspection: null,
     },
@@ -239,7 +239,7 @@ export function RelatedProducts({
       view_count: 85,
       created_at: new Date().toISOString(),
       brand: { name: 'Honda', slug: 'honda' },
-      model: { name: 'Jazz' },
+      carModel: { name: 'Jazz' },
       images: [],
       inspection: { overall_grade: 'A' },
     },
@@ -257,7 +257,7 @@ export function RelatedProducts({
       view_count: 200,
       created_at: new Date().toISOString(),
       brand: { name: 'Mitsubishi', slug: 'mitsubishi' },
-      model: { name: 'Xpander' },
+      carModel: { name: 'Xpander' },
       images: [],
       inspection: { overall_grade: 'A+' },
     },

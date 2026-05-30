@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
             model_id: true,
             variant_id: true,
             brand: { select: { name: true } },
-            model: { select: { name: true } },
+            carModel: { select: { name: true } },
             variant: { select: { name: true } },
             inspection: {
               select: { overall_grade: true, inspection_score: true },
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
           expires_at: null,
           listing_created: true,
           brand: listing.brand,
-          model: listing.model,
+          model: listing.carModel,
           variant: listing.variant,
         })
       }
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
         price_cash: true,
         created_at: true,
         brand: { select: { name: true } },
-        model: { select: { name: true } },
+        carModel: { select: { name: true } },
         variant: { select: { name: true } },
       },
       orderBy: { created_at: 'desc' },
@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           listing_created: true,
           brand: listing.brand,
-          model: listing.model,
+          model: listing.carModel,
           variant: listing.variant,
         })
       }

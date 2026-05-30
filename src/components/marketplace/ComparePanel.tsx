@@ -133,7 +133,7 @@ export function ComparePanel({ onClose }: ComparePanelProps) {
                     {car.images?.[0]?.image_url ? (
                       <Image
                         src={car.images[0].image_url}
-                        alt={`${car.brand?.name} ${car.model?.name}`}
+                        alt={`${car.brand?.name} ${car.carModel?.name}`}
                         width={200}
                         height={120}
                         className="w-full h-full object-cover"
@@ -145,7 +145,7 @@ export function ComparePanel({ onClose }: ComparePanelProps) {
                     )}
                   </div>
                   <h4 className="font-semibold text-sm text-center">
-                    {car.brand?.name} {car.model?.name}
+                    {car.brand?.name} {car.carModel?.name}
                   </h4>
                   <p className="text-emerald-600 font-bold text-center">
                     {formatPrice(car.price_cash)}

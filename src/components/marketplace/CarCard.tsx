@@ -71,7 +71,7 @@ export function CarCard({ listing, highlighted = false, showWishlist = true }: C
         <div className="relative h-48 sm:h-56 overflow-hidden bg-gray-100">
           <Image
             src={primaryImage}
-            alt={`${listing.brand?.name} ${listing.model?.name}`}
+            alt={`${listing.brand?.name} ${listing.carModel?.name}`}
             fill
             className="object-cover group-hover:scale-105 transition-transform duration-500"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -164,7 +164,7 @@ export function CarCard({ listing, highlighted = false, showWishlist = true }: C
         <CardContent className="p-4">
           {/* Title */}
           <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100 mb-1 line-clamp-1 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-            {listing.brand?.name} {listing.model?.name}
+            {listing.brand?.name} {listing.carModel?.name}
           </h3>
           
           {listing.variant?.name && (

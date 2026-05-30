@@ -30,7 +30,7 @@ interface Favorite {
     province: string
     status: string
     brand: { name: string }
-    model: { name: string }
+    carModel: { name: string }
     images: Array<{ image_url: string; is_primary: boolean }>
     inspection?: {
       inspection_score: number
@@ -106,7 +106,7 @@ function FavoriteCard({ favorite, onRemove }: {
         <div className="space-y-2">
           <Link href={`/listing/${listing.id}`}>
             <h3 className="font-semibold line-clamp-1 hover:text-primary">
-              {listing.brand?.name} {listing.model?.name} {listing.year}
+              {listing.brand?.name} {listing.carModel?.name} {listing.year}
             </h3>
           </Link>
           

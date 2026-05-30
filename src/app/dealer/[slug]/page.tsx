@@ -66,7 +66,7 @@ async function getDealerData(slug: string) {
         created_at,
         sold_at,
         brand:brands ( id, name, slug, logo_url ),
-        model:car_models ( id, name, slug, body_type ),
+        carModel:car_models ( id, name, slug, body_type ),
         variant:car_variants ( id, name, transmission, fuel_type ),
         exterior_color:car_colors!car_listings_exterior_color_id_fkey ( id, name, hex_code ),
         images:car_images ( id, image_url, is_primary, display_order ),
@@ -148,7 +148,7 @@ export default async function DealerProfilePage({ params }: PageProps) {
   // Transform listings for UserListings component
   const transformedListings = listings.map((listing: CarListing) => ({
     id: listing.id,
-    title: listing.title || `${listing.brand?.name || ''} ${listing.model?.name || ''} ${listing.year || ''}`,
+    title: listing.title || `${listing.brand?.name || ''} ${listing.carModel?.name || ''} ${listing.year || ''}`,
     slug: listing.slug || listing.id,
     price: listing.price_cash,
     condition: listing.condition,
@@ -163,7 +163,7 @@ export default async function DealerProfilePage({ params }: PageProps) {
     year: listing.year,
     mileage: listing.mileage,
     brand: listing.brand?.name,
-    model: listing.model?.name,
+    carModel: listing.carModel?.name,
   }))
 
   return (

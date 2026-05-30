@@ -53,7 +53,7 @@ interface Listing {
   id: string
   title: string
   brand: { name: string }
-  model: { name: string }
+  carModel: { name: string }
   year: number
   price_cash: number
   status: string
@@ -178,7 +178,7 @@ function ListingCard({ listing, onDelete, onReactivate }: {
       <CardContent className="p-4">
         <div className="space-y-2">
           <h3 className="font-semibold line-clamp-1">
-            {listing.brand?.name} {listing.model?.name} {listing.year}
+            {listing.brand?.name} {listing.carModel?.name} {listing.year}
           </h3>
           <p className="text-xl font-bold text-primary">
             {formatShortCurrency(listing.price_cash || 0)}

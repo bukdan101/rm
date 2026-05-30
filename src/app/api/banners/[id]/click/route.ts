@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 // POST /api/banners/[id]/click - Track banner click
 export async function POST(
@@ -8,28 +8,23 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    
-    // Get current click count
-    const { data: banner, error: fetchError } = await supabase
-      .from('banners')
-      .select('clicks')
-      .eq('id', id)
-      .single()
-    
-    if (fetchError || !banner) {
+
+    // Get current banner
+    const banner = await db.banner.findUnique({
+      where: { id },
+      select: { clicks: true }
+    })
+
+    if (!banner) {
       return NextResponse.json({ success: false, error: 'Banner not found' }, { status: 404 })
     }
-    
+
     // Increment click count
-    const { error: updateError } = await supabase
-      .from('banners')
-      .update({ 
-        clicks: (banner.clicks || 0) + 1 
-      })
-      .eq('id', id)
-    
-    if (updateError) throw updateError
-    
+    await db.banner.update({
+      where: { id },
+      data: { clicks: (banner.clicks || 0) + 1 }
+    })
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error tracking click:', error)

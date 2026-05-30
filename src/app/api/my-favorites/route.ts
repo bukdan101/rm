@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
             province: true,
             status: true,
             brand: { select: { name: true } },
-            model: { select: { name: true } },
+            carModel: { select: { name: true } },
             images: {
               select: { image_url: true, is_primary: true },
               orderBy: { display_order: 'asc' },

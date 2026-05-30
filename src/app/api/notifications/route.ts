@@ -1,47 +1,33 @@
-import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ notifications: [], unreadCount: 0 })
-    }
-
     const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId')
     const limit = parseInt(searchParams.get('limit') || '10')
     const unreadOnly = searchParams.get('unreadOnly') === 'true'
 
-    let query = supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(limit)
-
-    if (unreadOnly) {
-      query = query.eq('read', false)
-    }
-
-    const { data: notifications, error } = await query
-
-    if (error) {
-      console.error('Error fetching notifications:', error)
+    if (!userId) {
       return NextResponse.json({ notifications: [], unreadCount: 0 })
     }
 
+    const where: Record<string, unknown> = { user_id: userId }
+    if (unreadOnly) where.read = false
+
+    const notifications = await db.notification.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      take: limit,
+    })
+
     // Get unread count
-    const { count: unreadCount } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('read', false)
+    const unreadCount = await db.notification.count({
+      where: { user_id: userId, read: false },
+    })
 
     // Transform data for frontend
-    const transformedNotifications = (notifications || []).map(n => ({
+    const transformedNotifications = notifications.map(n => ({
       id: n.id,
       type: n.type || 'info',
       title: n.title,
@@ -49,12 +35,13 @@ export async function GET(request: Request) {
       isRead: n.read,
       createdAt: n.created_at,
       actionUrl: n.action_url,
-      data: n.data,
+      // data is String? in schema - parse JSON if needed
+      data: n.data ? tryParseJSON(n.data) : null,
     }))
 
     return NextResponse.json({
       notifications: transformedNotifications,
-      unreadCount: unreadCount || 0,
+      unreadCount,
     })
   } catch (error) {
     console.error('Server error:', error)
@@ -62,41 +49,27 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
+    const body = await request.json()
+    const { notificationId, markAllRead, userId } = body
+
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { notificationId, markAllRead } = body
-
     if (markAllRead) {
       // Mark all notifications as read
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true, read_at: new Date().toISOString() })
-        .eq('user_id', user.id)
-        .eq('read', false)
-
-      if (error) {
-        return NextResponse.json({ error: 'Failed to update notifications' }, { status: 500 })
-      }
+      await db.notification.updateMany({
+        where: { user_id: userId, read: false },
+        data: { read: true, read_at: new Date() },
+      })
     } else if (notificationId) {
       // Mark single notification as read
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true, read_at: new Date().toISOString() })
-        .eq('id', notificationId)
-        .eq('user_id', user.id)
-
-      if (error) {
-        return NextResponse.json({ error: 'Failed to update notification' }, { status: 500 })
-      }
+      await db.notification.update({
+        where: { id: notificationId },
+        data: { read: true, read_at: new Date() },
+      })
     }
 
     return NextResponse.json({ success: true })
@@ -106,45 +79,40 @@ export async function PUT(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
     const { userId, type, title, message, actionUrl, data } = body
 
-    // Only allow admin or system to create notifications for other users
-    // Or allow users to create notifications for themselves
-    const targetUserId = userId || user.id
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    const { data: notification, error } = await supabase
-      .from('notifications')
-      .insert({
-        user_id: targetUserId,
+    const notification = await db.notification.create({
+      data: {
+        user_id: userId,
         type: type || 'info',
         title,
-        message,
-        action_url: actionUrl,
-        data: data || {},
+        message: message || null,
+        action_url: actionUrl || null,
+        // Fixed: data is String? in schema - must JSON.stringify before inserting
+        data: data ? (typeof data === 'string' ? data : JSON.stringify(data)) : null,
         read: false,
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating notification:', error)
-      return NextResponse.json({ error: 'Failed to create notification' }, { status: 500 })
-    }
+      },
+    })
 
     return NextResponse.json({ success: true, notification })
   } catch (error) {
     console.error('Server error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+// Helper to safely parse JSON strings
+function tryParseJSON(str: string): unknown {
+  try {
+    return JSON.parse(str)
+  } catch {
+    return str
   }
 }

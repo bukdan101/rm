@@ -1,28 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
-// GET - Get token settings
+// GET - Get token settings (single-row wide table)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const activeOnly = searchParams.get('active_only') === 'true'
     
-    let query = supabase
-      .from('token_settings')
-      .select('*')
-      .order('created_at', { ascending: false })
+    const settings = await db.tokenSetting.findFirst({
+      where: activeOnly ? { is_active: true } : {},
+      orderBy: { created_at: 'desc' }
+    })
     
-    if (activeOnly) {
-      query = query.eq('is_active', true)
-        .or('valid_until.is.null,valid_until.gt.' + new Date().toISOString())
+    // Return defaults if no settings exist
+    const result = settings || {
+      token_price_base: 10000,
+      token_price_currency: 'IDR',
+      ai_prediction_tokens: 5,
+      ai_prediction_duration_hours: 24,
+      listing_normal_tokens: 3,
+      listing_normal_duration_days: 30,
+      listing_normal_chat_free: true,
+      listing_dealer_tokens: 5,
+      listing_dealer_duration_days: 30,
+      listing_dealer_multiplier: 1.0,
+      dealer_contact_tokens: 2,
+      dealer_contact_multiplier: 1.0,
+      boost_tokens: 5,
+      boost_duration_days: 7,
+      highlight_tokens: 3,
+      highlight_duration_days: 7,
+      featured_tokens: 10,
+      featured_duration_days: 7,
+      premium_badge_tokens: 8,
+      premium_badge_duration_days: 30,
+      top_search_tokens: 6,
+      top_search_duration_days: 7,
+      inspection_tokens: 5,
+      inspection_mandatory: false,
+      auto_move_to_public: false,
+      auto_move_gratis: false,
+      remind_before_expire_days: 3,
+      is_active: true,
     }
-    
-    const { data, error } = await query.limit(1)
-    
-    if (error) throw error
-    
-    // Return single object if active_only
-    const result = activeOnly ? data[0] : data
     
     return NextResponse.json({
       success: true,
@@ -37,7 +57,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create new token settings
+// POST - Create or update token settings (upsert single row)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -85,57 +105,56 @@ export async function POST(request: NextRequest) {
       auto_move_gratis,
       remind_before_expire_days,
       
-      // Valid until
-      valid_from,
-      valid_until,
-      created_by
+      is_active
     } = body
     
-    // Deactivate previous settings
-    await supabase
-      .from('token_settings')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq('is_active', true)
+    // Get existing settings
+    const existing = await db.tokenSetting.findFirst()
     
-    // Create new settings
-    const { data, error } = await supabase
-      .from('token_settings')
-      .insert({
-        token_price_base: token_price_base || 1000,
-        token_price_currency: token_price_currency || 'IDR',
-        ai_prediction_tokens: ai_prediction_tokens ?? 5,
-        ai_prediction_duration_hours: ai_prediction_duration_hours || 24,
-        listing_normal_tokens: listing_normal_tokens ?? 10,
-        listing_normal_duration_days: listing_normal_duration_days || 30,
-        listing_normal_chat_free: listing_normal_chat_free ?? true,
-        listing_dealer_tokens: listing_dealer_tokens ?? 20,
-        listing_dealer_duration_days: listing_dealer_duration_days || 7,
-        listing_dealer_multiplier: listing_dealer_multiplier || 2.00,
-        dealer_contact_tokens: dealer_contact_tokens ?? 5,
-        dealer_contact_multiplier: dealer_contact_multiplier || 0.50,
-        boost_tokens: boost_tokens ?? 3,
-        boost_duration_days: boost_duration_days || 7,
-        highlight_tokens: highlight_tokens ?? 2,
-        highlight_duration_days: highlight_duration_days || 7,
-        featured_tokens: featured_tokens ?? 5,
-        featured_duration_days: featured_duration_days || 7,
-        premium_badge_tokens: premium_badge_tokens ?? 10,
-        premium_badge_duration_days: premium_badge_duration_days || 30,
-        top_search_tokens: top_search_tokens ?? 5,
-        top_search_duration_days: top_search_duration_days || 7,
-        inspection_tokens: inspection_tokens ?? 0,
-        inspection_mandatory: inspection_mandatory ?? true,
-        auto_move_to_public: auto_move_to_public ?? true,
-        auto_move_gratis: auto_move_gratis ?? true,
-        remind_before_expire_days: remind_before_expire_days || 2,
-        valid_from: valid_from || new Date().toISOString(),
-        valid_until: valid_until || null,
-        created_by
+    const settingsData = {
+      token_price_base: token_price_base ?? 10000,
+      token_price_currency: token_price_currency || 'IDR',
+      ai_prediction_tokens: ai_prediction_tokens ?? 5,
+      ai_prediction_duration_hours: ai_prediction_duration_hours ?? 24,
+      listing_normal_tokens: listing_normal_tokens ?? 3,
+      listing_normal_duration_days: listing_normal_duration_days ?? 30,
+      listing_normal_chat_free: listing_normal_chat_free ?? true,
+      listing_dealer_tokens: listing_dealer_tokens ?? 5,
+      listing_dealer_duration_days: listing_dealer_duration_days ?? 30,
+      listing_dealer_multiplier: listing_dealer_multiplier ?? 1.0,
+      dealer_contact_tokens: dealer_contact_tokens ?? 2,
+      dealer_contact_multiplier: dealer_contact_multiplier ?? 1.0,
+      boost_tokens: boost_tokens ?? 5,
+      boost_duration_days: boost_duration_days ?? 7,
+      highlight_tokens: highlight_tokens ?? 3,
+      highlight_duration_days: highlight_duration_days ?? 7,
+      featured_tokens: featured_tokens ?? 10,
+      featured_duration_days: featured_duration_days ?? 7,
+      premium_badge_tokens: premium_badge_tokens ?? 8,
+      premium_badge_duration_days: premium_badge_duration_days ?? 30,
+      top_search_tokens: top_search_tokens ?? 6,
+      top_search_duration_days: top_search_duration_days ?? 7,
+      inspection_tokens: inspection_tokens ?? 5,
+      inspection_mandatory: inspection_mandatory ?? false,
+      auto_move_to_public: auto_move_to_public ?? false,
+      auto_move_gratis: auto_move_gratis ?? false,
+      remind_before_expire_days: remind_before_expire_days ?? 3,
+      is_active: is_active ?? true,
+    }
+    
+    let data
+    if (existing) {
+      // Update existing
+      data = await db.tokenSetting.update({
+        where: { id: existing.id },
+        data: settingsData
       })
-      .select()
-      .single()
-    
-    if (error) throw error
+    } else {
+      // Create new
+      data = await db.tokenSetting.create({
+        data: settingsData
+      })
+    }
     
     return NextResponse.json({
       success: true,
@@ -164,17 +183,10 @@ export async function PUT(request: NextRequest) {
       )
     }
     
-    const { data, error } = await supabase
-      .from('token_settings')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single()
-    
-    if (error) throw error
+    const data = await db.tokenSetting.update({
+      where: { id },
+      data: updates
+    })
     
     return NextResponse.json({
       success: true,

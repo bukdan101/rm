@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { db } from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
@@ -8,54 +7,51 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {}
-          },
-        },
-      }
-    )
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
+    if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
     // Get messages for the conversation
-    const { data: messages, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', id)
-      .order('created_at', { ascending: true })
+    const messages = await db.message.findMany({
+      where: { conversation_id: id },
+      orderBy: { created_at: 'asc' },
+    })
 
-    if (error) {
-      // Table might not exist, return empty
-      return NextResponse.json({
-        success: true,
-        messages: [],
-      })
+    // Get the conversation to know who is the buyer and seller
+    const conversation = await db.conversation.findUnique({
+      where: { id },
+    })
+
+    // Mark messages as read - set read_at timestamp
+    await db.message.updateMany({
+      where: {
+        conversation_id: id,
+        sender_id: { not: userId },
+        is_read: false,
+      },
+      data: {
+        is_read: true,
+        read_at: new Date(),
+      },
+    })
+
+    // Reset unread counter for the current user
+    if (conversation) {
+      if (conversation.buyer_id === userId) {
+        await db.conversation.update({
+          where: { id },
+          data: { buyer_unread: 0 },
+        })
+      } else if (conversation.seller_id === userId) {
+        await db.conversation.update({
+          where: { id },
+          data: { seller_unread: 0 },
+        })
+      }
     }
-
-    // Mark messages as read
-    await supabase
-      .from('messages')
-      .update({ is_read: true })
-      .eq('conversation_id', id)
-      .neq('sender_id', user.id)
-      .eq('is_read', false)
 
     return NextResponse.json({
       success: true,
@@ -76,64 +72,52 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {}
-          },
-        },
-      }
-    )
+    const body = await request.json()
+    const { message, userId } = body
 
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
+    if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
-
-    const body = await request.json()
-    const { message } = body
 
     if (!message?.trim()) {
       return NextResponse.json({ success: false, error: 'Message is required' }, { status: 400 })
     }
 
     // Insert the message
-    const { data: newMessage, error } = await supabase
-      .from('messages')
-      .insert({
+    const newMessage = await db.message.create({
+      data: {
         conversation_id: id,
-        sender_id: user.id,
+        sender_id: userId,
         message: message.trim(),
         is_read: false,
-      })
-      .select()
-      .single()
+      },
+    })
 
-    if (error) {
-      console.error('Insert message error:', error)
-      return NextResponse.json({ success: false, error: 'Failed to send message' }, { status: 500 })
-    }
+    // Get the conversation to determine buyer/seller
+    const conversation = await db.conversation.findUnique({
+      where: { id },
+    })
 
-    // Update conversation's last_message_at
-    await supabase
-      .from('conversations')
-      .update({
+    // Update conversation's last_message_at, last_message_by, and increment unread counter
+    if (conversation) {
+      const updateData: Record<string, unknown> = {
         last_message: message.trim(),
-        last_message_at: new Date().toISOString(),
+        last_message_at: new Date(),
+        last_message_by: userId,
+      }
+
+      // Increment the other party's unread counter
+      if (conversation.buyer_id === userId) {
+        updateData.seller_unread = (conversation.seller_unread || 0) + 1
+      } else if (conversation.seller_id === userId) {
+        updateData.buyer_unread = (conversation.buyer_unread || 0) + 1
+      }
+
+      await db.conversation.update({
+        where: { id },
+        data: updateData,
       })
-      .eq('id', id)
+    }
 
     return NextResponse.json({
       success: true,

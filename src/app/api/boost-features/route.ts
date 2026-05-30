@@ -1,21 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 // GET: Fetch boost features
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data, error } = await supabase
-      .from('boost_features')
-      .select('*')
-      .eq('is_active', true)
-      .order('display_order', { ascending: true })
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-    
+    const data = await db.boostFeature.findMany({
+      where: { is_active: true },
+      orderBy: { display_order: 'asc' },
+    })
+
     return NextResponse.json({ features: data })
   } catch (error) {
     console.error('Error fetching boost features:', error)

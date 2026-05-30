@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 // GET - Get all inspection pricing
 export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabase
-      .from('inspection_pricing')
-      .select('*')
-      .eq('is_active', true)
-      .order('display_order')
-
-    if (error) throw error
+    const data = await db.inspectionPricing.findMany({
+      where: { is_active: true },
+      orderBy: { display_order: 'asc' }
+    })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
@@ -27,13 +23,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const adminClient = getSupabaseAdmin()
 
-    const { data, error } = await adminClient
-      .from('inspection_pricing')
-      .insert({
+    const data = await db.inspectionPricing.create({
+      data: {
         name: body.name,
         description: body.description,
+        price: body.price || 0,
+        duration_days: body.duration_days || null,
         type: body.type,
         token_cost: body.token_cost || 0,
         includes_inspector: body.includes_inspector || false,
@@ -42,11 +38,8 @@ export async function POST(request: NextRequest) {
         certificate_validity_days: body.certificate_validity_days || 90,
         is_popular: body.is_popular || false,
         display_order: body.display_order || 0
-      })
-      .select()
-      .single()
-
-    if (error) throw error
+      }
+    })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
@@ -62,13 +55,14 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const adminClient = getSupabaseAdmin()
 
-    const { data, error } = await adminClient
-      .from('inspection_pricing')
-      .update({
+    const data = await db.inspectionPricing.update({
+      where: { id: body.id },
+      data: {
         name: body.name,
         description: body.description,
+        price: body.price,
+        duration_days: body.duration_days,
         token_cost: body.token_cost,
         includes_inspector: body.includes_inspector,
         includes_certificate: body.includes_certificate,
@@ -76,14 +70,9 @@ export async function PUT(request: NextRequest) {
         certificate_validity_days: body.certificate_validity_days,
         is_popular: body.is_popular,
         is_active: body.is_active,
-        display_order: body.display_order,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', body.id)
-      .select()
-      .single()
-
-    if (error) throw error
+        display_order: body.display_order
+      }
+    })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {

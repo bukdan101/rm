@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 export async function GET() {
   try {
-    const { data, error } = await supabase
-      .from('brands')
-      .select('*')
-      .order('name')
-
-    if (error) throw error
+    const data = await db.brand.findMany({
+      orderBy: { name: 'asc' },
+    })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {

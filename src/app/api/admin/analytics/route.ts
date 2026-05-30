@@ -1,27 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { db } from '@/lib/db'
+
+// Helper to verify admin access
+async function verifyAdmin(request: NextRequest) {
+  const userId = request.headers.get('x-user-id')
+  if (!userId) {
+    return { authorized: false, error: NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }) }
+  }
+  const profile = await db.profile.findUnique({ where: { id: userId }, select: { role: true } })
+  if (!profile || profile.role !== 'admin') {
+    return { authorized: false, error: NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 }) }
+  }
+  return { authorized: true, userId }
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    // Check authentication
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Check admin role
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
-
-    if (!profile || profile.role !== 'admin') {
-      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.authorized) return authResult.error!
 
     const searchParams = request.nextUrl.searchParams
     const period = searchParams.get('period') || '30d'
@@ -47,62 +43,70 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch user stats
-    const { data: usersData, error: usersError } = await supabase
-      .from('profiles')
-      .select('created_at, role')
+    const usersData = await db.profile.findMany({
+      select: { created_at: true, role: true },
+    })
 
     // Fetch listings stats
-    const { data: listingsData, error: listingsError } = await supabase
-      .from('car_listings')
-      .select('created_at, status, price, brand, model')
+    const listingsData = await db.carListing.findMany({
+      select: { created_at: true, status: true, price_cash: true, brand_id: true },
+    })
 
     // Fetch transactions
-    const { data: transactionsData, error: transactionsError } = await supabase
-      .from('transactions')
-      .select('created_at, amount, type, status')
+    const transactionsData = await db.transaction.findMany({
+      select: { created_at: true, amount: true, type: true, status: true },
+    })
 
     // Process analytics data
-    const totalUsers = usersData?.length || 0
-    const totalDealers = usersData?.filter(u => u.role === 'dealer').length || 0
+    const totalUsers = usersData.length
+    const totalDealers = usersData.filter(u => u.role === 'dealer').length
     const totalRegularUsers = totalUsers - totalDealers
 
-    const totalListings = listingsData?.length || 0
-    const activeListings = listingsData?.filter(l => l.status === 'active').length || 0
-    const soldListings = listingsData?.filter(l => l.status === 'sold').length || 0
-    const pendingListings = listingsData?.filter(l => l.status === 'pending').length || 0
+    const totalListings = listingsData.length
+    const activeListings = listingsData.filter(l => l.status === 'active').length
+    const soldListings = listingsData.filter(l => l.status === 'sold').length
+    const pendingListings = listingsData.filter(l => l.status === 'pending').length
 
     // Calculate revenue
     const totalRevenue = transactionsData
-      ?.filter(t => t.status === 'completed')
-      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0) || 0
+      .filter(t => t.status === 'completed')
+      .reduce((sum, t) => sum + (t.amount || 0), 0)
 
     // Calculate daily data for charts
     const dailyUsers: Record<string, number> = {}
     const dailyListings: Record<string, number> = {}
     const dailyRevenue: Record<string, number> = {}
 
-    usersData?.forEach(user => {
+    usersData.forEach(user => {
       const date = new Date(user.created_at).toISOString().split('T')[0]
       dailyUsers[date] = (dailyUsers[date] || 0) + 1
     })
 
-    listingsData?.forEach(listing => {
+    listingsData.forEach(listing => {
       const date = new Date(listing.created_at).toISOString().split('T')[0]
       dailyListings[date] = (dailyListings[date] || 0) + 1
     })
 
-    transactionsData?.forEach(tx => {
+    transactionsData.forEach(tx => {
       if (tx.status === 'completed') {
         const date = new Date(tx.created_at).toISOString().split('T')[0]
-        dailyRevenue[date] = (dailyRevenue[date] || 0) + (Number(tx.amount) || 0)
+        dailyRevenue[date] = (dailyRevenue[date] || 0) + (tx.amount || 0)
       }
     })
 
-    // Get top brands
+    // Get top brands via brand_id
     const brandCounts: Record<string, number> = {}
-    listingsData?.forEach(listing => {
-      if (listing.brand) {
-        brandCounts[listing.brand] = (brandCounts[listing.brand] || 0) + 1
+    const brandIds = [...new Set(listingsData.map(l => l.brand_id).filter(Boolean))] as number[]
+    const brands = await db.brand.findMany({
+      where: { id: { in: brandIds } },
+      select: { id: true, name: true },
+    })
+    const brandMap = Object.fromEntries(brands.map(b => [b.id, b.name]))
+
+    listingsData.forEach(listing => {
+      if (listing.brand_id) {
+        const brandName = brandMap[listing.brand_id] || 'Unknown'
+        brandCounts[brandName] = (brandCounts[brandName] || 0) + 1
       }
     })
     const topBrands = Object.entries(brandCounts)
@@ -113,12 +117,12 @@ export async function GET(request: NextRequest) {
     // Calculate growth rate
     const lastMonth = new Date()
     lastMonth.setMonth(lastMonth.getMonth() - 1)
-    const usersLastMonth = usersData?.filter(u => new Date(u.created_at) >= lastMonth).length || 0
-    const usersMonthBefore = usersData?.filter(u => {
+    const usersLastMonth = usersData.filter(u => new Date(u.created_at) >= lastMonth).length
+    const usersMonthBefore = usersData.filter(u => {
       const date = new Date(u.created_at)
       return date >= new Date(lastMonth.getTime() - 30 * 24 * 60 * 60 * 1000) && date < lastMonth
-    }).length || 0
-    const userGrowthRate = usersMonthBefore > 0 
+    }).length
+    const userGrowthRate = usersMonthBefore > 0
       ? ((usersLastMonth - usersMonthBefore) / usersMonthBefore * 100).toFixed(1)
       : 0
 

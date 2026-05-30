@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 // BNI VA Configuration
 const BNI_VA_PREFIX = '8808' // Example prefix, should be configured
@@ -25,49 +25,36 @@ function generateInvoiceNumber(): string {
 // GET: Get user's payments
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const searchParams = request.nextUrl.searchParams
+    const userId = searchParams.get('userId')
     const status = searchParams.get('status')
     const limit = parseInt(searchParams.get('limit') || '10')
     
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+    }
+    
     // Check if user is a dealer
-    const { data: dealer } = await supabase
-      .from('dealers')
-      .select('id')
-      .eq('owner_id', user.id)
-      .single()
+    const dealer = await db.dealer.findFirst({
+      where: { owner_id: userId }
+    })
     
-    let query = supabase
-      .from('payments')
-      .select(`
-        *,
-        package:credit_packages(*)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(limit)
-    
+    const where: any = {}
     if (dealer) {
-      query = query.eq('dealer_id', dealer.id)
+      where.dealer_id = dealer.id
     } else {
-      query = query.eq('user_id', user.id)
+      where.user_id = userId
     }
     
     if (status) {
-      query = query.eq('status', status)
+      where.status = status
     }
     
-    const { data: payments, error } = await query
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    const payments = await db.payment.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      take: limit,
+    })
     
     return NextResponse.json({ payments })
   } catch (error) {
@@ -79,46 +66,33 @@ export async function GET(request: NextRequest) {
 // POST: Create new payment
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const body = await request.json()
-    const { package_id, user_notes } = body
+    const { package_id, userId } = body
     
-    if (!package_id) {
-      return NextResponse.json({ error: 'Package ID is required' }, { status: 400 })
+    if (!package_id || !userId) {
+      return NextResponse.json({ error: 'Package ID and User ID are required' }, { status: 400 })
     }
     
     // Get package details
-    const { data: pkg, error: pkgError } = await supabase
-      .from('credit_packages')
-      .select('*')
-      .eq('id', package_id)
-      .eq('is_active', true)
-      .single()
+    const pkg = await db.creditPackage.findUnique({
+      where: { id: package_id }
+    })
     
-    if (pkgError || !pkg) {
+    if (!pkg || !pkg.is_active) {
       return NextResponse.json({ error: 'Package not found' }, { status: 404 })
     }
     
     // Check if user is a dealer
-    const { data: dealer } = await supabase
-      .from('dealers')
-      .select('id')
-      .eq('owner_id', user.id)
-      .single()
+    const dealer = await db.dealer.findFirst({
+      where: { owner_id: userId }
+    })
     
     // Validate package type matches user type
-    if (pkg.is_for_dealer && !dealer) {
+    if (pkg.is_dealer && !dealer) {
       return NextResponse.json({ error: 'This package is only for dealers' }, { status: 400 })
     }
     
-    if (!pkg.is_for_dealer && dealer) {
+    if (!pkg.is_dealer && dealer) {
       return NextResponse.json({ error: 'Please select a dealer package' }, { status: 400 })
     }
     
@@ -126,36 +100,22 @@ export async function POST(request: NextRequest) {
     const va_number = generateVANumber()
     const invoice_number = generateInvoiceNumber()
     
-    // Set expiry to 24 hours from now
-    const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-    
-    // Create payment record
+    // Create payment record (no expires_at in schema)
     const payment = {
       invoice_number,
-      user_id: dealer ? null : user.id,
+      user_id: dealer ? null : userId,
       dealer_id: dealer?.id || null,
       package_id,
       amount: pkg.price,
-      credits_awarded: pkg.total_credits,
+      credits_awarded: pkg.tokens + pkg.bonus_tokens,
       payment_method: 'bni_va',
       va_number,
       status: 'pending',
-      user_notes,
-      expires_at
     }
     
-    const { data: newPayment, error: createError } = await supabase
-      .from('payments')
-      .insert(payment)
-      .select(`
-        *,
-        package:credit_packages(*)
-      `)
-      .single()
-    
-    if (createError) {
-      return NextResponse.json({ error: createError.message }, { status: 500 })
-    }
+    const newPayment = await db.payment.create({
+      data: payment
+    })
     
     return NextResponse.json({
       payment: newPayment,
@@ -164,7 +124,6 @@ export async function POST(request: NextRequest) {
         va_number,
         account_name: 'AUTOMARKET INDONESIA',
         amount: pkg.price,
-        expires_at
       }
     })
   } catch (error) {
@@ -176,41 +135,29 @@ export async function POST(request: NextRequest) {
 // PUT: Update payment (upload proof or cancel)
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const body = await request.json()
-    const { payment_id, action, proof_url } = body
+    const { payment_id, action, proof_url, userId } = body
     
-    if (!payment_id || !action) {
-      return NextResponse.json({ error: 'Payment ID and action are required' }, { status: 400 })
+    if (!payment_id || !action || !userId) {
+      return NextResponse.json({ error: 'Payment ID, action, and User ID are required' }, { status: 400 })
     }
     
     // Get payment
-    const { data: payment, error: paymentError } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('id', payment_id)
-      .single()
+    const payment = await db.payment.findUnique({
+      where: { id: payment_id }
+    })
     
-    if (paymentError || !payment) {
+    if (!payment) {
       return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
     }
     
     // Verify ownership
-    const { data: dealer } = await supabase
-      .from('dealers')
-      .select('id')
-      .eq('owner_id', user.id)
-      .single()
+    const dealer = await db.dealer.findFirst({
+      where: { owner_id: userId }
+    })
     
     const isOwner = (dealer && payment.dealer_id === dealer.id) || 
-                    (!dealer && payment.user_id === user.id)
+                    (!dealer && payment.user_id === userId)
     
     if (!isOwner) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
@@ -221,31 +168,23 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: 'Proof URL is required' }, { status: 400 })
       }
       
-      const { error: updateError } = await supabase
-        .from('payments')
-        .update({
+      await db.payment.update({
+        where: { id: payment_id },
+        data: {
           proof_url,
           status: 'paid',
-          paid_at: new Date().toISOString()
-        })
-        .eq('id', payment_id)
-      
-      if (updateError) {
-        return NextResponse.json({ error: updateError.message }, { status: 500 })
-      }
+          paid_at: new Date()
+        }
+      })
       
       return NextResponse.json({ message: 'Proof uploaded successfully' })
     }
     
     if (action === 'cancel') {
-      const { error: updateError } = await supabase
-        .from('payments')
-        .update({ status: 'cancelled' })
-        .eq('id', payment_id)
-      
-      if (updateError) {
-        return NextResponse.json({ error: updateError.message }, { status: 500 })
-      }
+      await db.payment.update({
+        where: { id: payment_id },
+        data: { status: 'cancelled' }
+      })
       
       return NextResponse.json({ message: 'Payment cancelled' })
     }

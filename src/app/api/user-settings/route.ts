@@ -1,35 +1,28 @@
-import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
 
 // GET - Fetch user settings
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId')
+
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
 
-    const { data: settings, error } = await supabase
-      .from('user_settings')
-      .select('*')
-      .eq('user_id', user.id)
-      .single()
-
-    if (error && error.code !== 'PGRST116') {
-      console.error('Error fetching settings:', error)
-      return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 })
-    }
+    const settings = await db.userSetting.findUnique({
+      where: { user_id: userId }
+    })
 
     // Return default settings if not found
     const userSettings = settings || {
-      email_notifications: true,
-      push_notifications: true,
-      sms_notifications: false,
-      promo_notifications: false,
+      notification_email: true,
+      notification_push: true,
+      notification_sms: false,
+      promo_notifications: true,
       chat_notifications: true,
+      theme: 'system',
       language: 'id',
       currency: 'IDR'
     }
@@ -44,48 +37,48 @@ export async function GET() {
 // PUT - Update user settings
 export async function PUT(request: Request) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json()
     const { 
+      userId,
       email_notifications, 
       push_notifications, 
       sms_notifications,
       promo_notifications,
       chat_notifications,
       language,
-      currency 
+      currency,
+      theme
     } = body
 
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+    }
+
     // Upsert settings
-    const { data, error } = await supabase
-      .from('user_settings')
-      .upsert({
-        user_id: user.id,
-        email_notifications: email_notifications ?? true,
-        push_notifications: push_notifications ?? true,
-        sms_notifications: sms_notifications ?? false,
-        promo_notifications: promo_notifications ?? false,
+    const data = await db.userSetting.upsert({
+      where: { user_id: userId },
+      update: {
+        notification_email: email_notifications ?? true,
+        notification_push: push_notifications ?? true,
+        notification_sms: sms_notifications ?? false,
+        promo_notifications: promo_notifications ?? true,
         chat_notifications: chat_notifications ?? true,
         language: language ?? 'id',
         currency: currency ?? 'IDR',
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'user_id'
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error updating settings:', error)
-      return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 })
-    }
+        theme: theme ?? 'system',
+      },
+      create: {
+        user_id: userId,
+        notification_email: email_notifications ?? true,
+        notification_push: push_notifications ?? true,
+        notification_sms: sms_notifications ?? false,
+        promo_notifications: promo_notifications ?? true,
+        chat_notifications: chat_notifications ?? true,
+        language: language ?? 'id',
+        currency: currency ?? 'IDR',
+        theme: theme ?? 'system',
+      }
+    })
 
     return NextResponse.json({ settings: data })
   } catch (error) {

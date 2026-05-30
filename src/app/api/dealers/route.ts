@@ -1,41 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    
+
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
-    const offset = (page - 1) * limit
     const search = searchParams.get('search')
     const cityId = searchParams.get('city_id')
     const verified = searchParams.get('verified')
 
-    let query = supabase
-      .from('dealers')
-      .select('*', { count: 'exact' })
-      .eq('is_active', true)
+    const where: Record<string, unknown> = {
+      is_active: true,
+    }
+
+    if (cityId) {
+      where.city_id = cityId
+    }
+
+    if (verified === 'true') {
+      where.verified = true
+    }
 
     if (search) {
-      query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`)
-    }
-    
-    if (cityId) {
-      query = query.eq('city_id', cityId)
-    }
-    
-    if (verified === 'true') {
-      query = query.eq('verified', true)
+      where.OR = [
+        { name: { contains: search } },
+        { description: { contains: search } },
+      ]
     }
 
-    query = query
-      .order('rating', { ascending: false })
-      .range(offset, offset + limit - 1)
-
-    const { data, error, count } = await query
-
-    if (error) throw error
+    const [data, count] = await Promise.all([
+      db.dealer.findMany({
+        where,
+        orderBy: { rating: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      db.dealer.count({ where }),
+    ])
 
     return NextResponse.json({
       success: true,
@@ -43,9 +46,9 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit)
-      }
+        total: count,
+        totalPages: Math.ceil(count / limit),
+      },
     })
   } catch (error) {
     console.error('Error fetching dealers:', error)

@@ -1,50 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {}
-          },
-        },
-      }
-    )
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 })
     }
 
-    // Get user's token transactions
-    const { data: transactions, error } = await supabase
-      .from('token_transactions')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50)
-
-    if (error) {
-      // Table might not exist, return empty
-      return NextResponse.json({
-        success: true,
-        transactions: [],
-      })
-    }
+    // Get user's credit transactions
+    const transactions = await db.creditTransaction.findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' },
+      take: 50,
+    })
 
     return NextResponse.json({
       success: true,

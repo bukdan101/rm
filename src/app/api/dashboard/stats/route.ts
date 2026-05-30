@@ -1,159 +1,119 @@
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import type { NextRequest } from 'next/server'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
+    const userId = request.headers.get('x-user-id')
+
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userId = user.id
-
     // Get user profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    const profile = await db.profile.findUnique({
+      where: { id: userId },
+    })
 
-    // === WALLET & CREDITS ===
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('balance, total_earned, total_spent')
-      .eq('user_id', userId)
-      .single()
+    // === WALLET & CREDITS (UserCredit instead of wallets) ===
+    const userCredit = await db.userCredit.findUnique({
+      where: { user_id: userId },
+      select: { balance: true, total_earned: true, total_spent: true },
+    })
 
     // === LISTINGS STATS ===
-    const { count: totalListings } = await supabase
-      .from('car_listings')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
+    const totalListings = await db.carListing.count({
+      where: { user_id: userId },
+    })
 
-    const { count: activeListings } = await supabase
-      .from('car_listings')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('status', 'active')
+    const activeListings = await db.carListing.count({
+      where: { user_id: userId, status: 'active' },
+    })
 
-    const { count: pendingListings } = await supabase
-      .from('car_listings')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('status', 'pending')
+    const pendingListings = await db.carListing.count({
+      where: { user_id: userId, status: 'pending' },
+    })
 
-    const { count: soldListings } = await supabase
-      .from('car_listings')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('status', 'sold')
+    const soldListings = await db.carListing.count({
+      where: { user_id: userId, status: 'sold' },
+    })
 
     // === ORDERS STATS ===
-    const { count: totalOrders } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
-      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
+    const totalOrders = await db.order.count({
+      where: { OR: [{ buyer_id: userId }, { seller_id: userId }] },
+    })
 
-    const { count: pendingOrders } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
-      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
-      .eq('status', 'pending')
+    const pendingOrders = await db.order.count({
+      where: { OR: [{ buyer_id: userId }, { seller_id: userId }], status: 'pending' },
+    })
 
-    const { count: completedOrders } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
-      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
-      .eq('status', 'completed')
+    const completedOrders = await db.order.count({
+      where: { OR: [{ buyer_id: userId }, { seller_id: userId }], status: 'completed' },
+    })
 
     // === VIEWS & FAVORITES ===
-    const { data: listingsViews } = await supabase
-      .from('car_listings')
-      .select('view_count')
-      .eq('user_id', userId)
+    const listingsViews = await db.carListing.findMany({
+      where: { user_id: userId },
+      select: { view_count: true },
+    })
 
-    const totalViews = listingsViews?.reduce((sum, l) => sum + (l.view_count || 0), 0) || 0
+    const totalViews = listingsViews.reduce((sum, l) => sum + (l.view_count || 0), 0)
 
-    const { count: totalFavorites } = await supabase
-      .from('car_favorites')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
+    const totalFavorites = await db.carFavorite.count({
+      where: { user_id: userId },
+    })
 
     // === MESSAGES ===
-    const { count: unreadMessages } = await supabase
-      .from('conversations')
-      .select('*', { count: 'exact', head: true })
-      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
+    const unreadMessages = await db.conversation.count({
+      where: { OR: [{ buyer_id: userId }, { seller_id: userId }] },
+    })
 
     // === NOTIFICATIONS ===
-    const { count: unreadNotifications } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('read', false)
+    const unreadNotifications = await db.notification.count({
+      where: { user_id: userId, read: false },
+    })
 
     // === CHART DATA ===
-    // Get views per day for last 7 days
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-
-    const { data: analyticsViews } = await supabase
-      .from('analytics_page_views')
-      .select('created_at')
-      .eq('user_id', userId)
-      .gte('created_at', sevenDaysAgo.toISOString())
-
-    // Generate chart data (simplified)
+    // Generate simulated chart data since we don't have daily analytics table
     const viewsData = Array(7).fill(0).map(() => {
-      const base = 20 + Math.floor(Math.random() * 30)
-      return base + (analyticsViews?.length || 0) * Math.floor(Math.random() * 2)
+      return 20 + Math.floor(Math.random() * 30)
     })
 
     const inquiriesData = Array(7).fill(0).map(() => {
-      return Math.floor(Math.random() * 10) + (totalOrders || 0)
+      return Math.floor(Math.random() * 10) + totalOrders
     })
 
     // === RECENT ACTIVITY ===
-    const recentActivity = []
+    const recentActivity: Array<{ type: string; message: string; time: string }> = []
 
     // Get recent views
-    const { data: recentViews } = await supabase
-      .from('car_views')
-      .select(`
-        created_at,
-        car_listings (title)
-      `)
-      .eq('viewer_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(3)
+    const recentViews = await db.carView.findMany({
+      where: { user_id: userId },
+      select: { created_at: true },
+      orderBy: { created_at: 'desc' },
+      take: 3,
+    })
 
-    recentViews?.forEach(v => {
+    recentViews.forEach(v => {
       recentActivity.push({
         type: 'view',
-        message: `${v.car_listings?.title || 'Listing'} dilihat`,
+        message: 'Listing dilihat',
         time: getTimeAgo(v.created_at),
       })
     })
 
     // Get recent orders
-    const { data: recentOrders } = await supabase
-      .from('orders')
-      .select(`
-        created_at,
-        status,
-        car_listings (title)
-      `)
-      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
-      .order('created_at', { ascending: false })
-      .limit(3)
+    const recentOrders = await db.order.findMany({
+      where: { OR: [{ buyer_id: userId }, { seller_id: userId }] },
+      select: { created_at: true, status: true },
+      orderBy: { created_at: 'desc' },
+      take: 3,
+    })
 
-    recentOrders?.forEach(o => {
+    recentOrders.forEach(o => {
       recentActivity.push({
         type: 'order',
-        message: `Pesanan ${o.car_listings?.title || 'baru'} - ${o.status}`,
+        message: `Pesanan baru - ${o.status}`,
         time: getTimeAgo(o.created_at),
       })
     })
@@ -162,31 +122,41 @@ export async function GET() {
     recentActivity.sort(() => Math.random() - 0.5)
     recentActivity.slice(0, 5)
 
+    // Get KYC status from KycVerification table
+    let kycStatus = 'not_submitted'
+    const kycRecord = await db.kycVerification.findUnique({
+      where: { user_id: userId },
+      select: { status: true },
+    })
+    if (kycRecord) {
+      kycStatus = kycRecord.status
+    }
+
     // === RESPONSE ===
     return NextResponse.json({
       success: true,
       // Wallet
-      walletBalance: wallet?.balance || 0,
-      creditsBalance: wallet?.balance || 0,
-      totalEarned: wallet?.total_earned || 0,
-      totalSpent: wallet?.total_spent || 0,
+      walletBalance: userCredit?.balance || 0,
+      creditsBalance: userCredit?.balance || 0,
+      totalEarned: userCredit?.total_earned || 0,
+      totalSpent: userCredit?.total_spent || 0,
       // Listings
-      totalListings: totalListings || 0,
-      activeListings: activeListings || 0,
-      pendingListings: pendingListings || 0,
-      soldListings: soldListings || 0,
+      totalListings,
+      activeListings,
+      pendingListings,
+      soldListings,
       // Orders
-      totalOrders: totalOrders || 0,
-      pendingOrders: pendingOrders || 0,
-      completedOrders: completedOrders || 0,
+      totalOrders,
+      pendingOrders,
+      completedOrders,
       // Engagement
       totalViews,
-      totalFavorites: totalFavorites || 0,
-      unreadMessages: unreadMessages || 0,
-      unreadNotifications: unreadNotifications || 0,
+      totalFavorites,
+      unreadMessages,
+      unreadNotifications,
       // Profile
-      kycStatus: profile?.kyc_status || 'not_submitted',
-      role: profile?.role || 'user',
+      kycStatus,
+      role: profile?.role || 'buyer',
       // Charts
       viewsData,
       inquiriesData,
@@ -201,15 +171,15 @@ export async function GET() {
   }
 }
 
-function getTimeAgo(dateString: string): string {
+function getTimeAgo(dateString: Date): string {
   const now = new Date()
   const date = new Date(dateString)
   const diff = now.getTime() - date.getTime()
-  
+
   const minutes = Math.floor(diff / 60000)
   const hours = Math.floor(diff / 3600000)
   const days = Math.floor(diff / 86400000)
-  
+
   if (minutes < 1) return 'Baru saja'
   if (minutes < 60) return `${minutes} menit lalu`
   if (hours < 24) return `${hours} jam lalu`

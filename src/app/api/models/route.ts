@@ -1,26 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const brandId = searchParams.get('brand_id')
 
-    let query = supabase
-      .from('car_models')
-      .select(`
-        *,
-        brand:brands(id, name)
-      `)
-      .order('name')
-
+    const where: Record<string, unknown> = {}
     if (brandId) {
-      query = query.eq('brand_id', brandId)
+      where.brand_id = parseInt(brandId)
     }
 
-    const { data, error } = await query
-
-    if (error) throw error
+    const data = await db.carModel.findMany({
+      where,
+      include: {
+        brand: { select: { id: true, name: true } },
+      },
+      orderBy: { name: 'asc' },
+    })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {

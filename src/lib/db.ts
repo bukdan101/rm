@@ -1,7 +1,6 @@
 // ==============================================================
-// Database Client Exports
+// Database Client Export
 // - Prisma Client for local SQLite (Prisma ORM)
-// - Supabase Client for remote Supabase database
 // ==============================================================
 
 import { PrismaClient } from '@prisma/client'
@@ -16,10 +15,3 @@ export const db = globalForPrisma.prisma ?? new PrismaClient()
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = db
 }
-
-// Re-export Supabase client for backward compatibility
-export { supabase, supabaseAdmin, getSupabaseAdmin } from './supabase'
-
-// Type alias for backward compatibility
-import type { Database } from './supabase'
-export type { Database }

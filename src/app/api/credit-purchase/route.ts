@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { db } from '@/lib/db'
 import { errorResponse, successResponse } from '@/lib/api-utils'
 
 // POST - Process credit purchase
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const adminClient = getSupabaseAdmin()
     const body = await request.json()
     const { packageId, paymentMethod, userId } = body
 
@@ -15,21 +12,19 @@ export async function POST(request: NextRequest) {
       return errorResponse('Missing required fields', 400)
     }
 
-    // Get package details
-    const { data: pkg, error: pkgError } = await supabase
-      .from('credit_packages')
-      .select('*')
-      .eq('id', packageId)
-      .single()
+    // Get package details from CreditPackage
+    const pkg = await db.creditPackage.findUnique({
+      where: { id: packageId }
+    })
 
     // If package not in DB, use default calculation
     let credits = 50
     let bonusCredits = 0
     let price = 50000
 
-    if (pkg && !pkgError) {
-      credits = pkg.credits
-      bonusCredits = pkg.bonus_credits || 0
+    if (pkg) {
+      credits = pkg.tokens
+      bonusCredits = pkg.bonus_tokens || 0
       price = pkg.price
     } else {
       // Default packages mapping
@@ -49,84 +44,77 @@ export async function POST(request: NextRequest) {
 
     const totalCredits = credits + bonusCredits
 
-    // Create purchase transaction record using admin client
-    const { data: transaction, error: transactionError } = await adminClient
-      .from('credit_transactions')
-      .insert({
-        user_id: userId,
-        type: 'purchase',
-        amount: totalCredits,
-        balance_before: 0, // Will be updated after credit check
-        balance_after: 0,
-        description: `Purchase ${credits} credits${bonusCredits > 0 ? ` + ${bonusCredits} bonus` : ''} via ${paymentMethod}`,
-        reference_id: `PUR-${Date.now()}-${userId.slice(0, 8)}`,
-        status: paymentMethod === 'online' ? 'completed' : 'pending',
-        created_at: new Date().toISOString()
+    // Get or create user credit record
+    const userCredit = await db.userCredit.findUnique({
+      where: { user_id: userId }
+    })
+
+    if (userCredit) {
+      // Update existing credit
+      const newBalance = userCredit.balance + totalCredits
+      await db.userCredit.update({
+        where: { id: userCredit.id },
+        data: {
+          balance: newBalance,
+          total_earned: userCredit.total_earned + totalCredits,
+          last_purchase_at: paymentMethod === 'online' ? new Date() : userCredit.last_purchase_at,
+        }
       })
-      .select()
-      .maybeSingle()
 
-    // For online payment, immediately add credits
-    if (paymentMethod === 'online') {
-      // Check if user has credit record
-      const { data: userCredit, error: creditError } = await adminClient
-        .from('user_credits')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle()
-
-      if (userCredit) {
-        // Update existing credit
-        const newBalance = userCredit.balance + totalCredits
-        await adminClient
-          .from('user_credits')
-          .update({
-            balance: newBalance,
-            total_earned: userCredit.total_earned + totalCredits,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', userCredit.id)
-
-        // Update transaction with balance info
-        if (transaction) {
-          await adminClient
-            .from('credit_transactions')
-            .update({
-              balance_before: userCredit.balance,
-              balance_after: newBalance
-            })
-            .eq('id', transaction.id)
+      // Create transaction record
+      await db.creditTransaction.create({
+        data: {
+          user_credit_id: userCredit.id,
+          user_id: userId,
+          type: 'purchase',
+          amount: totalCredits,
+          balance_before: userCredit.balance,
+          balance_after: newBalance,
+          description: `Purchase ${credits} credits${bonusCredits > 0 ? ` + ${bonusCredits} bonus` : ''} via ${paymentMethod}`,
+          reference_type: 'credit_purchase',
+          reference_id: `PUR-${Date.now()}-${userId.slice(0, 8)}`,
         }
-      } else {
-        // Create new credit record
-        await adminClient
-          .from('user_credits')
-          .insert({
-            user_id: userId,
-            balance: totalCredits,
-            total_earned: totalCredits,
-            total_spent: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
+      })
 
-        // Update transaction with balance info
-        if (transaction) {
-          await adminClient
-            .from('credit_transactions')
-            .update({
-              balance_before: 0,
-              balance_after: totalCredits
-            })
-            .eq('id', transaction.id)
-        }
+      if (paymentMethod === 'online') {
+        return successResponse({
+          creditsAdded: totalCredits,
+          message: 'Credits added successfully'
+        })
       }
-
-      return successResponse({
-        creditsAdded: totalCredits,
-        transactionId: transaction?.id,
-        message: 'Credits added successfully'
+    } else {
+      // Create new credit record
+      const newCredit = await db.userCredit.create({
+        data: {
+          user_id: userId,
+          balance: totalCredits,
+          total_earned: totalCredits,
+          total_spent: 0,
+          last_purchase_at: paymentMethod === 'online' ? new Date() : undefined,
+        }
       })
+
+      // Create transaction record
+      await db.creditTransaction.create({
+        data: {
+          user_credit_id: newCredit.id,
+          user_id: userId,
+          type: 'purchase',
+          amount: totalCredits,
+          balance_before: 0,
+          balance_after: totalCredits,
+          description: `Purchase ${credits} credits${bonusCredits > 0 ? ` + ${bonusCredits} bonus` : ''} via ${paymentMethod}`,
+          reference_type: 'credit_purchase',
+          reference_id: `PUR-${Date.now()}-${userId.slice(0, 8)}`,
+        }
+      })
+
+      if (paymentMethod === 'online') {
+        return successResponse({
+          creditsAdded: totalCredits,
+          message: 'Credits added successfully'
+        })
+      }
     }
 
     // For manual payment, return bank details
@@ -138,9 +126,9 @@ export async function POST(request: NextRequest) {
         bank: 'BNI',
         accountNumber: '1234567890',
         accountName: 'AutoMarket Indonesia',
-        reference: transaction?.reference_id
+        reference: `PUR-${Date.now()}-${userId.slice(0, 8)}`
       },
-      instructions: `Silakan transfer ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price)} ke rekening di atas dengan kode referensi: ${transaction?.reference_id}`
+      instructions: `Silakan transfer ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price)} ke rekening di atas`
     })
   } catch (error) {
     console.error('Credit purchase error:', error)
@@ -151,7 +139,6 @@ export async function POST(request: NextRequest) {
 // GET - Get purchase history
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
 
@@ -159,17 +146,11 @@ export async function GET(request: NextRequest) {
       return errorResponse('User ID required', 400)
     }
 
-    const { data: transactions, error } = await supabase
-      .from('credit_transactions')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(20)
-
-    if (error) {
-      console.error('Error fetching transactions:', error)
-      return successResponse({ transactions: [] })
-    }
+    const transactions = await db.creditTransaction.findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' },
+      take: 20,
+    })
 
     return successResponse({ transactions: transactions || [] })
   } catch (error) {

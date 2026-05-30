@@ -1,80 +1,71 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 // GET: Get active boosts for a listing or user
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const searchParams = request.nextUrl.searchParams
     const listing_id = searchParams.get('listing_id')
+    const userId = searchParams.get('userId')
+    
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+    }
     
     if (listing_id) {
       // Get boosts for specific listing
-      const { data: boosts, error } = await supabase
-        .from('listing_boosts')
-        .select(`
-          *,
-          boost:boost_features(*)
-        `)
-        .eq('listing_id', listing_id)
-        .eq('is_active', true)
-        .gt('ends_at', new Date().toISOString())
-      
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
-      }
+      const boosts = await db.listingBoost.findMany({
+        where: {
+          listing_id,
+          is_active: true,
+          expires_at: { gt: new Date() }
+        },
+        include: {
+          boost_feature: true
+        }
+      })
       
       return NextResponse.json({ boosts })
     }
     
-    // Get all boosts for user's listings
-    const { data: dealer } = await supabase
-      .from('dealers')
-      .select('id')
-      .eq('owner_id', user.id)
-      .single()
-    
     // Get user's listings
-    let listingQuery = supabase
-      .from('car_listings')
-      .select('id')
+    const listings = await db.carListing.findMany({
+      where: { user_id: userId },
+      select: { id: true }
+    })
     
+    // Also check dealer listings
+    const dealer = await db.dealer.findFirst({
+      where: { owner_id: userId }
+    })
+    
+    let dealerListings: { id: string }[] = []
     if (dealer) {
-      listingQuery = listingQuery.eq('dealer_id', dealer.id)
-    } else {
-      listingQuery = listingQuery.eq('user_id', user.id)
+      dealerListings = await db.carListing.findMany({
+        where: { dealer_id: dealer.id },
+        select: { id: true }
+      })
     }
     
-    const { data: listings } = await listingQuery
+    const allListings = [...listings, ...dealerListings]
+    const listingIds = allListings.map(l => l.id)
     
-    if (!listings || listings.length === 0) {
+    if (listingIds.length === 0) {
       return NextResponse.json({ boosts: [] })
     }
     
-    const listingIds = listings.map(l => l.id)
-    
-    const { data: boosts, error } = await supabase
-      .from('listing_boosts')
-      .select(`
-        *,
-        boost:boost_features(*),
-        listing:car_listings(id, title, slug)
-      `)
-      .in('listing_id', listingIds)
-      .eq('is_active', true)
-      .gt('ends_at', new Date().toISOString())
-      .order('ends_at', { ascending: true })
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    const boosts = await db.listingBoost.findMany({
+      where: {
+        listing_id: { in: listingIds },
+        is_active: true,
+        expires_at: { gt: new Date() }
+      },
+      include: {
+        boost_feature: true,
+        listing: { select: { id: true, title: true, slug: true } }
+      },
+      orderBy: { expires_at: 'asc' }
+    })
     
     return NextResponse.json({ boosts })
   } catch (error) {
@@ -86,183 +77,138 @@ export async function GET(request: NextRequest) {
 // POST: Create a new boost for a listing
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const body = await request.json()
-    const { listing_id, boost_feature_id, auto_renew = false } = body
+    const { listing_id, boost_feature_id, userId } = body
     
-    if (!listing_id || !boost_feature_id) {
-      return NextResponse.json({ error: 'Listing ID and boost feature ID are required' }, { status: 400 })
+    if (!listing_id || !boost_feature_id || !userId) {
+      return NextResponse.json({ error: 'Listing ID, boost feature ID, and user ID are required' }, { status: 400 })
     }
     
     // Verify listing ownership
-    const { data: listing, error: listingError } = await supabase
-      .from('car_listings')
-      .select('id, user_id, dealer_id')
-      .eq('id', listing_id)
-      .single()
+    const listing = await db.carListing.findUnique({
+      where: { id: listing_id }
+    })
     
-    if (listingError || !listing) {
+    if (!listing) {
       return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
     }
     
     // Check if user is a dealer
-    const { data: dealer } = await supabase
-      .from('dealers')
-      .select('id')
-      .eq('owner_id', user.id)
-      .single()
+    const dealer = await db.dealer.findFirst({
+      where: { owner_id: userId }
+    })
     
     const isOwner = (dealer && listing.dealer_id === dealer.id) || 
-                    (!dealer && listing.user_id === user.id)
+                    (!dealer && listing.user_id === userId)
     
     if (!isOwner) {
       return NextResponse.json({ error: 'You can only boost your own listings' }, { status: 403 })
     }
     
     // Get boost feature
-    const { data: boostFeature, error: featureError } = await supabase
-      .from('boost_features')
-      .select('*')
-      .eq('id', boost_feature_id)
-      .eq('is_active', true)
-      .single()
+    const boostFeature = await db.boostFeature.findFirst({
+      where: { id: boost_feature_id, is_active: true }
+    })
     
-    if (featureError || !boostFeature) {
+    if (!boostFeature) {
       return NextResponse.json({ error: 'Boost feature not found' }, { status: 404 })
     }
     
     // Check if same boost is already active
-    const { data: existingBoost } = await supabase
-      .from('listing_boosts')
-      .select('id')
-      .eq('listing_id', listing_id)
-      .eq('boost_feature_id', boost_feature_id)
-      .eq('is_active', true)
-      .gt('ends_at', new Date().toISOString())
-      .single()
+    const existingBoost = await db.listingBoost.findFirst({
+      where: {
+        listing_id,
+        boost_feature_id,
+        is_active: true,
+        expires_at: { gt: new Date() }
+      }
+    })
     
     if (existingBoost) {
       return NextResponse.json({ error: 'This boost is already active for this listing' }, { status: 400 })
     }
     
     // Get user credits
-    let creditQuery = supabase
-      .from('user_credits')
-      .select('*')
+    let userCredit = await db.userCredit.findUnique({
+      where: { user_id: userId }
+    })
     
-    if (dealer) {
-      creditQuery = creditQuery.eq('dealer_id', dealer.id)
-    } else {
-      creditQuery = creditQuery.eq('user_id', user.id)
+    if (dealer && !userCredit) {
+      // Try by dealer_id
+      userCredit = await db.userCredit.findFirst({
+        where: { dealer_id: dealer.id }
+      })
     }
     
-    const { data: userCredit, error: creditError } = await creditQuery.single()
-    
-    if (creditError || !userCredit) {
+    if (!userCredit) {
       return NextResponse.json({ error: 'Credit account not found' }, { status: 404 })
     }
     
-    // Check balance
-    if (userCredit.balance < boostFeature.credit_cost) {
+    // Check balance (boostFeature.credits, not credit_cost)
+    if (userCredit.balance < boostFeature.credits) {
       return NextResponse.json({ 
         error: 'Insufficient credits',
-        required: boostFeature.credit_cost,
+        required: boostFeature.credits,
         current: userCredit.balance
       }, { status: 400 })
     }
     
     // Deduct credits
-    const newBalance = userCredit.balance - boostFeature.credit_cost
+    const newBalance = userCredit.balance - boostFeature.credits
     
-    const { error: updateCreditError } = await supabase
-      .from('user_credits')
-      .update({
+    await db.userCredit.update({
+      where: { id: userCredit.id },
+      data: {
         balance: newBalance,
-        total_spent: userCredit.total_spent + boostFeature.credit_cost
-      })
-      .eq('id', userCredit.id)
-    
-    if (updateCreditError) {
-      return NextResponse.json({ error: 'Failed to deduct credits' }, { status: 500 })
-    }
+        total_spent: userCredit.total_spent + boostFeature.credits,
+        last_usage_at: new Date()
+      }
+    })
     
     // Record transaction
-    const { data: transaction, error: transactionError } = await supabase
-      .from('credit_transactions')
-      .insert({
+    const transaction = await db.creditTransaction.create({
+      data: {
         user_credit_id: userCredit.id,
+        user_id: userId,
         type: 'usage',
-        amount: -boostFeature.credit_cost,
+        amount: -boostFeature.credits,
         balance_before: userCredit.balance,
         balance_after: newBalance,
         description: `Boost ${boostFeature.name} for listing`,
-        reference_type: 'boost'
-      })
-      .select()
-      .single()
+        reference_type: 'boost',
+        reference_id: boost_feature_id,
+      }
+    })
     
-    if (transactionError) {
-      // Rollback credit update
-      await supabase
-        .from('user_credits')
-        .update({ balance: userCredit.balance })
-        .eq('id', userCredit.id)
-      
-      return NextResponse.json({ error: 'Failed to record transaction' }, { status: 500 })
-    }
+    // Create boost (expires_at, not ends_at)
+    const expires_at = new Date(Date.now() + boostFeature.duration_days * 24 * 60 * 60 * 1000)
+    const starts_at = new Date()
     
-    // Create boost
-    const ends_at = new Date(Date.now() + boostFeature.duration_days * 24 * 60 * 60 * 1000).toISOString()
-    
-    const { data: boost, error: boostError } = await supabase
-      .from('listing_boosts')
-      .insert({
+    const boost = await db.listingBoost.create({
+      data: {
         listing_id,
         boost_feature_id,
-        user_credit_id: userCredit.id,
-        transaction_id: transaction.id,
-        credits_spent: boostFeature.credit_cost,
-        ends_at,
-        auto_renew
-      })
-      .select(`
-        *,
-        boost:boost_features(*)
-      `)
-      .single()
+        user_id: userId,
+        dealer_id: dealer?.id || null,
+        credits_spent: boostFeature.credits,
+        starts_at,
+        expires_at,
+      },
+      include: {
+        boost_feature: true
+      }
+    })
     
-    if (boostError) {
-      // Rollback
-      await supabase
-        .from('user_credits')
-        .update({ balance: userCredit.balance })
-        .eq('id', userCredit.id)
-      
-      await supabase
-        .from('credit_transactions')
-        .delete()
-        .eq('id', transaction.id)
-      
-      return NextResponse.json({ error: 'Failed to create boost' }, { status: 500 })
-    }
-    
-    // Log usage
-    await supabase
-      .from('credit_usage_log')
-      .insert({
-        user_credit_id: userCredit.id,
+    // Log usage (user_id, not user_credit_id; tokens_used, not credits_used; marketplace_type, not action)
+    await db.creditUsageLog.create({
+      data: {
+        user_id: userId,
         listing_id,
-        action: 'boost_listing',
-        credits_used: boostFeature.credit_cost,
-        details: { boost_name: boostFeature.name, duration_days: boostFeature.duration_days }
-      })
+        marketplace_type: 'boost_listing',
+        tokens_used: boostFeature.credits,
+        duration_days: boostFeature.duration_days,
+      }
+    })
     
     return NextResponse.json({
       boost,
@@ -277,65 +223,59 @@ export async function POST(request: NextRequest) {
 // DELETE: Cancel a boost
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    
     const searchParams = request.nextUrl.searchParams
     const boost_id = searchParams.get('id')
+    const userId = searchParams.get('userId')
     
     if (!boost_id) {
       return NextResponse.json({ error: 'Boost ID is required' }, { status: 400 })
     }
     
     // Get boost
-    const { data: boost, error: boostError } = await supabase
-      .from('listing_boosts')
-      .select(`
-        *,
-        listing:car_listings(user_id, dealer_id)
-      `)
-      .eq('id', boost_id)
-      .single()
+    const boost = await db.listingBoost.findUnique({
+      where: { id: boost_id },
+      include: {
+        listing: { select: { user_id: true, dealer_id: true } }
+      }
+    })
     
-    if (boostError || !boost) {
+    if (!boost) {
       return NextResponse.json({ error: 'Boost not found' }, { status: 404 })
     }
     
     // Check ownership
-    const { data: dealer } = await supabase
-      .from('dealers')
-      .select('id')
-      .eq('owner_id', user.id)
-      .single()
-    
-    const isOwner = (dealer && boost.listing.dealer_id === dealer.id) || 
-                    (!dealer && boost.listing.user_id === user.id)
+    let isOwner = false
+    if (userId) {
+      const dealer = await db.dealer.findFirst({
+        where: { owner_id: userId }
+      })
+      isOwner = (dealer && boost.listing.dealer_id === dealer.id) || 
+                (!dealer && boost.listing.user_id === userId)
+    }
     
     if (!isOwner) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
     
     // Deactivate boost
-    const { error: updateError } = await supabase
-      .from('listing_boosts')
-      .update({ is_active: false, auto_renew: false })
-      .eq('id', boost_id)
-    
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
-    }
+    await db.listingBoost.update({
+      where: { id: boost_id },
+      data: { is_active: false }
+    })
     
     // Calculate remaining days for potential refund
     const now = new Date()
-    const endsAt = new Date(boost.ends_at)
-    const startedAt = new Date(boost.started_at)
-    const totalDays = boost.boost_feature_id ? 
-      (await supabase.from('boost_features').select('duration_days').eq('id', boost.boost_feature_id).single())?.data?.duration_days || 0 : 0
+    const expiresAt = new Date(boost.expires_at!)
+    const startedAt = boost.starts_at ? new Date(boost.starts_at) : new Date(boost.created_at)
+    
+    // Get boost feature for duration
+    let totalDays = 7
+    if (boost.boost_feature_id) {
+      const feature = await db.boostFeature.findUnique({
+        where: { id: boost.boost_feature_id }
+      })
+      totalDays = feature?.duration_days || 7
+    }
     
     const totalMs = totalDays * 24 * 60 * 60 * 1000
     const usedMs = now.getTime() - startedAt.getTime()
@@ -343,29 +283,27 @@ export async function DELETE(request: NextRequest) {
     
     // Refund proportional credits (if more than 50% remaining)
     const remainingRatio = 1 - usedRatio
-    if (remainingRatio > 0.5 && boost.user_credit_id) {
+    if (remainingRatio > 0.5 && boost.user_id) {
       const refundCredits = Math.floor(boost.credits_spent * remainingRatio)
       
       if (refundCredits > 0) {
         // Get current balance
-        const { data: userCredit } = await supabase
-          .from('user_credits')
-          .select('balance')
-          .eq('id', boost.user_credit_id)
-          .single()
+        const userCredit = await db.userCredit.findFirst({
+          where: { user_id: boost.user_id }
+        })
         
         if (userCredit) {
           const newBalance = userCredit.balance + refundCredits
           
-          await supabase
-            .from('user_credits')
-            .update({ balance: newBalance })
-            .eq('id', boost.user_credit_id)
+          await db.userCredit.update({
+            where: { id: userCredit.id },
+            data: { balance: newBalance }
+          })
           
-          await supabase
-            .from('credit_transactions')
-            .insert({
-              user_credit_id: boost.user_credit_id,
+          await db.creditTransaction.create({
+            data: {
+              user_credit_id: userCredit.id,
+              user_id: boost.user_id,
               type: 'refund',
               amount: refundCredits,
               balance_before: userCredit.balance,
@@ -373,7 +311,8 @@ export async function DELETE(request: NextRequest) {
               description: `Refund for cancelled boost`,
               reference_id: boost.id,
               reference_type: 'boost'
-            })
+            }
+          })
         }
       }
     }

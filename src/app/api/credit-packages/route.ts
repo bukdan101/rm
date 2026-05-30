@@ -1,52 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
-
-// GET - Fetch all active credit packages
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const activeOnly = searchParams.get('active') === 'true'
-
-    let query = supabase
-      .from('credit_packages')
-      .select('*')
-      .order('sort_order', { ascending: true })
-
-    if (activeOnly) {
-      query = query.eq('is_active', true)
-    }
-
-    const { data: packages, error } = await query
-
-    if (error) {
-      console.error('Error fetching credit packages:', error)
-      // Return default packages if table doesn't exist
-      return NextResponse.json({
-        success: true,
-        packages: getDefaultPackages()
-      })
-    }
-
-    // If no packages in database, return defaults
-    if (!packages || packages.length === 0) {
-      return NextResponse.json({
-        success: true,
-        packages: getDefaultPackages()
-      })
-    }
-
-    return NextResponse.json({
-      success: true,
-      packages
-    })
-  } catch (error) {
-    console.error('Credit packages API error:', error)
-    return NextResponse.json({
-      success: true,
-      packages: getDefaultPackages()
-    })
-  }
-}
+import { db } from '@/lib/db'
 
 // Default packages if not in database
 function getDefaultPackages() {
@@ -54,85 +7,111 @@ function getDefaultPackages() {
     {
       id: 'pkg-starter',
       name: 'Starter',
-      credits: 50,
+      tokens: 50,
       price: 50000,
-      bonus_credits: 0,
+      bonus_tokens: 0,
       is_active: true,
-      sort_order: 0,
-      description: 'Cocok untuk pemula'
+      display_order: 0,
+      description: 'Cocok untuk pemula',
     },
     {
       id: 'pkg-popular',
       name: 'Popular',
-      credits: 150,
+      tokens: 150,
       price: 125000,
-      bonus_credits: 15,
+      bonus_tokens: 15,
       is_active: true,
-      sort_order: 1,
-      description: 'Paling diminati'
+      display_order: 1,
+      description: 'Paling diminati',
     },
     {
       id: 'pkg-business',
       name: 'Business',
-      credits: 350,
+      tokens: 350,
       price: 275000,
-      bonus_credits: 50,
+      bonus_tokens: 50,
       is_active: true,
-      sort_order: 2,
-      description: 'Untuk usaha berkembang'
+      display_order: 2,
+      description: 'Untuk usaha berkembang',
     },
     {
       id: 'pkg-enterprise',
       name: 'Enterprise',
-      credits: 750,
+      tokens: 750,
       price: 550000,
-      bonus_credits: 150,
+      bonus_tokens: 150,
       is_active: true,
-      sort_order: 3,
-      description: 'Untuk dealer profesional'
-    }
+      display_order: 3,
+      description: 'Untuk dealer profesional',
+    },
   ]
+}
+
+// GET - Fetch all active credit packages
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const activeOnly = searchParams.get('active') === 'true'
+
+    const where: Record<string, unknown> = {}
+    if (activeOnly) {
+      where.is_active = true
+    }
+
+    const packages = await db.creditPackage.findMany({
+      where,
+      orderBy: { display_order: 'asc' },
+    })
+
+    // If no packages in database, return defaults
+    if (!packages || packages.length === 0) {
+      return NextResponse.json({
+        success: true,
+        packages: getDefaultPackages(),
+      })
+    }
+
+    return NextResponse.json({
+      success: true,
+      packages,
+    })
+  } catch (error) {
+    console.error('Credit packages API error:', error)
+    return NextResponse.json({
+      success: true,
+      packages: getDefaultPackages(),
+    })
+  }
 }
 
 // POST - Create new credit package (admin only)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, credits, price, bonus_credits, description, sort_order } = body
+    const { name, tokens, price, bonus_tokens, description, display_order } = body
 
-    if (!name || !credits || !price) {
+    if (!name || !tokens || !price) {
       return NextResponse.json(
-        { success: false, error: 'Name, credits, and price are required' },
+        { success: false, error: 'Name, tokens, and price are required' },
         { status: 400 }
       )
     }
 
-    const { data: pkg, error } = await supabase
-      .from('credit_packages')
-      .insert({
+    const pkg = await db.creditPackage.create({
+      data: {
         name,
-        credits,
+        tokens,
         price,
-        bonus_credits: bonus_credits || 0,
+        bonus_tokens: bonus_tokens || 0,
         description,
-        sort_order: sort_order || 0,
+        display_order: display_order || 0,
         is_active: true,
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating package:', error)
-      return NextResponse.json(
-        { success: false, error: 'Failed to create package' },
-        { status: 500 }
-      )
-    }
+      },
+    })
 
     return NextResponse.json({
       success: true,
-      package: pkg
+      package: pkg,
     })
   } catch (error) {
     console.error('Create package error:', error)

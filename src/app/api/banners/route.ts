@@ -1,58 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 // GET /api/banners - Fetch banners by position
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const position = searchParams.get('position')
-    
-    // Build query - select only columns that exist
-    let query = supabase
-      .from('banners')
-      .select('id, title, image_url, target_url, position, impressions, clicks, created_at')
-      .order('created_at', { ascending: false })
-    
-    // Filter by position if provided
+
+    const where: Record<string, unknown> = {}
     if (position) {
-      query = query.eq('position', position)
+      where.position = position
     }
-    
-    const { data, error } = await query
-    
-    if (error) {
-      // If table doesn't exist or other error, return empty array
-      console.error('Error fetching banners:', error)
-      return NextResponse.json({
-        success: true,
-        banners: []
-      })
-    }
-    
+
+    const data = await db.banner.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+    })
+
     // Increment impressions for banners when position is specified
     if (position && data && data.length > 0) {
       const randomBanner = data[Math.floor(Math.random() * data.length)]
-      
+
       // Increment impression (fire and forget)
-      supabase
-        .from('banners')
-        .update({ 
-          impressions: (randomBanner.impressions || 0) + 1 
-        })
-        .eq('id', randomBanner.id)
-        .then(() => {})
-        .catch(() => {})
+      db.banner.update({
+        where: { id: randomBanner.id },
+        data: { impressions: (randomBanner.impressions || 0) + 1 },
+      }).catch(() => {})
     }
-    
+
     return NextResponse.json({
       success: true,
-      banners: data || []
+      banners: data || [],
     })
   } catch (error) {
     console.error('Error fetching banners:', error)
     return NextResponse.json({
       success: true,
-      banners: []
+      banners: [],
     })
   }
 }
@@ -61,23 +45,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    
-    const { data, error } = await supabase
-      .from('banners')
-      .insert({
+
+    const data = await db.banner.create({
+      data: {
         title: body.title,
         image_url: body.imageUrl,
         target_url: body.targetUrl,
         position: body.position,
-      })
-      .select()
-      .single()
-    
-    if (error) throw error
-    
+      },
+    })
+
     return NextResponse.json({
       success: true,
-      banner: data
+      banner: data,
     })
   } catch (error) {
     console.error('Error creating banner:', error)

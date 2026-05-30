@@ -1,42 +1,41 @@
 import { NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
-
-const supabase = getSupabaseAdmin()
+import { db } from '@/lib/db'
 
 export async function GET() {
   try {
     // Get counts for different notification types
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+
     const [
-      kycResult,
-      dealerResult,
-      paymentResult,
-      userResult,
-      listingResult,
+      pendingKyc,
+      pendingDealer,
+      pendingPayments,
+      newUsersToday,
+      newListingsToday,
     ] = await Promise.all([
       // Pending KYC
-      supabase.from('kyc_verifications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      
-      // Pending dealer approvals
-      supabase.from('dealers').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      
-      // Pending payments
-      supabase.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      
-      // New users today
-      supabase.from('profiles').select('id', { count: 'exact', head: true })
-        .gte('created_at', new Date(new Date().setHours(0,0,0,0)).toISOString()),
-      
-      // New listings today
-      supabase.from('car_listings').select('id', { count: 'exact', head: true })
-        .eq('status', 'active')
-        .gte('created_at', new Date(new Date().setHours(0,0,0,0)).toISOString()),
-    ])
+      db.kycVerification.count({ where: { status: 'pending' } }),
 
-    const pendingKyc = kycResult.count || 0
-    const pendingDealer = dealerResult.count || 0
-    const pendingPayments = paymentResult.count || 0
-    const newUsersToday = userResult.count || 0
-    const newListingsToday = listingResult.count || 0
+      // Pending dealer approvals
+      db.dealer.count({ where: { status: 'pending' } }),
+
+      // Pending payments
+      db.payment.count({ where: { status: 'pending' } }),
+
+      // New users today
+      db.profile.count({
+        where: { created_at: { gte: startOfDay } },
+      }),
+
+      // New listings today
+      db.carListing.count({
+        where: {
+          status: 'active',
+          created_at: { gte: startOfDay },
+        },
+      }),
+    ])
 
     // Build notifications array based on actual data
     const notifications = []
@@ -124,7 +123,7 @@ export async function GET() {
         pendingPayments,
         newUsersToday,
         newListingsToday,
-      }
+      },
     })
   } catch (error) {
     console.error('Error fetching notifications:', error)
@@ -138,7 +137,7 @@ export async function GET() {
         pendingPayments: 0,
         newUsersToday: 0,
         newListingsToday: 0,
-      }
+      },
     }, { status: 500 })
   }
 }

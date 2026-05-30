@@ -1,101 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-
-// Helper function to check admin role
-async function checkAdminRole() {
-  const supabase = await createClient()
-  
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  
-  if (authError || !user) {
-    return { authorized: false, error: 'Unauthorized', status: 401 }
-  }
-  
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-  
-  if (!profile || profile.role !== 'admin') {
-    return { authorized: false, error: 'Admin access required', status: 403 }
-  }
-  
-  return { authorized: true, supabase, userId: user.id }
-}
+import { db } from '@/lib/db'
 
 // GET: Fetch all boost features with usage statistics
 export async function GET(request: NextRequest) {
   try {
-    const authCheck = await checkAdminRole()
-    if (!authCheck.authorized) {
-      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
-    }
-    
-    const supabase = authCheck.supabase!
-    
     // Fetch boost features
-    const { data: boostFeatures, error: featuresError } = await supabase
-      .from('boost_features')
-      .select('*')
-      .order('display_order', { ascending: true })
-    
-    if (featuresError) {
-      // If table doesn't exist, return default mock data
-      if (featuresError.code === 'PGRST204' || featuresError.message?.includes('does not exist')) {
-        return NextResponse.json({
-          features: getDefaultBoostFeatures(),
-          usingMockData: true
-        })
-      }
-      return NextResponse.json({ error: featuresError.message }, { status: 500 })
-    }
-    
+    const boostFeatures = await db.boostFeature.findMany({
+      orderBy: { display_order: 'asc' },
+    })
+
     // If no data, return defaults
     if (!boostFeatures || boostFeatures.length === 0) {
       return NextResponse.json({
         features: getDefaultBoostFeatures(),
-        usingMockData: true
+        usingMockData: true,
       })
     }
-    
+
     // Fetch usage statistics for each boost feature
     const featuresWithStats = await Promise.all(
       boostFeatures.map(async (feature) => {
         // Count active listings using this boost
-        const { count: activeListingsCount } = await supabase
-          .from('listing_boosts')
-          .select('id', { count: 'exact', head: true })
-          .eq('boost_feature_id', feature.id)
-          .eq('is_active', true)
-          .gt('ends_at', new Date().toISOString())
-        
+        const activeListingsCount = await db.listingBoost.count({
+          where: {
+            boost_feature_id: feature.id,
+            is_active: true,
+            expires_at: { gt: new Date() },
+          },
+        })
+
         // Count total usage
-        const { count: totalUsageCount } = await supabase
-          .from('listing_boosts')
-          .select('id', { count: 'exact', head: true })
-          .eq('boost_feature_id', feature.id)
-        
+        const totalUsageCount = await db.listingBoost.count({
+          where: { boost_feature_id: feature.id },
+        })
+
         // Get total credits spent
-        const { data: creditsData } = await supabase
-          .from('listing_boosts')
-          .select('credits_spent')
-          .eq('boost_feature_id', feature.id)
-        
-        const totalCreditsSpent = creditsData?.reduce((sum, item) => sum + (item.credits_spent || 0), 0) || 0
-        
+        const creditsData = await db.listingBoost.findMany({
+          where: { boost_feature_id: feature.id },
+          select: { credits_spent: true },
+        })
+
+        const totalCreditsSpent = creditsData.reduce((sum, item) => sum + (item.credits_spent || 0), 0)
+
         return {
           ...feature,
-          active_listings_count: activeListingsCount || 0,
-          total_usage_count: totalUsageCount || 0,
-          total_credits_spent: totalCreditsSpent
+          active_listings_count: activeListingsCount,
+          total_usage_count: totalUsageCount,
+          total_credits_spent: totalCreditsSpent,
         }
       })
     )
-    
+
     return NextResponse.json({
       features: featuresWithStats,
-      usingMockData: false
+      usingMockData: false,
     })
   } catch (error) {
     console.error('Error fetching boost features:', error)
@@ -106,49 +64,40 @@ export async function GET(request: NextRequest) {
 // POST: Create new boost feature
 export async function POST(request: NextRequest) {
   try {
-    const authCheck = await checkAdminRole()
-    if (!authCheck.authorized) {
-      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
-    }
-    
-    const supabase = authCheck.supabase!
     const body = await request.json()
-    
+
     const { name, slug, description, credit_cost, duration_days, icon, color, benefits } = body
-    
+
     if (!name || !slug || credit_cost === undefined || !duration_days) {
-      return NextResponse.json({ 
-        error: 'Name, slug, credit_cost, and duration_days are required' 
-      }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Name, slug, credit_cost, and duration_days are required' },
+        { status: 400 }
+      )
     }
-    
-    // Generate UUID for slug if not provided
+
+    // Generate slug if not provided
     const finalSlug = slug || name.toLowerCase().replace(/\s+/g, '-')
-    
-    const { data: feature, error } = await supabase
-      .from('boost_features')
-      .insert({
+
+    const feature = await db.boostFeature.create({
+      data: {
         name,
         slug: finalSlug,
-        description,
-        credit_cost,
+        description: description || null,
+        credits: credit_cost, // Fixed: credit_cost → credits (BoostFeature schema)
         duration_days,
         icon: icon || 'Sparkles',
         color: color || 'blue',
-        benefits: benefits || [],
+        // Fixed: benefits is String? in BoostFeature schema - must JSON.stringify if array
+        benefits: benefits ? (typeof benefits === 'string' ? benefits : JSON.stringify(benefits)) : null,
         is_active: true,
-        display_order: 0
-      })
-      .select()
-      .single()
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-    
+        display_order: 0,
+        // Fixed: removed updated_at - doesn't exist in BoostFeature schema
+      },
+    })
+
     return NextResponse.json({
       success: true,
-      feature
+      feature,
     })
   } catch (error) {
     console.error('Error creating boost feature:', error)
@@ -159,50 +108,42 @@ export async function POST(request: NextRequest) {
 // PUT: Update boost feature pricing/status
 export async function PUT(request: NextRequest) {
   try {
-    const authCheck = await checkAdminRole()
-    if (!authCheck.authorized) {
-      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
-    }
-    
-    const supabase = authCheck.supabase!
     const body = await request.json()
-    
+
     const { id, ...updates } = body
-    
+
     if (!id) {
       return NextResponse.json({ error: 'Boost feature ID is required' }, { status: 400 })
     }
-    
-    // Filter allowed update fields
-    const allowedFields = ['name', 'slug', 'description', 'credit_cost', 'duration_days', 'icon', 'color', 'benefits', 'is_active', 'display_order']
+
+    // Filter allowed update fields - map credit_cost → credits
+    const allowedFields = ['name', 'slug', 'description', 'credit_cost', 'credits', 'duration_days', 'icon', 'color', 'benefits', 'is_active', 'display_order']
     const filteredUpdates: Record<string, unknown> = {}
-    
+
     for (const key of allowedFields) {
       if (updates[key] !== undefined) {
-        filteredUpdates[key] = updates[key]
+        // Map credit_cost → credits for BoostFeature schema
+        if (key === 'credit_cost') {
+          filteredUpdates.credits = updates[key]
+        } else if (key === 'benefits') {
+          // Benefits is String? - must JSON.stringify if array
+          filteredUpdates.benefits = typeof updates[key] === 'string' ? updates[key] : JSON.stringify(updates[key])
+        } else {
+          filteredUpdates[key] = updates[key]
+        }
       }
     }
-    
-    filteredUpdates.updated_at = new Date().toISOString()
-    
-    const { data: feature, error } = await supabase
-      .from('boost_features')
-      .update(filteredUpdates)
-      .eq('id', id)
-      .select()
-      .single()
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-    
-    if (!feature) {
-      return NextResponse.json({ error: 'Boost feature not found' }, { status: 404 })
-    }
-    
+
+    // Fixed: removed updated_at - doesn't exist in BoostFeature schema
+
+    const feature = await db.boostFeature.update({
+      where: { id },
+      data: filteredUpdates,
+    })
+
     return NextResponse.json({
       success: true,
-      feature
+      feature,
     })
   } catch (error) {
     console.error('Error updating boost feature:', error)
@@ -213,57 +154,41 @@ export async function PUT(request: NextRequest) {
 // DELETE: Delete boost feature
 export async function DELETE(request: NextRequest) {
   try {
-    const authCheck = await checkAdminRole()
-    if (!authCheck.authorized) {
-      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
-    }
-    
-    const supabase = authCheck.supabase!
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    
+
     if (!id) {
       return NextResponse.json({ error: 'Boost feature ID is required' }, { status: 400 })
     }
-    
+
     // Check if boost feature is being used
-    const { count } = await supabase
-      .from('listing_boosts')
-      .select('id', { count: 'exact', head: true })
-      .eq('boost_feature_id', id)
-    
-    if (count && count > 0) {
+    const count = await db.listingBoost.count({
+      where: { boost_feature_id: id },
+    })
+
+    if (count > 0) {
       // Soft delete - just deactivate
-      const { error } = await supabase
-        .from('boost_features')
-        .update({ is_active: false })
-        .eq('id', id)
-      
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
-      }
-      
+      await db.boostFeature.update({
+        where: { id },
+        data: { is_active: false },
+      })
+
       return NextResponse.json({
         success: true,
         message: 'Boost feature deactivated (has active usage)',
-        deactivated: true
+        deactivated: true,
       })
     }
-    
+
     // Hard delete if not used
-    const { error } = await supabase
-      .from('boost_features')
-      .delete()
-      .eq('id', id)
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-    
+    await db.boostFeature.delete({
+      where: { id },
+    })
+
     return NextResponse.json({
       success: true,
       message: 'Boost feature deleted successfully',
-      deactivated: false
+      deactivated: false,
     })
   } catch (error) {
     console.error('Error deleting boost feature:', error)
@@ -279,48 +204,48 @@ function getDefaultBoostFeatures() {
       name: 'Highlight',
       slug: 'highlight',
       description: 'Tampilkan iklan Anda dengan background highlight yang menonjol',
-      credit_cost: 3,
+      credits: 3, // Fixed: credit_cost → credits
       duration_days: 7,
       icon: 'Sparkles',
       color: 'amber',
-      benefits: ['Background kuning highlight', 'Lebih mudah dilihat', 'Cocok untuk iklan prioritas'],
+      benefits: '["Background kuning highlight","Lebih mudah dilihat","Cocok untuk iklan prioritas"]', // String format
       is_active: true,
       display_order: 1,
       active_listings_count: 0,
       total_usage_count: 0,
-      total_credits_spent: 0
+      total_credits_spent: 0,
     },
     {
       id: 'bf-default-002',
       name: 'Top Search',
       slug: 'top-search',
       description: 'Prioritaskan iklan Anda di hasil pencarian teratas',
-      credit_cost: 5,
+      credits: 5, // Fixed: credit_cost → credits
       duration_days: 7,
       icon: 'ArrowUp',
       color: 'blue',
-      benefits: ['Muncul di posisi teratas', 'Maksimal 10 iklan per halaman', 'Visibilitas meningkat 3x'],
+      benefits: '["Muncul di posisi teratas","Maksimal 10 iklan per halaman","Visibilitas meningkat 3x"]',
       is_active: true,
       display_order: 2,
       active_listings_count: 0,
       total_usage_count: 0,
-      total_credits_spent: 0
+      total_credits_spent: 0,
     },
     {
       id: 'bf-default-003',
       name: 'Featured',
       slug: 'featured',
       description: 'Tampilkan iklan di halaman utama sebagai iklan pilihan',
-      credit_cost: 10,
+      credits: 10, // Fixed: credit_cost → credits
       duration_days: 14,
       icon: 'Star',
       color: 'purple',
-      benefits: ['Muncul di halaman utama', 'Badge Featured eksklusif', 'Durasi lebih lama 14 hari', 'Eksposur maksimal'],
+      benefits: '["Muncul di halaman utama","Badge Featured eksklusif","Durasi lebih lama 14 hari","Eksposur maksimal"]',
       is_active: true,
       display_order: 3,
       active_listings_count: 0,
       total_usage_count: 0,
-      total_credits_spent: 0
-    }
+      total_credits_spent: 0,
+    },
   ]
 }

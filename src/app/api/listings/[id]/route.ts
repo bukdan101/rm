@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { db } from '@/lib/db'
 import { 
   autoRejectOffersForListing, 
   handleStatusChange, 
@@ -40,28 +40,26 @@ async function getTokenSettings(): Promise<{
   tokenValue: number
 }> {
   try {
-    const { data: settings, error } = await supabaseAdmin
-      .from('token_settings')
-      .select('key, tokens, is_active, category')
-      .eq('is_active', true)
+    const settings = await db.tokenSetting.findFirst({
+      where: { is_active: true }
+    })
     
-    if (error || !settings) {
+    if (!settings) {
       return {
         marketplaceCosts: DEFAULT_MARKETPLACE_COSTS,
         tokenValue: DEFAULT_TOKEN_VALUE
       }
     }
 
-    const marketplaceCosts: Record<string, number> = { ...DEFAULT_MARKETPLACE_COSTS }
-    let tokenValue = DEFAULT_TOKEN_VALUE
-
-    settings.forEach((row: any) => {
-      if (row.category === 'listing') {
-        marketplaceCosts[row.key] = row.tokens
-      } else if (row.key === 'token_value_rupiah') {
-        tokenValue = row.tokens
-      }
-    })
+    const marketplaceCosts: Record<string, number> = {
+      marketplace_umum: settings.listing_normal_tokens,
+      dealer_marketplace: settings.listing_dealer_tokens,
+      chat_platform: settings.dealer_contact_tokens,
+      public: settings.listing_normal_tokens,
+      dealer: settings.listing_dealer_tokens,
+      both: settings.listing_normal_tokens + settings.listing_dealer_tokens
+    }
+    const tokenValue = settings.token_price_base
 
     return { marketplaceCosts, tokenValue }
   } catch (error) {
@@ -82,25 +80,27 @@ export async function GET(
     const { id } = await params
 
     // Get listing by ID or slug
-    const { data: listing, error } = await supabaseAdmin
-      .from('car_listings')
-      .select(`
-        *,
-        brand:brands(id, name, slug, logo_url),
-        model:car_models(id, name, slug, body_type),
-        variant:car_variants(id, name, transmission, fuel_type),
-        exterior_color:car_colors!car_listings_exterior_color_id_fkey(id, name, hex_code),
-        interior_color:car_colors!car_listings_interior_color_id_fkey(id, name, hex_code),
-        images:car_images(id, image_url, is_primary, display_order),
-        documents:car_documents(*),
-        features:car_features(*)
-      `)
-      .or(`slug.eq.${id},id.eq.${id}`)
-      .is('deleted_at', null)
-      .single()
+    const listing = await db.carListing.findFirst({
+      where: {
+        OR: [
+          { id },
+          { slug: id }
+        ],
+        deleted_at: null
+      },
+      include: {
+        brand: { select: { id: true, name: true, slug: true, logo_url: true } },
+        model: { select: { id: true, name: true, slug: true, body_type: true } },
+        variant: { select: { id: true, name: true, transmission: true, fuel_type: true } },
+        exteriorColor: { select: { id: true, name: true, hex_code: true } },
+        interiorColor: { select: { id: true, name: true, hex_code: true } },
+        images: { select: { id: true, image_url: true, is_primary: true, display_order: true }, orderBy: { display_order: 'asc' } },
+        documents: true,
+        features: true
+      }
+    })
 
-    if (error || !listing) {
-      console.error('Listing fetch error:', error)
+    if (!listing) {
       return NextResponse.json({
         success: false,
         error: 'Listing tidak ditemukan'
@@ -109,59 +109,48 @@ export async function GET(
 
     // Get seller info
     let seller = null
-    if (listing.seller_id) {
-      const { data: sellerData } = await supabaseAdmin
-        .from('profiles')
-        .select('id, full_name, phone, avatar_url, is_verified, city, province')
-        .eq('id', listing.seller_id)
-        .single()
-      seller = sellerData
+    if (listing.user_id) {
+      seller = await db.profile.findUnique({
+        where: { id: listing.user_id },
+        select: { id: true, full_name: true, phone: true, avatar_url: true, is_verified: true }
+      })
     }
 
     // Get dealer info if listing belongs to dealer
     let dealer = null
     if (listing.dealer_id) {
-      const { data: dealerData } = await supabaseAdmin
-        .from('dealers')
-        .select(`
-          id, name, slug, logo_url, cover_url, description,
-          phone, whatsapp, email, website, instagram,
-          address, verified, rating, review_count, subscription_tier
-        `)
-        .eq('id', listing.dealer_id)
-        .single()
-      dealer = dealerData
+      dealer = await db.dealer.findUnique({
+        where: { id: listing.dealer_id },
+        select: {
+          id: true, name: true, slug: true, logo_url: true, cover_url: true, description: true,
+          phone: true, email: true, website: true,
+          address: true, verified: true, rating: true, review_count: true, subscription_tier: true
+        }
+      })
     }
 
     // Get inspection if exists
-    const { data: inspection } = await supabaseAdmin
-      .from('car_inspections')
-      .select(`
-        id,
-        inspector_name,
-        inspection_place,
-        inspection_date,
-        total_points,
-        passed_points,
-        accident_free,
-        flood_free,
-        fire_free,
-        risk_level,
-        overall_score,
-        status,
-        created_at,
-        results:inspection_results(
-          id,
-          status,
-          notes,
-          image_url,
-          item:inspection_items(id, category, name, description, display_order)
-        )
-      `)
-      .eq('car_listing_id', listing.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    const inspection = await db.carInspection.findFirst({
+      where: { car_listing_id: listing.id },
+      orderBy: { created_at: 'desc' },
+      include: {
+        results: {
+          include: {
+            item: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                display_order: true,
+                inspectionCategory: {
+                  select: { id: true, name: true }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
 
     // Group inspection results by category
     let inspectionByCategory = null
@@ -169,7 +158,7 @@ export async function GET(
     if (inspection && inspection.results) {
       const grouped: Record<string, any[]> = {}
       for (const result of inspection.results) {
-        const category = result.item?.category || 'Lainnya'
+        const category = (result.item as any)?.inspectionCategory?.name || 'Lainnya'
         if (!grouped[category]) {
           grouped[category] = []
         }
@@ -193,10 +182,10 @@ export async function GET(
     }
 
     // Increment view count
-    await supabaseAdmin
-      .from('car_listings')
-      .update({ view_count: (listing.view_count || 0) + 1 })
-      .eq('id', listing.id)
+    await db.carListing.update({
+      where: { id: listing.id },
+      data: { view_count: (listing.view_count || 0) + 1 }
+    })
 
     // Sort images by display_order
     const sortedImages = listing.images?.sort((a: any, b: any) => (a.display_order || 0) - (b.display_order || 0)) || []
@@ -234,14 +223,11 @@ export async function PUT(
     const body = await request.json()
     
     // Get current listing data to compare changes
-    const { data: currentListing, error: fetchError } = await supabaseAdmin
-      .from('car_listings')
-      .select('id, status, visibility, user_id')
-      .eq('id', id)
-      .is('deleted_at', null)
-      .single()
+    const currentListing = await db.carListing.findFirst({
+      where: { id, deleted_at: null }
+    })
     
-    if (fetchError || !currentListing) {
+    if (!currentListing) {
       return NextResponse.json({
         success: false,
         error: 'Listing tidak ditemukan'
@@ -266,15 +252,9 @@ export async function PUT(
       // Only charge if upgrading (new cost > old cost)
       if (additionalCost > 0) {
         // Check user's credit balance
-        const { data: userCredits, error: creditsError } = await supabaseAdmin
-          .from('user_credits')
-          .select('balance, total_spent')
-          .eq('user_id', userId)
-          .single()
-        
-        if (creditsError && creditsError.code !== 'PGRST116') {
-          console.error('Error fetching user credits:', creditsError)
-        }
+        const userCredits = await db.userCredit.findUnique({
+          where: { user_id: userId }
+        })
         
         const currentBalance = userCredits?.balance || 0
         
@@ -291,36 +271,28 @@ export async function PUT(
         
         // Deduct tokens
         const newBalance = currentBalance - additionalCost
-        const { error: updateError } = await supabaseAdmin
-          .from('user_credits')
-          .update({
+        await db.userCredit.update({
+          where: { user_id: userId },
+          data: {
             balance: newBalance,
-            total_spent: (userCredits?.total_spent || 0) + additionalCost,
-            updated_at: new Date().toISOString()
-          })
-          .eq('user_id', userId)
-        
-        if (updateError) {
-          console.error('Error deducting tokens:', updateError)
-          return NextResponse.json({
-            success: false,
-            error: 'Failed to process token payment'
-          }, { status: 500 })
-        }
+            total_spent: (userCredits?.total_spent || 0) + additionalCost
+          }
+        })
         
         // Record transaction
-        await supabaseAdmin
-          .from('credit_transactions')
-          .insert({
+        await db.creditTransaction.create({
+          data: {
             id: uuidv4(),
             user_id: userId,
             type: 'spend',
             amount: -additionalCost,
+            balance_before: currentBalance,
             balance_after: newBalance,
             description: `Upgraded listing visibility: ${oldVisibility} → ${newVisibility}`,
             reference_type: 'listing_upgrade',
             reference_id: id
-          })
+          }
+        })
         
         tokenChargeResult = {
           charged: additionalCost,
@@ -332,15 +304,13 @@ export async function PUT(
     }
     
     // Prepare update data
-    const updateData: any = {
-      updated_at: new Date().toISOString()
-    }
+    const updateData: any = {}
     
     // Add fields from body
     const allowedFields = [
       'title', 'description', 'price_cash', 'price_negotiable',
       'mileage', 'condition', 'transmission', 'fuel', 'body_type',
-      'city', 'province', 'phone', 'whatsapp', 'status', 'visibility',
+      'city', 'province', 'status', 'visibility',
       'brand_id', 'model_id', 'variant_id', 'exterior_color_id',
       'year', 'engine_capacity', 'seat_count', 'vin_number', 'plate_number'
     ]
@@ -353,24 +323,14 @@ export async function PUT(
     
     // Handle status-specific fields
     if (newStatus === 'sold') {
-      updateData.sold_at = new Date().toISOString()
+      updateData.sold_at = new Date()
     }
     
     // Update the listing
-    const { data: updatedListing, error: updateError } = await supabaseAdmin
-      .from('car_listings')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single()
-    
-    if (updateError) {
-      console.error('Error updating listing:', updateError)
-      return NextResponse.json({
-        success: false,
-        error: updateError.message
-      }, { status: 500 })
-    }
+    const updatedListing = await db.carListing.update({
+      where: { id },
+      data: updateData
+    })
     
     // Handle auto-rejection of dealer offers if status changed
     let autoRejectResult = null
@@ -408,14 +368,11 @@ export async function DELETE(
     const { id } = await params
     
     // Get current listing data
-    const { data: currentListing, error: fetchError } = await supabaseAdmin
-      .from('car_listings')
-      .select('id, status, visibility, user_id')
-      .eq('id', id)
-      .is('deleted_at', null)
-      .single()
+    const currentListing = await db.carListing.findFirst({
+      where: { id, deleted_at: null }
+    })
     
-    if (fetchError || !currentListing) {
+    if (!currentListing) {
       return NextResponse.json({
         success: false,
         error: 'Listing tidak ditemukan'
@@ -423,22 +380,13 @@ export async function DELETE(
     }
     
     // Soft delete by setting deleted_at
-    const { error: deleteError } = await supabaseAdmin
-      .from('car_listings')
-      .update({
-        deleted_at: new Date().toISOString(),
-        status: 'deleted',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-    
-    if (deleteError) {
-      console.error('Error deleting listing:', deleteError)
-      return NextResponse.json({
-        success: false,
-        error: deleteError.message
-      }, { status: 500 })
-    }
+    await db.carListing.update({
+      where: { id },
+      data: {
+        deleted_at: new Date(),
+        status: 'deleted'
+      }
+    })
     
     // Auto-reject all pending dealer offers
     const autoRejectResult = await autoRejectOffersForListing(id, 'listing_deleted')

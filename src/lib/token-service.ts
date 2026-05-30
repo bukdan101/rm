@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 // Token action types
 export type TokenActionType = 
@@ -29,24 +29,15 @@ export interface TokenDeductionResult {
 }
 
 /**
- * Get active token settings
+ * Get active token settings (single-row wide table)
  */
 export async function getActiveTokenSettings() {
-  const { data, error } = await supabase
-    .from('token_settings')
-    .select('*')
-    .eq('is_active', true)
-    .or('valid_until.is.null,valid_until.gt.' + new Date().toISOString())
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
+  const settings = await db.tokenSetting.findFirst({
+    where: { is_active: true },
+    orderBy: { created_at: 'desc' }
+  })
   
-  if (error) {
-    console.error('Error fetching token settings:', error)
-    return null
-  }
-  
-  return data
+  return settings
 }
 
 /**
@@ -59,20 +50,20 @@ export async function calculateTokenCost(action: TokenActionType): Promise<numbe
     // Default fallback values
     const defaults: Record<TokenActionType, number> = {
       ai_prediction: 5,
-      listing_normal: 10,
-      listing_dealer: 20,
-      dealer_contact: 5,
-      boost: 3,
-      highlight: 2,
-      featured: 5,
-      premium_badge: 10,
-      top_search: 5,
-      inspection: 0
+      listing_normal: 3,
+      listing_dealer: 5,
+      dealer_contact: 2,
+      boost: 5,
+      highlight: 3,
+      featured: 10,
+      premium_badge: 8,
+      top_search: 6,
+      inspection: 5
     }
     return defaults[action] || 0
   }
   
-  const costMap: Record<TokenActionType, string> = {
+  const costMap: Record<TokenActionType, keyof typeof settings> = {
     ai_prediction: 'ai_prediction_tokens',
     listing_normal: 'listing_normal_tokens',
     listing_dealer: 'listing_dealer_tokens',
@@ -86,7 +77,7 @@ export async function calculateTokenCost(action: TokenActionType): Promise<numbe
   }
   
   const field = costMap[action]
-  return settings[field] || 0
+  return (settings[field] as number) || 0
 }
 
 /**
@@ -95,33 +86,26 @@ export async function calculateTokenCost(action: TokenActionType): Promise<numbe
 export async function getTokenBalance(userId?: string, dealerId?: string): Promise<number> {
   if (!userId && !dealerId) return 0
   
-  let query = supabase
-    .from('user_tokens')
-    .select('balance')
-  
+  let where: any = {}
   if (userId) {
-    query = query.eq('user_id', userId)
+    where.user_id = userId
   } else if (dealerId) {
-    query = query.eq('dealer_id', dealerId)
+    where.dealer_id = dealerId
   }
   
-  const { data, error } = await query.single()
+  const credit = await db.userCredit.findFirst({ where })
   
-  if (error) {
+  if (!credit) {
     // Create new record if not exists
-    if (error.code === 'PGRST116') {
-      const insertData: any = { balance: 0 }
-      if (userId) insertData.user_id = userId
-      if (dealerId) insertData.dealer_id = dealerId
-      
-      await supabase.from('user_tokens').insert(insertData)
-      return 0
-    }
-    console.error('Error fetching token balance:', error)
+    const data: any = { balance: 0, total_earned: 0, total_spent: 0, total_bonus: 0 }
+    if (userId) data.user_id = userId
+    if (dealerId) data.dealer_id = dealerId
+    
+    await db.userCredit.create({ data })
     return 0
   }
   
-  return data?.balance || 0
+  return credit.balance || 0
 }
 
 /**
@@ -190,52 +174,48 @@ export async function deductTokens(
     const balanceBefore = balanceCheck.currentBalance
     const balanceAfter = balanceBefore - tokensRequired
     
+    // Find user credit record
+    let where: any = {}
+    if (userId) {
+      where.user_id = userId
+    } else if (dealerId) {
+      where.dealer_id = dealerId
+    }
+    
+    const userCredit = await db.userCredit.findFirst({ where })
+    
+    if (!userCredit) {
+      return { success: false, error: 'User credit record not found' }
+    }
+    
     // Create transaction
-    const { data: transaction, error: txError } = await supabase
-      .from('token_transactions')
-      .insert({
+    const transaction = await db.creditTransaction.create({
+      data: {
+        user_credit_id: userCredit.id,
         user_id: userId,
-        dealer_id: dealerId,
-        transaction_type: 'usage',
+        type: 'usage',
         amount: -tokensRequired,
         balance_before: balanceBefore,
         balance_after: balanceAfter,
         reference_type: referenceType,
         reference_id: referenceId,
         description: description || `${action}: -${tokensRequired} tokens`
-      })
-      .select('id')
-      .single()
-    
-    if (txError) throw txError
-    
-    // Update balance
-    const updateData = {
-      balance: balanceAfter,
-      total_used: supabase.rpc('increment', { x: tokensRequired }),
-      last_usage_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-    
-    let updateQuery = supabase.from('user_tokens').update({
-      balance: balanceAfter,
-      last_usage_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      }
     })
     
-    if (userId) {
-      updateQuery = updateQuery.eq('user_id', userId)
-    } else if (dealerId) {
-      updateQuery = updateQuery.eq('dealer_id', dealerId)
-    }
-    
-    const { error: updateError } = await updateQuery
-    
-    if (updateError) throw updateError
+    // Update balance
+    await db.userCredit.update({
+      where: { id: userCredit.id },
+      data: {
+        balance: balanceAfter,
+        total_spent: userCredit.total_spent + tokensRequired,
+        last_usage_at: new Date()
+      }
+    })
     
     return {
       success: true,
-      transactionId: transaction?.id,
+      transactionId: transaction.id,
       newBalance: balanceAfter
     }
   } catch (error) {
@@ -262,69 +242,67 @@ export async function addTokens(
       return { success: false, error: 'User ID or Dealer ID is required' }
     }
     
-    // Get current balance
-    const balanceBefore = await getTokenBalance(userId, dealerId)
+    // Get current balance / find or create user credit
+    let where: any = {}
+    if (userId) {
+      where.user_id = userId
+    } else if (dealerId) {
+      where.dealer_id = dealerId
+    }
+    
+    let userCredit = await db.userCredit.findFirst({ where })
+    
+    const balanceBefore = userCredit?.balance || 0
     const balanceAfter = balanceBefore + amount
     
-    // Create transaction
-    const { data: transaction, error: txError } = await supabase
-      .from('token_transactions')
-      .insert({
+    if (userCredit) {
+      // Update existing record
+      const updateData: any = {
+        balance: balanceAfter,
+        total_earned: userCredit.total_earned + amount
+      }
+      
+      if (transactionType === 'purchase') {
+        updateData.last_purchase_at = new Date()
+      } else if (transactionType === 'bonus') {
+        updateData.total_bonus = userCredit.total_bonus + amount
+      }
+      
+      userCredit = await db.userCredit.update({
+        where: { id: userCredit.id },
+        data: updateData
+      })
+    } else {
+      // Create new record
+      const data: any = {
+        balance: balanceAfter,
+        total_earned: amount,
+        total_spent: 0,
+        total_bonus: transactionType === 'bonus' ? amount : 0
+      }
+      if (userId) data.user_id = userId
+      if (dealerId) data.dealer_id = dealerId
+      if (transactionType === 'purchase') data.last_purchase_at = new Date()
+      
+      userCredit = await db.userCredit.create({ data })
+    }
+    
+    // Create transaction record
+    const transaction = await db.creditTransaction.create({
+      data: {
+        user_credit_id: userCredit.id,
         user_id: userId,
-        dealer_id: dealerId,
-        transaction_type: transactionType,
+        type: transactionType,
         amount: amount,
         balance_before: balanceBefore,
         balance_after: balanceAfter,
         description: description || `Token ${transactionType}: +${amount} tokens`
-      })
-      .select('id')
-      .single()
-    
-    if (txError) throw txError
-    
-    // Update or create balance record
-    const { data: existing } = await supabase
-      .from('user_tokens')
-      .select('*')
-      .eq(userId ? 'user_id' : 'dealer_id', userId || dealerId)
-      .single()
-    
-    if (existing) {
-      const updateData: any = {
-        balance: balanceAfter,
-        updated_at: new Date().toISOString()
       }
-      
-      if (transactionType === 'purchase') {
-        updateData.total_purchased = (existing.total_purchased || 0) + amount
-        updateData.last_purchase_at = new Date().toISOString()
-      } else if (transactionType === 'bonus') {
-        updateData.total_bonus = (existing.total_bonus || 0) + amount
-      }
-      
-      let updateQuery = supabase.from('user_tokens').update(updateData)
-      if (userId) {
-        updateQuery = updateQuery.eq('user_id', userId)
-      } else {
-        updateQuery = updateQuery.eq('dealer_id', dealerId)
-      }
-      await updateQuery
-    } else {
-      const insertData: any = {
-        balance: balanceAfter,
-        total_purchased: transactionType === 'purchase' ? amount : 0,
-        total_bonus: transactionType === 'bonus' ? amount : 0
-      }
-      if (userId) insertData.user_id = userId
-      if (dealerId) insertData.dealer_id = dealerId
-      
-      await supabase.from('user_tokens').insert(insertData)
-    }
+    })
     
     return {
       success: true,
-      transactionId: transaction?.id,
+      transactionId: transaction.id,
       newBalance: balanceAfter
     }
   } catch (error) {
@@ -346,15 +324,15 @@ export async function getAllTokenCosts(): Promise<Record<TokenActionType, { toke
     // Return defaults
     return {
       ai_prediction: { tokens: 5, duration: 24 },
-      listing_normal: { tokens: 10, duration: 30 },
-      listing_dealer: { tokens: 20, duration: 7 },
-      dealer_contact: { tokens: 5 },
-      boost: { tokens: 3, duration: 7 },
-      highlight: { tokens: 2, duration: 7 },
-      featured: { tokens: 5, duration: 7 },
-      premium_badge: { tokens: 10, duration: 30 },
-      top_search: { tokens: 5, duration: 7 },
-      inspection: { tokens: 0 }
+      listing_normal: { tokens: 3, duration: 30 },
+      listing_dealer: { tokens: 5, duration: 30 },
+      dealer_contact: { tokens: 2 },
+      boost: { tokens: 5, duration: 7 },
+      highlight: { tokens: 3, duration: 7 },
+      featured: { tokens: 10, duration: 7 },
+      premium_badge: { tokens: 8, duration: 30 },
+      top_search: { tokens: 6, duration: 7 },
+      inspection: { tokens: 5 }
     }
   }
   

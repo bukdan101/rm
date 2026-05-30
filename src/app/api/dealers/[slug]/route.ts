@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
@@ -9,24 +9,26 @@ export async function GET(
     const { slug } = await params
 
     // Fetch dealer by slug or id
-    const { data: dealer, error } = await supabase
-      .from('dealers')
-      .select(`
-        *,
-        owner:profiles!dealers_owner_id_fkey (
-          id,
-          email,
-          full_name,
-          phone,
-          avatar_url,
-          is_verified
-        )
-      `)
-      .or(`slug.eq.${slug},id.eq.${slug}`)
-      .eq('is_active', true)
-      .single()
+    const dealer = await db.dealer.findFirst({
+      where: {
+        is_active: true,
+        OR: [{ slug }, { id: slug }],
+      },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            email: true,
+            full_name: true,
+            phone: true,
+            avatar_url: true,
+            is_verified: true,
+          },
+        },
+      },
+    })
 
-    if (error || !dealer) {
+    if (!dealer) {
       return NextResponse.json(
         { success: false, error: 'Dealer not found' },
         { status: 404 }
@@ -34,78 +36,76 @@ export async function GET(
     }
 
     // Fetch dealer's car listings
-    const { data: listings, error: listingsError } = await supabase
-      .from('car_listings')
-      .select(`
-        id,
-        title,
-        slug,
-        price_cash,
-        price_credit,
-        price_negotiable,
-        year,
-        mileage,
-        vehicle_condition,
-        transaction_type,
-        status,
-        city,
-        province,
-        view_count,
-        favorite_count,
-        is_featured,
-        created_at,
-        sold_at,
-        brand:brands ( id, name, slug, logo_url ),
-        model:car_models ( id, name, slug, body_type ),
-        variant:car_variants ( id, name, transmission, fuel_type ),
-        exterior_color:car_colors!car_listings_exterior_color_id_fkey ( id, name, hex_code ),
-        images:car_images ( id, image_url, is_primary, display_order ),
-        inspection:car_inspections ( id, risk_level, overall_score, passed_points, total_points, status )
-      `)
-      .eq('dealer_id', dealer.id)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(20)
-
-    if (listingsError) {
-      console.error('Error fetching listings:', listingsError)
-    }
+    const listings = await db.carListing.findMany({
+      where: {
+        dealer_id: dealer.id,
+        deleted_at: null,
+      },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        price_cash: true,
+        price_credit: true,
+        price_negotiable: true,
+        year: true,
+        mileage: true,
+        condition: true,
+        transaction_type: true,
+        status: true,
+        city: true,
+        province: true,
+        view_count: true,
+        favorite_count: true,
+        created_at: true,
+        sold_at: true,
+        brand: { select: { id: true, name: true, slug: true, logo_url: true } },
+        model: { select: { id: true, name: true, slug: true, body_type: true } },
+        variant: { select: { id: true, name: true, transmission: true, fuel_type: true } },
+        images: {
+          select: { id: true, image_url: true, is_primary: true, display_order: true },
+          orderBy: { display_order: 'asc' },
+        },
+        inspection: {
+          select: { id: true, risk_level: true, inspection_score: true, passed_points: true, total_points: true, status: true },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+      take: 20,
+    })
 
     // Fetch location details
     let locationDetails = null
     if (dealer.city_id || dealer.province_id) {
-      const [cityResult, provinceResult] = await Promise.all([
+      const [city, province] = await Promise.all([
         dealer.city_id
-          ? supabase.from('cities').select('*').eq('id', dealer.city_id).single()
-          : { data: null },
+          ? db.city.findUnique({ where: { id: dealer.city_id } })
+          : null,
         dealer.province_id
-          ? supabase.from('provinces').select('*').eq('id', dealer.province_id).single()
-          : { data: null }
+          ? db.province.findUnique({ where: { id: dealer.province_id } })
+          : null,
       ])
 
-      locationDetails = {
-        city: cityResult.data,
-        province: provinceResult.data
-      }
+      locationDetails = { city, province }
     }
 
     // Calculate stats
     const stats = {
-      total_listings: listings?.length || 0,
-      active_listings: listings?.filter(l => l.status === 'active').length || 0,
-      sold_listings: listings?.filter(l => l.status === 'sold').length || 0,
-      total_views: listings?.reduce((sum, l) => sum + (l.view_count || 0), 0) || 0,
-      total_favorites: listings?.reduce((sum, l) => sum + (l.favorite_count || 0), 0) || 0
+      total_listings: listings.length,
+      active_listings: listings.filter(l => l.status === 'active').length,
+      sold_listings: listings.filter(l => l.status === 'sold').length,
+      total_views: listings.reduce((sum, l) => sum + (l.view_count || 0), 0),
+      total_favorites: listings.reduce((sum, l) => sum + (l.favorite_count || 0), 0),
     }
 
     return NextResponse.json({
       success: true,
       data: {
         dealer,
-        listings: listings || [],
+        listings,
         locationDetails,
-        stats
-      }
+        stats,
+      },
     })
   } catch (error) {
     console.error('Error fetching dealer:', error)

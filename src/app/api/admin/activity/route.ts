@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
-    
+
     // Pagination params
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
-    
+
     // Filter params
     const search = searchParams.get('search') || ''
     const action = searchParams.get('action') || ''
@@ -19,41 +18,37 @@ export async function GET(request: NextRequest) {
     // Calculate offset
     const offset = (page - 1) * limit
 
-    // Build query - fetch activity logs
-    let query = supabase
-      .from('activity_logs')
-      .select('*', { count: 'exact' })
+    // Build where clause
+    const where: Record<string, unknown> = {}
 
-    // Apply filters
     if (action) {
-      query = query.eq('action', action)
+      where.action = action
     }
 
     if (dateFrom) {
-      query = query.gte('created_at', new Date(dateFrom).toISOString())
+      where.created_at = { ...((where.created_at as Record<string, unknown>) || {}), gte: new Date(dateFrom) }
     }
 
     if (dateTo) {
       const toDate = new Date(dateTo)
       toDate.setHours(23, 59, 59, 999)
-      query = query.lte('created_at', toDate.toISOString())
+      where.created_at = { ...((where.created_at as Record<string, unknown>) || {}), lte: toDate }
     }
 
     if (search) {
-      query = query.ilike('description', `%${search}%`)
+      where.description = { contains: search }
     }
 
-    // Apply pagination and ordering
-    query = query
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
-
-    const { data: logs, count, error } = await query
-
-    if (error) {
-      console.error('Error fetching activity logs:', error)
-      throw error
-    }
+    // Fetch activity logs with count
+    const [logs, count] = await Promise.all([
+      db.activityLog.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip: offset,
+        take: limit,
+      }),
+      db.activityLog.count({ where }),
+    ])
 
     // If no logs, return empty result
     if (!logs || logs.length === 0) {
@@ -70,25 +65,23 @@ export async function GET(request: NextRequest) {
     }
 
     // Get unique user IDs to fetch profiles
-    const userIds = [...new Set(logs.map(log => log.user_id).filter(Boolean))]
+    const userIds = [...new Set(logs.map(log => log.user_id).filter(Boolean))] as string[]
 
     // Fetch profiles for user names
     let profilesMap = new Map<string, { full_name: string | null; email: string | null }>()
-    
-    if (userIds.length > 0) {
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', userIds)
 
-      if (!profileError && profiles) {
-        profiles.forEach(profile => {
-          profilesMap.set(profile.id, {
-            full_name: profile.full_name,
-            email: profile.email,
-          })
+    if (userIds.length > 0) {
+      const profiles = await db.profile.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, full_name: true, email: true },
+      })
+
+      profiles.forEach(profile => {
+        profilesMap.set(profile.id, {
+          full_name: profile.full_name,
+          email: profile.email,
         })
-      }
+      })
     }
 
     // Enrich logs with user data
@@ -105,10 +98,10 @@ export async function GET(request: NextRequest) {
       success: true,
       data: enrichedLogs,
       pagination: {
-        total: count || 0,
+        total: count,
         page,
         limit,
-        totalPages: Math.ceil((count || 0) / limit),
+        totalPages: Math.ceil(count / limit),
       },
     })
   } catch (error) {

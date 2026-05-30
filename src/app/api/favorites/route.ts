@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,32 +7,29 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('user_id')
 
     if (!userId) {
-      // Return empty if no user - demo mode
       return NextResponse.json({
         success: true,
-        data: []
+        data: [],
       })
     }
 
-    const { data, error } = await supabase
-      .from('car_favorites')
-      .select(`
-        *,
-        listing:car_listings(
-          *,
-          brand:brands(*),
-          model:car_models(*),
-          images:car_images(*)
-        )
-      `)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
+    const data = await db.carFavorite.findMany({
+      where: { user_id: userId },
+      include: {
+        listing: {
+          include: {
+            brand: true,
+            model: true,
+            images: { orderBy: { display_order: 'asc' } },
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    })
 
     return NextResponse.json({
       success: true,
-      data
+      data,
     })
   } catch (error) {
     console.error('Error fetching favorites:', error)
@@ -48,27 +45,26 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { user_id, car_listing_id, notes } = body
 
-    const { data, error } = await supabase
-      .from('car_favorites')
-      .insert({
-        user_id,
-        car_listing_id,
-        notes
+    try {
+      const data = await db.carFavorite.create({
+        data: {
+          user_id,
+          car_listing_id,
+          notes,
+        },
       })
-      .select()
-      .single()
 
-    if (error) {
-      if (error.code === '23505') {
+      return NextResponse.json({ success: true, data })
+    } catch (err: unknown) {
+      // Unique constraint violation
+      if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2002') {
         return NextResponse.json(
           { success: false, error: 'Already in favorites' },
           { status: 400 }
         )
       }
-      throw error
+      throw err
     }
-
-    return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error('Error adding favorite:', error)
     return NextResponse.json(
@@ -91,13 +87,12 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const { error } = await supabase
-      .from('car_favorites')
-      .delete()
-      .eq('user_id', userId)
-      .eq('car_listing_id', listingId)
-
-    if (error) throw error
+    await db.carFavorite.deleteMany({
+      where: {
+        user_id: userId,
+        car_listing_id: listingId,
+      },
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

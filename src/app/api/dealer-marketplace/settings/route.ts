@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
 
 // Default settings for development/preview
 const DEFAULT_SETTINGS = {
@@ -6,6 +7,8 @@ const DEFAULT_SETTINGS = {
   token_cost_dealer_marketplace: 2,
   token_cost_both: 3,
   default_offer_duration_hours: 72,
+  max_counter_offers: 5,
+  auto_reject_hours: 48,
   inspection_cost: 250000,
   inspection_required_for_dealer_marketplace: false,
   platform_fee_percentage: 0,
@@ -15,45 +18,17 @@ const DEFAULT_SETTINGS = {
 // GET - Get dealer marketplace settings
 export async function GET() {
   try {
-    // Check if Supabase is configured
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    
-    if (!supabaseUrl || !supabaseKey) {
+    const data = await db.dealerMarketplaceSettings.findFirst({
+      where: { is_active: true }
+    })
+
+    if (!data) {
       return NextResponse.json({
         success: true,
         settings: DEFAULT_SETTINGS,
         isDefault: true,
-        message: 'Using default settings (Supabase not configured)'
+        message: 'Using default settings (no active settings found)'
       })
-    }
-
-    const { supabaseAdmin } = await import('@/lib/supabase')
-    
-    if (!supabaseAdmin) {
-      return NextResponse.json({
-        success: true,
-        settings: DEFAULT_SETTINGS,
-        isDefault: true
-      })
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('dealer_marketplace_settings')
-      .select('*')
-      .eq('is_active', true)
-      .single()
-
-    if (error) {
-      // If table doesn't exist, return default settings
-      if (error.code === '42P01') {
-        return NextResponse.json({
-          success: true,
-          settings: DEFAULT_SETTINGS,
-          isDefault: true
-        })
-      }
-      throw error
     }
 
     return NextResponse.json({
@@ -74,26 +49,6 @@ export async function GET() {
 // PUT - Update dealer marketplace settings (admin only)
 export async function PUT(request: NextRequest) {
   try {
-    // Check if Supabase is configured
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({
-        success: false,
-        error: 'Supabase not configured. Cannot save settings.'
-      }, { status: 400 })
-    }
-
-    const { supabaseAdmin } = await import('@/lib/supabase')
-    
-    if (!supabaseAdmin) {
-      return NextResponse.json({
-        success: false,
-        error: 'Supabase admin not available'
-      }, { status: 400 })
-    }
-    
     const body = await request.json()
     
     const {
@@ -101,6 +56,8 @@ export async function PUT(request: NextRequest) {
       token_cost_dealer_marketplace,
       token_cost_both,
       default_offer_duration_hours,
+      max_counter_offers,
+      auto_reject_hours,
       inspection_cost,
       inspection_required_for_dealer_marketplace,
       platform_fee_percentage,
@@ -108,58 +65,40 @@ export async function PUT(request: NextRequest) {
     } = body
 
     // Get existing settings
-    const { data: existing, error: fetchError } = await supabaseAdmin
-      .from('dealer_marketplace_settings')
-      .select('id')
-      .eq('is_active', true)
-      .single()
+    const existing = await db.dealerMarketplaceSettings.findFirst({
+      where: { is_active: true }
+    })
 
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      throw fetchError
+    const settingsData = {
+      token_cost_public: token_cost_public ?? DEFAULT_SETTINGS.token_cost_public,
+      token_cost_dealer_marketplace: token_cost_dealer_marketplace ?? DEFAULT_SETTINGS.token_cost_dealer_marketplace,
+      token_cost_both: token_cost_both ?? DEFAULT_SETTINGS.token_cost_both,
+      default_offer_duration_hours: default_offer_duration_hours ?? DEFAULT_SETTINGS.default_offer_duration_hours,
+      max_counter_offers: max_counter_offers ?? DEFAULT_SETTINGS.max_counter_offers,
+      auto_reject_hours: auto_reject_hours ?? DEFAULT_SETTINGS.auto_reject_hours,
+      inspection_cost: inspection_cost ?? DEFAULT_SETTINGS.inspection_cost,
+      inspection_required_for_dealer_marketplace: inspection_required_for_dealer_marketplace ?? DEFAULT_SETTINGS.inspection_required_for_dealer_marketplace,
+      platform_fee_percentage: platform_fee_percentage ?? DEFAULT_SETTINGS.platform_fee_percentage,
+      platform_fee_enabled: platform_fee_enabled ?? DEFAULT_SETTINGS.platform_fee_enabled
     }
 
     let result
     if (existing) {
       // Update existing
-      result = await supabaseAdmin
-        .from('dealer_marketplace_settings')
-        .update({
-          token_cost_public,
-          token_cost_dealer_marketplace,
-          token_cost_both,
-          default_offer_duration_hours,
-          inspection_cost,
-          inspection_required_for_dealer_marketplace,
-          platform_fee_percentage,
-          platform_fee_enabled,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existing.id)
-        .select()
-        .single()
+      result = await db.dealerMarketplaceSettings.update({
+        where: { id: existing.id },
+        data: settingsData
+      })
     } else {
       // Insert new
-      result = await supabaseAdmin
-        .from('dealer_marketplace_settings')
-        .insert({
-          token_cost_public,
-          token_cost_dealer_marketplace,
-          token_cost_both,
-          default_offer_duration_hours,
-          inspection_cost,
-          inspection_required_for_dealer_marketplace,
-          platform_fee_percentage,
-          platform_fee_enabled
-        })
-        .select()
-        .single()
+      result = await db.dealerMarketplaceSettings.create({
+        data: settingsData
+      })
     }
-
-    if (result.error) throw result.error
 
     return NextResponse.json({
       success: true,
-      settings: result.data
+      settings: result
     })
   } catch (error: any) {
     return NextResponse.json({

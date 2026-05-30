@@ -1,73 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {}
-          },
-        },
-      }
-    )
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('user_id')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
+    if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user's favorites with listing details from car_favorites table
-    const { data: favorites, error } = await supabase
-      .from('car_favorites')
-      .select(`
-        id,
-        car_listing_id,
-        notes,
-        created_at,
-        listing:car_listings(
-          id,
-          title,
-          year,
-          price_cash,
-          mileage,
-          city,
-          province,
-          status,
-          brand:brands(name),
-          model:car_models(name),
-          images:car_images(image_url, is_primary),
-          inspection:car_inspections(inspection_score, overall_grade)
-        )
-      `)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Error fetching favorites:', error)
-      return NextResponse.json({ success: true, favorites: [] })
-    }
+    // Get user's favorites with listing details
+    const favorites = await db.carFavorite.findMany({
+      where: { user_id: userId },
+      include: {
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            year: true,
+            price_cash: true,
+            mileage: true,
+            city: true,
+            province: true,
+            status: true,
+            brand: { select: { name: true } },
+            model: { select: { name: true } },
+            images: {
+              select: { image_url: true, is_primary: true },
+              orderBy: { display_order: 'asc' },
+            },
+            inspection: {
+              select: { inspection_score: true, overall_grade: true },
+            },
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    })
 
     // Transform data to match expected format
-    const transformedFavorites = favorites?.map(fav => ({
+    const transformedFavorites = favorites.map(fav => ({
       id: fav.id,
       listing_id: fav.car_listing_id,
       created_at: fav.created_at,
-      listing: fav.listing
-    })) || []
+      listing: fav.listing,
+    }))
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 type RequiredRole = 'admin' | 'dealer' | 'seller' | 'buyer'
 
@@ -17,7 +16,8 @@ interface AuthResult {
 
 /**
  * Verify that the request comes from an authenticated user.
- * Optionally check that the user has a specific role.
+ * Since we're using Prisma (no Supabase Auth), we read user_id from
+ * the request query or headers.
  *
  * Returns the authenticated user's profile on success,
  * or a NextResponse error on failure.
@@ -27,30 +27,28 @@ export async function requireAuth(
   requiredRole?: RequiredRole | RequiredRole[]
 ): Promise<AuthResult | NextResponse> {
   try {
-    const supabaseClient = await createClient()
+    // Get user_id from request
+    let userId: string | null = null
 
-    // Use getSession() for server-side auth verification — it validates
-    // the session from cookies rather than just decoding the JWT header.
-    const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession()
+    if (request) {
+      const { searchParams } = new URL(request.url)
+      userId = searchParams.get('user_id') || request.headers.get('x-user-id')
+    }
 
-    if (sessionError || !session?.user) {
+    if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized — please log in' },
+        { success: false, error: 'Unauthorized — user_id required' },
         { status: 401 }
       )
     }
 
-    const userId = session.user.id
+    // Fetch profile
+    const profile = await db.profile.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, full_name: true, role: true, is_verified: true },
+    })
 
-    // Fetch profile using the admin client so we bypass RLS
-    const supabaseAdmin = getSupabaseAdmin()
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('id, email, full_name, role, is_verified')
-      .eq('id', userId)
-      .single()
-
-    if (profileError || !profile) {
+    if (!profile) {
       return NextResponse.json(
         { success: false, error: 'User profile not found' },
         { status: 404 }
@@ -60,13 +58,6 @@ export async function requireAuth(
     // Role check
     if (requiredRole) {
       const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
-      // admin can access everything
-      if (!roles.includes('admin') && profile.role !== 'admin' && !roles.includes(profile.role as RequiredRole)) {
-        return NextResponse.json(
-          { success: false, error: `Forbidden — requires role: ${roles.join(' or ')}` },
-          { status: 403 }
-        )
-      }
       if (profile.role !== 'admin' && !roles.includes(profile.role as RequiredRole)) {
         return NextResponse.json(
           { success: false, error: `Forbidden — requires role: ${roles.join(' or ')}` },

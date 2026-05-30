@@ -174,3 +174,29 @@ Stage Summary:
 - Major finding: Multiple API routes use completely wrong field names vs schema
 - Major finding: Token settings schema incompatible with admin API expectations
 - Major finding: Dealer-offers route uses a "fantasy" schema with 34+ non-existent fields
+
+---
+Task ID: 6
+Agent: Main Agent + 6 Sub-agents
+Task: Fix ALL code-database mismatches across the entire AutoMarket project
+
+Work Log:
+- Updated Prisma schema with 8 new models (Transaction, Withdrawal, SupportTicket, SupportTicketMessage, ActivityLog, Coupon, TopupRequest, FeeSetting)
+- Redesigned TokenSetting from key-value to single-row wide table with 25+ columns
+- Added missing fields to existing models (Payment: invoice_number/package_id/verified_by/admin_notes, Banner: description/status/start_date/end_date/display_order/budget_total, BoostFeature: slug/icon/color/benefits, UserSetting: promo_notifications/chat_notifications/currency, InspectionBooking: booking_number/pricing_id/location fields, InspectionPricing: type/token_cost/includes_*, CertificatePurchase: purchase_number/car_listing_id/token_cost, DealerMarketplaceSettings: is_active/token_cost_*/platform_fee_*, DealerOfferSettings: fee_type/fee_percentage/etc)
+- Removed redundant models: TokenBalance, UserToken, TokenPackage, TokenTransaction (consolidated into UserCredit/CreditTransaction/CreditPackage)
+- Removed duplicate fields: CarRentalPrice daily_price/weekly_price/monthly_price/min_rent_days, InspectionCategory order_index, InspectionItem order_index/category string, InspectionResult photo_url
+- Fixed AstraPayTransaction: removed @unique from credit_application_id, changed relation to one-to-many
+- Fixed 80+ API route files: replaced all Supabase client usage with Prisma db, fixed all field name mismatches
+- Fixed token-service.ts: complete rewrite from UserToken/TokenTransaction/TokenBalance to UserCredit/CreditTransaction
+- Fixed AstraPay credit bugs: added credit_application_id to pay-monthly, created account-link callback route
+- Fixed dealer-offers route: complete rewrite from 34+ fantasy fields to actual DealerOffer schema
+- Fixed all admin APIs: orders→Transaction, withdrawals→Withdrawal, tickets→SupportTicket, activity-logs→ActivityLog, coupons→Coupon, fee-settings→FeeSetting
+- Lint passes clean, db:push in sync, homepage loads 200
+
+Stage Summary:
+- 8 new Prisma models added, 4 redundant models removed
+- 80+ API route files fixed (field names + Supabase→Prisma migration)
+- All critical bugs fixed (AstraPay credit_application_id, account-link callback, boost field names)
+- Token system consolidated from 3 competing balance models to 1 (UserCredit)
+- 29 seed/utility files still have Supabase references (non-critical, debug/seed only)

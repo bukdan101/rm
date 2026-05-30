@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
-
-const supabase = getSupabaseAdmin()
+import { db } from '@/lib/db'
 
 // GET - Get count of active offers for a user
 export async function GET(request: NextRequest) {
@@ -14,47 +12,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'user_id or dealer_id required' }, { status: 400 })
     }
 
-    // Check if dealer_offers table exists
-    const tableName = userId ? 'user_id' : 'dealer_id'
-    const filterValue = userId || dealerId
+    const activeStatuses = ['pending', 'viewed', 'negotiating']
 
-    // Count active offers (pending, viewed, negotiating)
-    const { count, error } = await supabase
-      .from('dealer_offers')
-      .select('*', { count: 'exact', head: true })
-      .in('status', ['pending', 'viewed', 'negotiating'])
-      .eq(tableName, filterValue)
-
-    if (error) {
-      // If table doesn't exist, return 0
-      if (error.code === '42P01') {
-        return NextResponse.json({
-          success: true,
-          active_count: 0,
-          new_count: 0,
-          breakdown: {
-            pending: 0,
-            viewed: 0,
-            negotiating: 0,
-            accepted: 0,
-            rejected: 0,
-            expired: 0,
-            withdrawn: 0
-          }
-        })
-      }
-      throw error
+    // Count active offers
+    const activeWhere: Record<string, unknown> = {
+      status: { in: activeStatuses },
     }
+    if (userId) activeWhere.user_id = userId
+    if (dealerId) activeWhere.dealer_id = dealerId
+
+    const count = await db.dealerOffer.count({ where: activeWhere })
 
     // Also get breakdown by status
-    const { data: breakdown, error: breakdownError } = await supabase
-      .from('dealer_offers')
-      .select('status')
-      .eq(tableName, filterValue)
+    const allWhere: Record<string, unknown> = {}
+    if (userId) allWhere.user_id = userId
+    if (dealerId) allWhere.dealer_id = dealerId
 
-    if (breakdownError) {
-      throw breakdownError
-    }
+    const allOffers = await db.dealerOffer.findMany({
+      where: allWhere,
+      select: { status: true },
+    })
 
     // Count by status
     const statusCounts: Record<string, number> = {
@@ -64,10 +41,10 @@ export async function GET(request: NextRequest) {
       accepted: 0,
       rejected: 0,
       expired: 0,
-      withdrawn: 0
+      withdrawn: 0,
     }
 
-    breakdown?.forEach(offer => {
+    allOffers.forEach(offer => {
       if (offer.status && statusCounts[offer.status] !== undefined) {
         statusCounts[offer.status]++
       }
@@ -76,26 +53,22 @@ export async function GET(request: NextRequest) {
     // Count new offers (not viewed yet) for user
     let newOffersCount = 0
     if (userId) {
-      const { count: newCount } = await supabase
-        .from('dealer_offers')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .eq('status', 'pending')
-      
-      newOffersCount = newCount || 0
+      newOffersCount = await db.dealerOffer.count({
+        where: { user_id: userId, status: 'pending' },
+      })
     }
 
     return NextResponse.json({
       success: true,
-      active_count: count || 0,
+      active_count: count,
       new_count: newOffersCount,
-      breakdown: statusCounts
+      breakdown: statusCounts,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error counting offers:', error)
-    return NextResponse.json({
-      success: false,
-      error: error.message
-    }, { status: 500 })
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    )
   }
 }

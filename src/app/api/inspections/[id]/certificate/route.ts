@@ -1,12 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: { autoRefreshToken: false, persistSession: false }
-})
+import { db } from '@/lib/db'
 
 export async function GET(
   request: NextRequest,
@@ -16,51 +9,61 @@ export async function GET(
     const { id } = await params
     
     // Get inspection with car listing details
-    const { data: inspection, error: inspError } = await supabase
-      .from('car_inspections')
-      .select(`
-        *,
-        car_listings(
-          id, title, year, mileage, fuel, transmission, body_type,
-          price_cash, city, province,
-          brands(id, name),
-          car_models(id, name),
-          car_images(image_url, is_primary)
-        )
-      `)
-      .eq('id', id)
-      .single()
+    const inspection = await db.carInspection.findUnique({
+      where: { id },
+      include: {
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            year: true,
+            mileage: true,
+            fuel: true,
+            transmission: true,
+            body_type: true,
+            price_cash: true,
+            city: true,
+            province: true,
+            brand: { select: { id: true, name: true } },
+            model: { select: { id: true, name: true } },
+            images: { select: { image_url: true, is_primary: true } }
+          }
+        }
+      }
+    })
 
-    if (inspError || !inspection) {
+    if (!inspection) {
       return NextResponse.json({ error: 'Inspection not found' }, { status: 404 })
     }
 
     // Get all inspection results with item details
-    const { data: results, error: resultsError } = await supabase
-      .from('inspection_results')
-      .select(`
-        id, status, notes, severity,
-        inspection_items(
-          id, name, description, display_order, is_critical,
-          category_id
-        )
-      `)
-      .eq('inspection_id', id)
-      .order('inspection_items(display_order)')
+    const results = await db.inspectionResult.findMany({
+      where: { inspection_id: id },
+      include: {
+        item: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            display_order: true,
+            is_critical: true,
+            category_id: true
+          }
+        }
+      },
+      orderBy: {
+        item: { display_order: 'asc' }
+      }
+    })
 
-    if (resultsError) {
-      return NextResponse.json({ error: 'Failed to fetch results' }, { status: 500 })
-    }
-
-    // Get categories
-    const { data: categories } = await supabase
-      .from('inspection_categories')
-      .select('*')
-      .order('display_order')
+    // Get categories ordered by display_order
+    const categories = await db.inspectionCategory.findMany({
+      orderBy: { display_order: 'asc' }
+    })
 
     // Group results by category
     const categoryMap: Record<string, any> = {}
-    for (const cat of categories || []) {
+    for (const cat of categories) {
       categoryMap[cat.id] = {
         ...cat,
         items: [],
@@ -69,16 +72,16 @@ export async function GET(
       }
     }
 
-    for (const result of results || []) {
-      const catId = result.inspection_items?.category_id
+    for (const result of results) {
+      const catId = result.item?.category_id
       if (catId && categoryMap[catId]) {
         categoryMap[catId].items.push({
           id: result.id,
-          name: result.inspection_items?.name,
-          description: result.inspection_items?.description,
-          display_order: result.inspection_items?.display_order,
+          name: result.item?.name,
+          description: result.item?.description,
+          display_order: result.item?.display_order,
           status: result.status,
-          is_critical: result.inspection_items?.is_critical,
+          is_critical: result.item?.is_critical,
           notes: result.notes,
           severity: result.severity
         })

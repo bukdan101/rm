@@ -1,63 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { db } from '@/lib/db'
 import { errorResponse } from '@/lib/api-utils'
 
 // GET - Get dealer offers
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    const sellerId = searchParams.get('seller_id')
+    const userId = searchParams.get('user_id')
     const dealerId = searchParams.get('dealer_id')
+    const listingId = searchParams.get('car_listing_id')
     const status = searchParams.get('status')
-    const predictionId = searchParams.get('prediction_id')
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = parseInt(searchParams.get('offset') || '0')
     
     if (id) {
       // Get single offer with full details
-      const { data, error } = await supabase
-        .from('dealer_offers')
-        .select(`
-          *,
-          seller:profiles!dealer_offers_seller_id_fkey(id, full_name, phone, email),
-          dealer:dealers(id, name, slug, logo_url, rating, phone, email, address)
-        `)
-        .eq('id', id)
-        .single()
-      
-      if (error) throw error
+      const data = await db.dealerOffer.findUnique({
+        where: { id },
+        include: {
+          dealer: { select: { id: true, name: true, slug: true, logo_url: true, rating: true, phone: true, email: true, address: true } },
+          listing: {
+            include: {
+              seller: { select: { id: true, full_name: true, phone: true, email: true } }
+            }
+          }
+        }
+      })
       
       return NextResponse.json({ success: true, data })
     }
     
     // List offers
-    let query = supabase
-      .from('dealer_offers')
-      .select(`
-        *,
-        seller:profiles!dealer_offers_seller_id_fkey(id, full_name, phone),
-        dealer:dealers(id, name, slug, logo_url, rating)
-      `, { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
-    
-    if (sellerId) query = query.eq('seller_id', sellerId)
-    if (dealerId) query = query.eq('dealer_id', dealerId)
-    if (status) query = query.eq('status', status)
-    if (predictionId) query = query.eq('prediction_id', predictionId)
-    
-    const { data, error, count } = await query
-    
-    if (error) throw error
+    const where: any = {}
+    if (userId) where.user_id = userId
+    if (dealerId) where.dealer_id = dealerId
+    if (listingId) where.car_listing_id = listingId
+    if (status) where.status = status
+
+    const [data, count] = await Promise.all([
+      db.dealerOffer.findMany({
+        where,
+        include: {
+          dealer: { select: { id: true, name: true, slug: true, logo_url: true, rating: true } },
+          listing: {
+            include: {
+              seller: { select: { id: true, full_name: true, phone: true } }
+            }
+          }
+        },
+        orderBy: { created_at: 'desc' },
+        skip: offset,
+        take: limit
+      }),
+      db.dealerOffer.count({ where })
+    ])
     
     return NextResponse.json({
       success: true,
       data,
       pagination: {
-        total: count || 0,
+        total: count,
         limit,
         offset
       }
@@ -71,122 +74,68 @@ export async function GET(request: NextRequest) {
 // POST - Create new dealer offer (Sell to Dealer)
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const adminClient = getSupabaseAdmin()
     const body = await request.json()
     const {
-      prediction_id,
-      listing_id,
-      seller_id,
-      seller_type,
-      dealer_ids, // Array of dealer IDs to send offer to
-      seller_ask_price,
-      seller_notes,
-      
-      // Vehicle summary (if no prediction)
-      vehicle_title,
-      vehicle_year,
-      vehicle_brand,
-      vehicle_model,
-      vehicle_variant,
-      vehicle_mileage,
-      
-      // AI prediction data (from prediction)
-      ai_predicted_price_low,
-      ai_predicted_price_high,
-      ai_predicted_price_recommended,
-      ai_confidence
+      car_listing_id,
+      user_id,
+      dealer_id,
+      offer_price,
+      original_price,
+      message,
+      financing_available,
+      financing_notes,
+      inspection_included,
+      pickup_service,
+      pickup_location
     } = body
     
     // Validate
-    if (!seller_id) {
-      return errorResponse('Seller ID is required', 400)
+    if (!dealer_id) {
+      return errorResponse('Dealer ID is required', 400)
     }
     
-    if (!dealer_ids || dealer_ids.length === 0) {
-      return errorResponse('At least one dealer must be selected', 400)
+    if (!car_listing_id) {
+      return errorResponse('Car listing ID is required', 400)
     }
-    
-    // Get prediction data if available
-    let predictionData = null
-    if (prediction_id) {
-      const { data: pred } = await supabase
-        .from('ai_predictions')
-        .select('*')
-        .eq('id', prediction_id)
-        .single()
-      predictionData = pred
+
+    // Check listing exists
+    const listing = await db.carListing.findUnique({
+      where: { id: car_listing_id }
+    })
+
+    if (!listing) {
+      return errorResponse('Listing not found', 404)
     }
-    
-    // Get active fee setting
-    const { data: feeSetting } = await supabase
-      .from('dealer_offer_settings')
-      .select('*')
-      .eq('is_active', true)
-      .lte('valid_from', new Date().toISOString())
-      .or(`valid_until.is.null,valid_until.gt.${new Date().toISOString()}`)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-    
-    const feePercentage = feeSetting?.fee_percentage || 5
-    
-    // Create offers for each dealer
-    const offers = []
-    
-    for (const dealerId of dealer_ids) {
-      // Check if dealer is active and handles this brand
-      const { data: dealer } = await supabase
-        .from('dealers')
-        .select('id, name, is_active')
-        .eq('id', dealerId)
-        .single()
-      
-      if (!dealer || !dealer.is_active) continue
-      
-      // Create offer using admin client for elevated access
-      const { data: offer, error: offerError } = await adminClient
-        .from('dealer_offers')
-        .insert({
-          prediction_id,
-          listing_id,
-          seller_id,
-          seller_type: seller_type || 'user',
-          dealer_id: dealerId,
-          vehicle_title: vehicle_title || `${predictionData?.year || vehicle_year} ${predictionData?.brands?.name || vehicle_brand} ${predictionData?.models?.name || vehicle_model}`,
-          vehicle_year: predictionData?.year || vehicle_year,
-          vehicle_brand: predictionData?.brands?.name || vehicle_brand,
-          vehicle_model: predictionData?.models?.name || vehicle_model,
-          vehicle_variant: predictionData?.variants?.name || vehicle_variant,
-          vehicle_mileage: predictionData?.mileage || vehicle_mileage,
-          ai_predicted_price_low: predictionData?.predicted_price_low || ai_predicted_price_low,
-          ai_predicted_price_high: predictionData?.predicted_price_high || ai_predicted_price_high,
-          ai_predicted_price_recommended: predictionData?.predicted_price_recommended || ai_predicted_price_recommended,
-          ai_confidence: predictionData?.prediction_confidence || ai_confidence,
-          seller_ask_price,
-          seller_notes,
-          fee_setting_id: feeSetting?.id,
-          fee_percentage: feePercentage,
-          status: 'pending',
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
-        })
-        .select()
-        .single()
-      
-      if (offerError) {
-        console.error('Error creating offer:', offerError)
-        continue
+
+    // Get default offer duration from settings
+    const settings = await db.dealerMarketplaceSettings.findFirst({
+      where: { is_active: true }
+    })
+    const durationHours = settings?.default_offer_duration_hours || 72
+
+    // Create offer
+    const offer = await db.dealerOffer.create({
+      data: {
+        dealer_id,
+        car_listing_id,
+        user_id: user_id || listing.user_id,
+        offer_price: offer_price || null,
+        original_price: original_price || listing.price_cash || null,
+        message: message || null,
+        financing_available: financing_available || false,
+        financing_notes: financing_notes || null,
+        inspection_included: inspection_included || false,
+        pickup_service: pickup_service || false,
+        pickup_location: pickup_location || null,
+        status: 'pending',
+        expires_at: new Date(Date.now() + durationHours * 60 * 60 * 1000)
       }
-      
-      offers.push(offer)
-      
-      // TODO: Send notification to dealer (push notification / email / in-app)
-    }
+    })
     
     return NextResponse.json({
       success: true,
-      data: offers,
-      message: `Offers sent to ${offers.length} dealers`
+      data: offer,
+      message: 'Offer created successfully'
     })
   } catch (error) {
     console.error('Error creating dealer offers:', error)
@@ -194,31 +143,21 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT - Update offer (dealer response, counter offer, accept/reject)
-export async function PUT(request: NextRequest) {
+// PATCH - Update offer (dealer response, counter offer, accept/reject)
+export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const adminClient = getSupabaseAdmin()
     const body = await request.json()
     const {
       id,
-      action, // 'dealer_respond', 'counter', 'accept', 'reject', 'cancel', 'request_inspection'
-      
-      // For dealer response
-      dealer_offer_price,
-      dealer_notes,
-      dealer_valid_until,
+      action, // 'counter', 'accept', 'reject', 'withdraw'
       
       // For counter offer
-      counter_price,
-      counter_by, // 'seller' or 'dealer'
+      counter_offer_price,
+      counter_offer_message,
+      counter_offer_by,
       
       // For rejection
-      rejection_reason,
-      
-      // For inspection request
-      inspection_location,
-      inspection_scheduled_at
+      rejection_reason
     } = body
     
     if (!id || !action) {
@@ -226,107 +165,55 @@ export async function PUT(request: NextRequest) {
     }
     
     // Get current offer
-    const { data: currentOffer, error: fetchError } = await supabase
-      .from('dealer_offers')
-      .select('*')
-      .eq('id', id)
-      .single()
+    const currentOffer = await db.dealerOffer.findUnique({
+      where: { id }
+    })
     
-    if (fetchError) throw fetchError
+    if (!currentOffer) {
+      return errorResponse('Offer not found', 404)
+    }
     
-    let updateData: any = { updated_at: new Date().toISOString() }
+    let updateData: any = {}
     
     switch (action) {
-      case 'dealer_respond':
-        // Dealer makes initial offer
-        updateData = {
-          ...updateData,
-          dealer_offer_price,
-          dealer_notes,
-          dealer_valid_until,
-          status: 'viewed',
-          fee_amount: dealer_offer_price ? Math.round(dealer_offer_price * (currentOffer.fee_percentage / 100)) : null,
-          seller_receives: dealer_offer_price ? dealer_offer_price - Math.round(dealer_offer_price * (currentOffer.fee_percentage / 100)) : null
-        }
-        break
-        
       case 'counter':
         // Counter offer from either party
-        const counterHistory = currentOffer.counter_history || []
-        counterHistory.push({
-          by: counter_by,
-          price: counter_price,
-          at: new Date().toISOString()
-        })
-        
         updateData = {
-          ...updateData,
-          has_counter_offer: true,
-          counter_offer_count: (currentOffer.counter_offer_count || 0) + 1,
-          last_counter_price: counter_price,
-          last_counter_by: counter_by,
-          counter_history: counterHistory,
-          status: 'negotiating',
-          // Update seller ask or dealer offer depending on who countered
-          ...(counter_by === 'seller' ? { seller_ask_price: counter_price } : { dealer_offer_price: counter_price })
+          counter_offer_price,
+          counter_offer_message,
+          counter_offer_by,
+          counter_offer_at: new Date(),
+          status: 'negotiating'
         }
         break
         
       case 'accept':
         // Accept the offer
-        const acceptedPrice = currentOffer.dealer_offer_price || currentOffer.seller_ask_price
         updateData = {
-          ...updateData,
           status: 'accepted',
-          accepted_at: new Date().toISOString(),
-          accepted_price: acceptedPrice,
-          fee_amount: acceptedPrice ? Math.round(acceptedPrice * (currentOffer.fee_percentage / 100)) : null,
-          seller_receives: acceptedPrice ? acceptedPrice - Math.round(acceptedPrice * (currentOffer.fee_percentage / 100)) : null
+          accepted_at: new Date()
         }
         break
         
       case 'reject':
         updateData = {
-          ...updateData,
           status: 'rejected',
-          rejected_at: new Date().toISOString(),
+          rejected_at: new Date(),
           rejection_reason
         }
         break
         
-      case 'cancel':
+      case 'withdraw':
         updateData = {
-          ...updateData,
-          status: 'cancelled',
-          rejected_at: new Date().toISOString(),
-          rejection_reason: 'Cancelled by user'
+          status: 'withdrawn',
+          withdrawn_at: new Date()
         }
         break
         
-      case 'request_inspection':
+      case 'view':
         updateData = {
-          ...updateData,
-          status: 'inspection_requested',
-          inspection_requested: true,
-          inspection_location,
-          inspection_scheduled_at
-        }
-        break
-        
-      case 'schedule_inspection':
-        updateData = {
-          ...updateData,
-          status: 'inspection_scheduled',
-          inspection_scheduled_at
-        }
-        break
-        
-      case 'complete_inspection':
-        updateData = {
-          ...updateData,
-          status: 'inspection_completed',
-          inspection_completed: true,
-          inspection_id_ref: body.inspection_id
+          viewed_at: new Date(),
+          status: currentOffer.status === 'pending' ? 'viewed' : currentOffer.status
         }
         break
         
@@ -334,14 +221,22 @@ export async function PUT(request: NextRequest) {
         return errorResponse('Invalid action', 400)
     }
     
-    const { data: updatedOffer, error: updateError } = await adminClient
-      .from('dealer_offers')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single()
+    const updatedOffer = await db.dealerOffer.update({
+      where: { id },
+      data: updateData
+    })
     
-    if (updateError) throw updateError
+    // Create history entry
+    await db.dealerOfferHistory.create({
+      data: {
+        offer_id: id,
+        action,
+        previous_price: currentOffer.offer_price,
+        new_price: action === 'counter' ? counter_offer_price : currentOffer.offer_price,
+        message: action === 'reject' ? rejection_reason : action === 'counter' ? counter_offer_message : null,
+        actor_type: counter_offer_by || 'user'
+      }
+    })
     
     return NextResponse.json({
       success: true,
@@ -353,11 +248,9 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE - Delete/cancel an offer
+// DELETE - Delete/withdraw an offer
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const adminClient = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     
@@ -366,11 +259,9 @@ export async function DELETE(request: NextRequest) {
     }
     
     // Check if offer can be cancelled
-    const { data: offer } = await supabase
-      .from('dealer_offers')
-      .select('status')
-      .eq('id', id)
-      .single()
+    const offer = await db.dealerOffer.findUnique({
+      where: { id }
+    })
     
     if (!offer) {
       return errorResponse('Offer not found', 404)
@@ -380,17 +271,15 @@ export async function DELETE(request: NextRequest) {
       return errorResponse('Cannot cancel an accepted offer', 400)
     }
     
-    // Update status to cancelled instead of deleting
-    const { error } = await adminClient
-      .from('dealer_offers')
-      .update({
-        status: 'cancelled',
-        rejected_at: new Date().toISOString(),
+    // Update status to withdrawn instead of deleting
+    await db.dealerOffer.update({
+      where: { id },
+      data: {
+        status: 'withdrawn',
+        withdrawn_at: new Date(),
         rejection_reason: 'Cancelled by user'
-      })
-      .eq('id', id)
-    
-    if (error) throw error
+      }
+    })
     
     return NextResponse.json({
       success: true,

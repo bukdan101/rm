@@ -1,195 +1,145 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { errorResponse } from '@/lib/api-utils'
+import { db } from '@/lib/db'
+
+function errorResponse(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status })
+}
+
+// Helper to verify admin access
+async function verifyAdmin(request: NextRequest) {
+  const userId = request.headers.get('x-user-id')
+  if (!userId) {
+    return { authorized: false, error: errorResponse('Unauthorized', 401) }
+  }
+  const profile = await db.profile.findUnique({ where: { id: userId }, select: { role: true } })
+  if (!profile || profile.role !== 'admin') {
+    return { authorized: false, error: errorResponse('Admin access required', 403) }
+  }
+  return { authorized: true, userId }
+}
 
 // GET: Get admin dashboard stats (admin only)
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check admin role
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return errorResponse('Unauthorized', 401)
-    }
-    
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-    
-    if (!profile || profile.role !== 'admin') {
-      return errorResponse('Admin access required', 403)
-    }
-    
-    // Get total users count
-    const { count: totalUsers } = await supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-    
-    // Get total dealers count
-    const { count: totalDealers } = await supabase
-      .from('dealers')
-      .select('*', { count: 'exact', head: true })
-    
-    // Get total listings count
-    const { count: totalListings } = await supabase
-      .from('car_listings')
-      .select('*', { count: 'exact', head: true })
-      .neq('status', 'deleted')
-    
-    // Get pending KYC count
-    const { count: pendingKyc } = await supabase
-      .from('kyc_verifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending')
-    
-    // Get pending dealer approval count (dealers that are not verified)
-    const { count: pendingDealerApproval } = await supabase
-      .from('dealers')
-      .select('*', { count: 'exact', head: true })
-      .eq('verified', false)
-      .eq('is_active', true)
-    
-    // Get total revenue from paid payments (status = 'paid', matching PaymentStatus enum)
-    const { data: paymentsData } = await supabase
-      .from('payments')
-      .select('amount')
-      .eq('status', 'paid')
-    
-    const totalRevenue = paymentsData?.reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0
-    
-    // Get token sales count (total credits awarded from paid payments)
-    const { data: creditsData } = await supabase
-      .from('payments')
-      .select('credits_awarded')
-      .eq('status', 'paid')
-    
-    const tokenSales = creditsData?.reduce((sum, payment) => sum + (payment.credits_awarded || 0), 0) || 0
-    
-    // Get boost revenue from credit_transactions
-    const { data: boostTransactions } = await supabase
-      .from('credit_transactions')
-      .select('amount')
-      .eq('type', 'boost')
-    
-    const boostRevenue = boostTransactions?.reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0) || 0
+    const authResult = await verifyAdmin(request)
+    if (!authResult.authorized) return authResult.error!
 
-    // Calculate monthly growth (users created this month vs last month)
+    // Get total users count
+    const totalUsers = await db.profile.count()
+
+    // Get total dealers count
+    const totalDealers = await db.dealer.count()
+
+    // Get total listings count (not deleted)
+    const totalListings = await db.carListing.count({
+      where: { status: { not: 'deleted' } },
+    })
+
+    // Get pending KYC count
+    const pendingKyc = await db.kycVerification.count({
+      where: { status: 'pending' },
+    })
+
+    // Get pending dealer approval count
+    const pendingDealerApproval = await db.dealer.count({
+      where: { verified: false, is_active: true },
+    })
+
+    // Get total revenue from paid payments
+    const paidPayments = await db.payment.findMany({
+      where: { status: 'paid' },
+      select: { amount: true },
+    })
+    const totalRevenue = paidPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+
+    // Get token sales count (total credits awarded from paid payments)
+    const creditsPayments = await db.payment.findMany({
+      where: { status: 'paid' },
+      select: { credits_awarded: true },
+    })
+    const tokenSales = creditsPayments.reduce((sum, p) => sum + (p.credits_awarded || 0), 0)
+
+    // Get boost revenue from credit_transactions
+    const boostTransactions = await db.creditTransaction.findMany({
+      where: { type: 'boost' },
+      select: { amount: true },
+    })
+    const boostRevenue = boostTransactions.reduce((sum, tx) => sum + Math.abs(tx.amount || 0), 0)
+
+    // Calculate monthly growth
     const now = new Date()
     const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0)
-    
-    // Users this month
-    const { count: usersThisMonth } = await supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', startOfThisMonth.toISOString())
-    
-    // Users last month
-    const { count: usersLastMonth } = await supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', startOfLastMonth.toISOString())
-      .lte('created_at', endOfLastMonth.toISOString())
-    
-    // Calculate growth percentage
+
+    const usersThisMonth = await db.profile.count({
+      where: { created_at: { gte: startOfThisMonth } },
+    })
+
+    const usersLastMonth = await db.profile.count({
+      where: {
+        created_at: { gte: startOfLastMonth, lte: endOfLastMonth },
+      },
+    })
+
     let monthlyGrowth = 0
-    if (usersLastMonth && usersLastMonth > 0) {
-      monthlyGrowth = Math.round(((usersThisMonth || 0) - usersLastMonth) / usersLastMonth * 100)
-    } else if (usersThisMonth && usersThisMonth > 0) {
-      monthlyGrowth = 100 // If no users last month but have users this month
+    if (usersLastMonth > 0) {
+      monthlyGrowth = Math.round((usersThisMonth - usersLastMonth) / usersLastMonth * 100)
+    } else if (usersThisMonth > 0) {
+      monthlyGrowth = 100
     }
-    
-    // Get additional useful stats
-    // Active listings
-    const { count: activeListings } = await supabase
-      .from('car_listings')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'active')
-    
-    // Pending listings
-    const { count: pendingListings } = await supabase
-      .from('car_listings')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending')
-    
-    // Sold listings
-    const { count: soldListings } = await supabase
-      .from('car_listings')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'sold')
-    
-    // Verified dealers
-    const { count: verifiedDealers } = await supabase
-      .from('dealers')
-      .select('*', { count: 'exact', head: true })
-      .eq('verified', true)
-      .eq('is_active', true)
-    
-    // Approved KYC
-    const { count: approvedKyc } = await supabase
-      .from('kyc_verifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'approved')
-    
-    // Pending payments
-    const { count: pendingPayments } = await supabase
-      .from('payments')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending')
-    
-    // Fetch monthly data for charts
-    const monthlyData = await fetchMonthlyRevenueData(supabase)
-    const userGrowth = await fetchUserGrowthData(supabase)
-    const tokenUsage = await fetchTokenUsageData(supabase)
+
+    // Additional stats
+    const activeListings = await db.carListing.count({ where: { status: 'active' } })
+    const pendingListings = await db.carListing.count({ where: { status: 'pending' } })
+    const soldListings = await db.carListing.count({ where: { status: 'sold' } })
+    const verifiedDealers = await db.dealer.count({ where: { verified: true, is_active: true } })
+    const approvedKyc = await db.kycVerification.count({ where: { status: 'approved' } })
+    const pendingPayments = await db.payment.count({ where: { status: 'pending' } })
+
+    // Fetch chart data
+    const monthlyData = await fetchMonthlyRevenueData()
+    const userGrowth = await fetchUserGrowthData()
+    const tokenUsage = await fetchTokenUsageData()
 
     return NextResponse.json({
-      // Primary stats
-      totalUsers: totalUsers || 0,
-      totalDealers: totalDealers || 0,
-      totalListings: totalListings || 0,
-      pendingKyc: pendingKyc || 0,
-      pendingDealerApproval: pendingDealerApproval || 0,
+      totalUsers,
+      totalDealers,
+      totalListings,
+      pendingKyc,
+      pendingDealerApproval,
       totalRevenue,
       tokenSales,
       boostRevenue,
       monthlyGrowth,
-      
-      // Chart data
       monthlyData,
       userGrowth,
       tokenUsage,
-      
-      // Additional stats
       breakdown: {
         users: {
-          total: totalUsers || 0,
-          thisMonth: usersThisMonth || 0,
-          lastMonth: usersLastMonth || 0
+          total: totalUsers,
+          thisMonth: usersThisMonth,
+          lastMonth: usersLastMonth,
         },
         dealers: {
-          total: totalDealers || 0,
-          verified: verifiedDealers || 0,
-          pending: pendingDealerApproval || 0
+          total: totalDealers,
+          verified: verifiedDealers,
+          pending: pendingDealerApproval,
         },
         listings: {
-          total: totalListings || 0,
-          active: activeListings || 0,
-          pending: pendingListings || 0,
-          sold: soldListings || 0
+          total: totalListings,
+          active: activeListings,
+          pending: pendingListings,
+          sold: soldListings,
         },
         kyc: {
-          pending: pendingKyc || 0,
-          approved: approvedKyc || 0
+          pending: pendingKyc,
+          approved: approvedKyc,
         },
         payments: {
-          pending: pendingPayments || 0
-        }
-      }
+          pending: pendingPayments,
+        },
+      },
     })
   } catch (error) {
     console.error('Error fetching admin stats:', error)
@@ -198,144 +148,141 @@ export async function GET(request: NextRequest) {
 }
 
 // Fetch monthly revenue data for charts
-async function fetchMonthlyRevenueData(supabase: Awaited<ReturnType<typeof createClient>>) {
+async function fetchMonthlyRevenueData() {
   const year = new Date().getFullYear()
-  const { data: payments, error } = await supabase
-    .from('payments')
-    .select('amount, created_at, credits_awarded')
-    .eq('status', 'paid')
-    .gte('created_at', `${year}-01-01`)
-    .lte('created_at', `${year}-12-31`)
-    .order('created_at', { ascending: true })
-  
-  // Initialize monthly data
+  const startOfYear = new Date(year, 0, 1)
+  const endOfYear = new Date(year, 11, 31, 23, 59, 59)
+
+  const payments = await db.payment.findMany({
+    where: {
+      status: 'paid',
+      created_at: { gte: startOfYear, lte: endOfYear },
+    },
+    select: { amount: true, credits_awarded: true, created_at: true },
+    orderBy: { created_at: 'asc' },
+  })
+
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   const monthlyData: Record<string, { revenue: number; tokens: number }> = {}
-  
+
   for (let i = 1; i <= 12; i++) {
     const monthKey = i.toString().padStart(2, '0')
     monthlyData[monthKey] = { revenue: 0, tokens: 0 }
   }
-  
-  if (payments && !error) {
-    payments.forEach((payment) => {
-      if (payment.created_at) {
-        const month = payment.created_at.substring(5, 7)
-        monthlyData[month].revenue += payment.amount || 0
-        monthlyData[month].tokens += payment.credits_awarded || 0
-      }
-    })
-  }
-  
+
+  payments.forEach((payment) => {
+    if (payment.created_at) {
+      const month = new Date(payment.created_at).toISOString().substring(5, 7)
+      monthlyData[month].revenue += payment.amount || 0
+      monthlyData[month].tokens += payment.credits_awarded || 0
+    }
+  })
+
   return Object.entries(monthlyData).map(([month, data], index) => ({
     name: months[index],
     revenue: data.revenue,
-    tokens: data.tokens
+    tokens: data.tokens,
   }))
 }
 
 // Fetch user growth data for charts
-async function fetchUserGrowthData(supabase: Awaited<ReturnType<typeof createClient>>) {
+async function fetchUserGrowthData() {
   const year = new Date().getFullYear()
-  
-  // Get profiles
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, role, created_at')
-    .gte('created_at', `${year}-01-01`)
-    .lte('created_at', `${year}-12-31`)
-  
-  // Get dealers
-  const { data: dealers } = await supabase
-    .from('dealers')
-    .select('id, created_at')
-    .gte('created_at', `${year}-01-01`)
-    .lte('created_at', `${year}-12-31`)
-  
+  const startOfYear = new Date(year, 0, 1)
+  const endOfYear = new Date(year, 11, 31, 23, 59, 59)
+
+  const profiles = await db.profile.findMany({
+    where: {
+      created_at: { gte: startOfYear, lte: endOfYear },
+    },
+    select: { id: true, role: true, created_at: true },
+  })
+
+  const dealers = await db.dealer.findMany({
+    where: {
+      created_at: { gte: startOfYear, lte: endOfYear },
+    },
+    select: { id: true, created_at: true },
+  })
+
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   const monthlyData: Record<string, { users: number; dealers: number }> = {}
-  
+
   for (let i = 1; i <= 12; i++) {
     const monthKey = i.toString().padStart(2, '0')
     monthlyData[monthKey] = { users: 0, dealers: 0 }
   }
-  
-  if (profiles) {
-    profiles.forEach((profile) => {
-      if (profile.created_at) {
-        const month = profile.created_at.substring(5, 7)
-        monthlyData[month].users += 1
-      }
-    })
-  }
-  
-  if (dealers) {
-    dealers.forEach((dealer) => {
-      if (dealer.created_at) {
-        const month = dealer.created_at.substring(5, 7)
-        monthlyData[month].dealers += 1
-      }
-    })
-  }
-  
+
+  profiles.forEach((profile) => {
+    if (profile.created_at) {
+      const month = new Date(profile.created_at).toISOString().substring(5, 7)
+      monthlyData[month].users += 1
+    }
+  })
+
+  dealers.forEach((dealer) => {
+    if (dealer.created_at) {
+      const month = new Date(dealer.created_at).toISOString().substring(5, 7)
+      monthlyData[month].dealers += 1
+    }
+  })
+
   return Object.entries(monthlyData).map(([month, data], index) => ({
     name: months[index],
     users: data.users,
-    dealers: data.dealers
+    dealers: data.dealers,
   }))
 }
 
 // Fetch token usage data for pie chart
-async function fetchTokenUsageData(supabase: Awaited<ReturnType<typeof createClient>>) {
-  // Get credit transactions grouped by type
-  const { data: transactions } = await supabase
-    .from('credit_transactions')
-    .select('type, amount')
-    .in('type', ['listing', 'boost', 'prediction', 'dealer_contact'])
-  
+async function fetchTokenUsageData() {
+  const transactions = await db.creditTransaction.findMany({
+    where: {
+      type: { in: ['listing', 'boost', 'prediction', 'dealer_contact'] },
+    },
+    select: { type: true, amount: true },
+  })
+
   const usageStats = {
     listings: 0,
     boosts: 0,
     predictions: 0,
-    dealer_contacts: 0
+    dealer_contacts: 0,
   }
-  
-  if (transactions) {
-    transactions.forEach((tx) => {
-      const amount = Math.abs(tx.amount || 0)
-      switch (tx.type) {
-        case 'listing':
-          usageStats.listings += amount
-          break
-        case 'boost':
-          usageStats.boosts += amount
-          break
-        case 'prediction':
-          usageStats.predictions += amount
-          break
-        case 'dealer_contact':
-          usageStats.dealer_contacts += amount
-          break
-      }
-    })
-  }
-  
+
+  transactions.forEach((tx) => {
+    const amount = Math.abs(tx.amount || 0)
+    switch (tx.type) {
+      case 'listing':
+        usageStats.listings += amount
+        break
+      case 'boost':
+        usageStats.boosts += amount
+        break
+      case 'prediction':
+        usageStats.predictions += amount
+        break
+      case 'dealer_contact':
+        usageStats.dealer_contacts += amount
+        break
+    }
+  })
+
   const total = usageStats.listings + usageStats.boosts + usageStats.predictions + usageStats.dealer_contacts
-  
-  // If no data, return default distribution
+
   if (total === 0) {
     return [
       { name: 'Listings', value: 45, color: '#8b5cf6' },
       { name: 'Boosts', value: 30, color: '#06b6d4' },
       { name: 'AI Predict', value: 15, color: '#f59e0b' },
-      { name: 'Dealer Contact', value: 10, color: '#10b981' }
+      { name: 'Dealer Contact', value: 10, color: '#10b981' },
     ]
   }
-  
+
   return [
     { name: 'Listings', value: Math.round((usageStats.listings / total) * 100), color: '#8b5cf6' },
     { name: 'Boosts', value: Math.round((usageStats.boosts / total) * 100), color: '#06b6d4' },
     { name: 'AI Predict', value: Math.round((usageStats.predictions / total) * 100), color: '#f59e0b' },
-    { name: 'Dealer Contact', value: Math.round((usageStats.dealer_contacts / total) * 100), color: '#10b981' }
+    { name: 'Dealer Contact', value: Math.round((usageStats.dealer_contacts / total) * 100), color: '#10b981' },
   ]
 }

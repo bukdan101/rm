@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { db } from '@/lib/db'
 
 export async function DELETE(
   request: NextRequest,
@@ -8,43 +7,23 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {}
-          },
-        },
-      }
-    )
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('user_id')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
+    if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
     // Delete the favorite, ensuring it belongs to the current user
-    const { error } = await supabase
-      .from('car_favorites')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id)
+    const result = await db.carFavorite.deleteMany({
+      where: {
+        id,
+        user_id: userId,
+      },
+    })
 
-    if (error) {
-      console.error('Error removing favorite:', error)
-      return NextResponse.json({ success: false, error: 'Failed to remove favorite' }, { status: 500 })
+    if (result.count === 0) {
+      return NextResponse.json({ success: false, error: 'Favorite not found' }, { status: 404 })
     }
 
     return NextResponse.json({ success: true })

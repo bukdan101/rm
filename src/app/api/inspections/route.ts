@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,33 +13,35 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { data, error } = await supabase
-      .from('car_inspections')
-      .select(`
-        *,
-        results:inspection_results(
-          id,
-          status,
-          notes,
-          image_url,
-          item:inspection_items(id, category, name, display_order)
-        )
-      `)
-      .eq('car_listing_id', carListingId)
-      .single()
+    const data = await db.carInspection.findUnique({
+      where: { car_listing_id },
+      include: {
+        results: {
+          include: {
+            item: {
+              select: {
+                id: true,
+                name: true,
+                display_order: true,
+                inspectionCategory: {
+                  select: { id: true, name: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    })
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json({ success: true, data: null })
-      }
-      throw error
+    if (!data) {
+      return NextResponse.json({ success: true, data: null })
     }
 
     // Group results by category
     const grouped: Record<string, typeof data.results> = {}
     if (data.results) {
       for (const result of data.results) {
-        const category = result.item?.category || 'Other'
+        const category = result.item?.inspectionCategory?.name || 'Other'
         if (!grouped[category]) {
           grouped[category] = []
         }
@@ -53,7 +55,7 @@ export async function GET(request: NextRequest) {
       baik: data.results?.filter(r => r.status === 'baik').length || 0,
       sedang: data.results?.filter(r => r.status === 'sedang').length || 0,
       perlu_perbaikan: data.results?.filter(r => r.status === 'perlu_perbaikan').length || 0,
-      istimewa: data.results?.filter(r => r.status === 'istimewa').length || 0
+      istimewa: data.results?.filter(r => r.status === 'istimewa').length || 0,
     }
 
     return NextResponse.json({
@@ -61,8 +63,8 @@ export async function GET(request: NextRequest) {
       data: {
         ...data,
         results_by_category: grouped,
-        stats
-      }
+        stats,
+      },
     })
   } catch (error) {
     console.error('Error fetching inspection:', error)
@@ -78,24 +80,20 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // Create inspection
-    const { data: inspection, error: inspectionError } = await supabase
-      .from('car_inspections')
-      .insert({
+    const inspection = await db.carInspection.create({
+      data: {
         car_listing_id: body.car_listing_id,
         inspector_name: body.inspector_name,
         inspection_place: body.inspection_place,
-        inspection_date: body.inspection_date || new Date().toISOString(),
+        inspection_date: body.inspection_date ? new Date(body.inspection_date) : new Date(),
         total_points: body.total_points || 160,
         passed_points: body.passed_points,
         accident_free: body.accident_free ?? true,
         flood_free: body.flood_free ?? true,
         fire_free: body.fire_free ?? true,
-        risk_level: body.risk_level || 'low'
-      })
-      .select()
-      .single()
-
-    if (inspectionError) throw inspectionError
+        risk_level: body.risk_level || 'low',
+      },
+    })
 
     // If results are provided, insert them
     if (body.results && body.results.length > 0) {
@@ -104,30 +102,28 @@ export async function POST(request: NextRequest) {
         item_id: r.item_id,
         status: r.status || 'baik',
         notes: r.notes || null,
-        image_url: r.image_url || null
+        image_url: r.image_url || null,
       }))
 
-      const { error: resultsError } = await supabase
-        .from('inspection_results')
-        .insert(resultsToInsert)
-
-      if (resultsError) throw resultsError
+      await db.inspectionResult.createMany({
+        data: resultsToInsert,
+      })
     } else {
       // Create default results for all inspection items
-      const { data: items } = await supabase
-        .from('inspection_items')
-        .select('id')
+      const items = await db.inspectionItem.findMany({
+        select: { id: true },
+      })
 
       if (items && items.length > 0) {
         const defaultResults = items.map(item => ({
           inspection_id: inspection.id,
           item_id: item.id,
-          status: 'baik'
+          status: 'baik',
         }))
 
-        await supabase
-          .from('inspection_results')
-          .insert(defaultResults)
+        await db.inspectionResult.createMany({
+          data: defaultResults,
+        })
       }
     }
 

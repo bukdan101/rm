@@ -13,6 +13,20 @@ interface CallbackBody {
 }
 
 // POST – Payment callback from AstraPay (webhook)
+//
+// This is a dual-purpose handler that processes AstraPay payment callbacks
+// for two distinct flows:
+//
+// 1. INITIAL CREDIT APPROVAL:
+//    - AstraPayTransaction created via /api/astrapay/payment with credit_application_id set
+//    - On "approved" callback → CreditApplication status changes from "submitted" → "approved"
+//    - The first CreditPayment is also marked as "paid"
+//
+// 2. MONTHLY INSTALLMENT PAYMENT:
+//    - AstraPayTransaction created via /api/credit/pay-monthly with credit_application_id set
+//    - On "approved" callback → The next unpaid CreditPayment is marked as "paid"
+//    - If all payments are paid → CreditApplication status changes to "completed"
+//    - The application is already "approved"/"disbursed", so the approval block is skipped
 export async function POST(request: NextRequest) {
   try {
     const body: CallbackBody = await request.json()
@@ -39,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update the transaction with callback data
-    const updatedTransaction = await db.astraPayTransaction.update({
+    await db.astraPayTransaction.update({
       where: { id: transaction.id },
       data: {
         astrapay_trx_id: astrapayTransactionId || transaction.astrapay_trx_id,
@@ -52,7 +66,11 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // If this is a credit payment, update the CreditPayment record
+    // ───────────────────────────────────────────────────────
+    // Credit-related callback handling
+    // Only process if this transaction is linked to a credit
+    // application AND the payment was approved by AstraPay
+    // ───────────────────────────────────────────────────────
     if (transaction.credit_application_id && status === 'approved') {
       const creditApplication = await db.creditApplication.findUnique({
         where: { id: transaction.credit_application_id },
@@ -60,7 +78,10 @@ export async function POST(request: NextRequest) {
       })
 
       if (creditApplication) {
-        // Find the next unpaid payment
+        // ── Flow 1: Monthly installment payment ──
+        // Find the next unpaid payment and mark it as paid.
+        // This applies to both the initial first installment and
+        // subsequent monthly payments.
         const upcomingPayment = creditApplication.payments
           .filter((p) => p.status === 'upcoming' || p.status === 'overdue')
           .sort((a, b) => a.payment_number - b.payment_number)[0]
@@ -92,15 +113,21 @@ export async function POST(request: NextRequest) {
             },
           })
         }
-      }
-    }
 
-    // If listing purchase payment is approved, update application status
-    if (transaction.credit_application_id && status === 'approved') {
-      await db.creditApplication.updateMany({
-        where: { id: transaction.credit_application_id, status: 'submitted' },
-        data: { status: 'approved', approved_at: new Date() },
-      })
+        // ── Flow 2: Initial credit approval ──
+        // If the application is still in "submitted" status, this callback
+        // represents the initial payment approval. Promote the application
+        // to "approved" so the user can proceed with the financing.
+        // This block only fires for initial approval because the
+        // condition checks for status === 'submitted' — monthly payments
+        // are already in "approved"/"disbursed" status.
+        if (creditApplication.status === 'submitted') {
+          await db.creditApplication.update({
+            where: { id: creditApplication.id },
+            data: { status: 'approved', approved_at: new Date() },
+          })
+        }
+      }
     }
 
     return successResponse({ status: 'OK' })

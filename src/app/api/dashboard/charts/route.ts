@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const adminClient = getSupabaseAdmin()
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
+    const userId = request.headers.get('x-user-id')
+
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const searchParams = request.nextUrl.searchParams
     const period = searchParams.get('period') || '7d'
-    const userId = searchParams.get('user_id')
-    const dealerId = searchParams.get('dealer_id')
+    const dealerIdParam = searchParams.get('dealer_id')
 
     // Calculate date range
     const now = new Date()
@@ -40,56 +35,42 @@ export async function GET(request: NextRequest) {
       dateLabels.push(date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }))
     }
 
-    // Build filter condition for listings
-    const sellerFilter = dealerId 
-      ? `dealer_id.eq.${dealerId}` 
-      : userId 
-        ? `seller_id.eq.${userId}` 
-        : `seller_id.eq.${user.id}`
+    // Build filter for listings - user_id instead of seller_id
+    const whereFilter: Record<string, unknown> = dealerIdParam
+      ? { dealer_id: dealerIdParam }
+      : { user_id: userId }
 
     // 1. Fetch listing views over time
-    // Get listings with view counts
-    const { data: listings, error: listingsError } = await adminClient
-      .from('car_listings')
-      .select('id, view_count, created_at, status, sold_at, seller_id, dealer_id')
-      .or(sellerFilter)
-      .gte('created_at', startDate.toISOString())
+    const listings = await db.carListing.findMany({
+      where: { ...whereFilter, created_at: { gte: startDate } },
+      select: { id: true, view_count: true, created_at: true, status: true, sold_at: true, user_id: true, dealer_id: true },
+    })
 
-    if (listingsError) {
-      console.error('Error fetching listings:', listingsError)
-    }
-
-    // For views, we'll distribute total views across the period based on listing creation
-    // In a real app, you'd have an analytics/events table with daily view counts
     const viewsData: number[] = []
     const leadsData: number[] = []
     const tokensData: number[] = []
 
     // Calculate total views and distribute
-    const totalViews = listings?.reduce((sum, l) => sum + (l.view_count || 0), 0) || 0
+    const totalViews = listings.reduce((sum, l) => sum + (l.view_count || 0), 0)
     const avgViewsPerDay = Math.floor(totalViews / days) || 0
-    
-    // Get conversations for leads
-    const { data: conversations, error: convError } = await adminClient
-      .from('conversations')
-      .select('id, created_at')
-      .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
-      .gte('created_at', startDate.toISOString())
 
-    if (convError) {
-      console.error('Error fetching conversations:', convError)
-    }
+    // Get conversations for leads
+    const conversations = await db.conversation.findMany({
+      where: {
+        OR: [{ buyer_id: userId }, { seller_id: userId }],
+        created_at: { gte: startDate },
+      },
+      select: { id: true, created_at: true },
+    })
 
     // Get credit transactions for tokens usage
-    const { data: creditTransactions, error: txError } = await adminClient
-      .from('credit_transactions')
-      .select('id, amount, type, created_at')
-      .eq('user_id', user.id)
-      .gte('created_at', startDate.toISOString())
-
-    if (txError) {
-      console.error('Error fetching credit transactions:', txError)
-    }
+    const creditTransactions = await db.creditTransaction.findMany({
+      where: {
+        user_id: userId,
+        created_at: { gte: startDate },
+      },
+      select: { id: true, amount: true, type: true, created_at: true },
+    })
 
     // Generate daily data
     for (let i = 0; i < days; i++) {
@@ -103,17 +84,17 @@ export async function GET(request: NextRequest) {
       viewsData.push(Math.max(0, avgViewsPerDay + variance + Math.floor(Math.random() * 30)))
 
       // Leads (conversations started on this day)
-      const dayLeads = conversations?.filter(c => {
+      const dayLeads = conversations.filter(c => {
         const convDate = new Date(c.created_at)
         return convDate >= dateStart && convDate <= dateEnd
-      }).length || 0
+      }).length
       leadsData.push(dayLeads + Math.floor(Math.random() * 3))
 
       // Tokens used
-      const dayTokens = creditTransactions?.filter(t => {
+      const dayTokens = creditTransactions.filter(t => {
         const txDate = new Date(t.created_at)
-        return txDate >= dateStart && txDate <= dateEnd && t.type === 'deduct'
-      }).reduce((sum, t) => sum + Math.abs(t.amount || 0), 0) || 0
+        return txDate >= dateStart && txDate <= dateEnd && t.amount < 0
+      }).reduce((sum, t) => sum + Math.abs(t.amount || 0), 0)
       tokensData.push(dayTokens || Math.floor(Math.random() * 10))
     }
 
@@ -126,14 +107,10 @@ export async function GET(request: NextRequest) {
     }))
 
     // 2. Listing Status Distribution
-    const { data: allListings, error: allListingsError } = await adminClient
-      .from('car_listings')
-      .select('status')
-      .or(sellerFilter)
-
-    if (allListingsError) {
-      console.error('Error fetching all listings:', allListingsError)
-    }
+    const allListings = await db.carListing.findMany({
+      where: whereFilter,
+      select: { status: true },
+    })
 
     const statusCounts = {
       active: 0,
@@ -143,7 +120,7 @@ export async function GET(request: NextRequest) {
       expired: 0,
     }
 
-    allListings?.forEach(l => {
+    allListings.forEach(l => {
       const status = l.status as keyof typeof statusCounts
       if (statusCounts[status] !== undefined) {
         statusCounts[status]++
@@ -158,16 +135,12 @@ export async function GET(request: NextRequest) {
     ]
 
     // 3. Token Usage Distribution
-    const { data: tokenUsage, error: tokenError } = await adminClient
-      .from('credit_transactions')
-      .select('type, amount, description')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(100)
-
-    if (tokenError) {
-      console.error('Error fetching token usage:', tokenError)
-    }
+    const tokenUsage = await db.creditTransaction.findMany({
+      where: { user_id: userId },
+      select: { type: true, amount: true, description: true },
+      orderBy: { created_at: 'desc' },
+      take: 100,
+    })
 
     const usageByType: Record<string, number> = {
       'Iklan Normal': 0,
@@ -176,8 +149,8 @@ export async function GET(request: NextRequest) {
       'Boost': 0,
     }
 
-    tokenUsage?.forEach(t => {
-      if (t.type === 'deduct') {
+    tokenUsage.forEach(t => {
+      if (t.amount < 0) {
         const amount = Math.abs(t.amount || 0)
         const desc = t.description?.toLowerCase() || ''
         if (desc.includes('dealer') || desc.includes('marketplace')) {
@@ -192,7 +165,6 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // If no usage data, show sample distribution
     const hasRealUsage = Object.values(usageByType).some(v => v > 0)
     const tokenUsageData = hasRealUsage
       ? Object.entries(usageByType)
@@ -205,17 +177,15 @@ export async function GET(request: NextRequest) {
           { name: 'Boost', amount: 10 },
         ]
 
-    // 4. Sales Trend (for dealers or sellers)
-    const { data: soldListings, error: soldError } = await adminClient
-      .from('car_listings')
-      .select('id, sold_at, price, created_at')
-      .or(sellerFilter)
-      .eq('status', 'sold')
-      .gte('sold_at', startDate.toISOString())
-
-    if (soldError) {
-      console.error('Error fetching sold listings:', soldError)
-    }
+    // 4. Sales Trend - use price_cash instead of price
+    const soldListings = await db.carListing.findMany({
+      where: {
+        ...whereFilter,
+        status: 'sold',
+        sold_at: { gte: startDate, not: null },
+      },
+      select: { id: true, sold_at: true, price_cash: true, created_at: true },
+    })
 
     const salesTrend = dateLabels.map((name, index) => {
       const dateStart = new Date(now.getTime() - (days - 1 - index) * 24 * 60 * 60 * 1000)
@@ -223,28 +193,24 @@ export async function GET(request: NextRequest) {
       const dateEnd = new Date(dateStart)
       dateEnd.setHours(23, 59, 59, 999)
 
-      const daySales = soldListings?.filter(s => {
-        const soldDate = new Date(s.sold_at!)
-        return soldDate >= dateStart && soldDate <= dateEnd
-      }) || []
+      const daySales = soldListings.filter(s => {
+        const soldDate = s.sold_at ? new Date(s.sold_at) : null
+        return soldDate && soldDate >= dateStart && soldDate <= dateEnd
+      })
 
       return {
         name,
         sales: daySales.length,
-        revenue: daySales.reduce((sum, s) => sum + (s.price || 0), 0),
+        revenue: daySales.reduce((sum, s) => sum + (s.price_cash || 0), 0),
       }
     })
 
-    // 5. User Growth (for admin overview)
-    const { data: userGrowth, error: userError } = await adminClient
-      .from('profiles')
-      .select('id, created_at')
-      .gte('created_at', startDate.toISOString())
-      .order('created_at', { ascending: true })
-
-    if (userError) {
-      console.error('Error fetching user growth:', userError)
-    }
+    // 5. User Growth
+    const userGrowth = await db.profile.findMany({
+      where: { created_at: { gte: startDate } },
+      select: { id: true, created_at: true },
+      orderBy: { created_at: 'asc' },
+    })
 
     const userGrowthData = dateLabels.map((name, index) => {
       const dateStart = new Date(now.getTime() - (days - 1 - index) * 24 * 60 * 60 * 1000)
@@ -252,10 +218,10 @@ export async function GET(request: NextRequest) {
       const dateEnd = new Date(dateStart)
       dateEnd.setHours(23, 59, 59, 999)
 
-      const dayUsers = userGrowth?.filter(u => {
+      const dayUsers = userGrowth.filter(u => {
         const userDate = new Date(u.created_at)
         return userDate >= dateStart && userDate <= dateEnd
-      }).length || 0
+      }).length
 
       return {
         name,
@@ -263,16 +229,11 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // 6. Revenue Data (for admin)
-    const { data: payments, error: paymentsError } = await adminClient
-      .from('payments')
-      .select('id, amount, created_at, status')
-      .eq('status', 'verified')
-      .gte('created_at', startDate.toISOString())
-
-    if (paymentsError) {
-      console.error('Error fetching payments:', paymentsError)
-    }
+    // 6. Revenue Data
+    const payments = await db.payment.findMany({
+      where: { status: 'verified', created_at: { gte: startDate } },
+      select: { id: true, amount: true, created_at: true },
+    })
 
     const revenueData = dateLabels.map((name, index) => {
       const dateStart = new Date(now.getTime() - (days - 1 - index) * 24 * 60 * 60 * 1000)
@@ -280,10 +241,10 @@ export async function GET(request: NextRequest) {
       const dateEnd = new Date(dateStart)
       dateEnd.setHours(23, 59, 59, 999)
 
-      const dayPayments = payments?.filter(p => {
+      const dayPayments = payments.filter(p => {
         const payDate = new Date(p.created_at)
         return payDate >= dateStart && payDate <= dateEnd
-      }) || []
+      })
 
       return {
         name,
@@ -304,8 +265,8 @@ export async function GET(request: NextRequest) {
           totalViews: viewsData.reduce((a, b) => a + b, 0),
           totalLeads: leadsData.reduce((a, b) => a + b, 0),
           totalTokensUsed: tokensData.reduce((a, b) => a + b, 0),
-          totalSales: soldListings?.length || 0,
-          totalRevenue: payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0,
+          totalSales: soldListings.length,
+          totalRevenue: payments.reduce((sum, p) => sum + (p.amount || 0), 0),
         },
       },
     })

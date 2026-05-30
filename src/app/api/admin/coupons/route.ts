@@ -1,112 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
-import { randomUUID } from 'crypto'
-
-// Helper to verify admin access
-async function verifyAdmin(request: NextRequest) {
-  // For now, we'll use a simple check
-  // In production, you'd verify the session/JWT token
-  const authHeader = request.headers.get('authorization')
-  // The actual auth check happens via the AdminLayout component on the frontend
-  // For API routes, we rely on the service role key having proper access
-  return true
-}
+import { db } from '@/lib/db'
 
 // GET - Fetch coupons with pagination and filters
 export async function GET(request: NextRequest) {
   try {
-    await verifyAdmin(request)
-    const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
-    
+
     const limit = parseInt(searchParams.get('limit') || '10')
     const page = parseInt(searchParams.get('page') || '1')
     const search = searchParams.get('search') || ''
     const status = searchParams.get('status') || ''
+    const skip = (page - 1) * limit
 
-    // Try to fetch from coupons table
-    let query = supabase
-      .from('coupons')
-      .select('*', { count: 'exact' })
+    const where: Record<string, unknown> = {}
 
     // Apply search filter
     if (search) {
-      query = query.ilike('code', `%${search}%`)
+      where.code = { contains: search }
     }
 
     // Apply status filter
     if (status === 'active') {
-      const now = new Date().toISOString()
-      query = query.eq('status', 'active').gte('valid_until', now)
+      where.is_active = true
+      where.valid_until = { gte: new Date() }
     } else if (status === 'expired') {
-      const now = new Date().toISOString()
-      query = query.or(`status.eq.expired,valid_until.lt.${now}`)
-    } else if (status === 'disabled') {
-      query = query.eq('status', 'disabled')
+      where.OR = [
+        { is_active: false },
+        { valid_until: { lt: new Date() } },
+      ]
     }
 
-    // Apply pagination
-    const offset = (page - 1) * limit
-    query = query.order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
-
-    const { data: coupons, count, error } = await query
-
-    if (error) {
-      // If table doesn't exist, return empty data with mock stats
-      if (error.code === '42P01') {
-        return NextResponse.json({
-          success: true,
-          data: [],
-          pagination: {
-            total: 0,
-            page,
-            limit,
-            totalPages: 0,
-          },
-          stats: {
-            activeCoupons: 0,
-            totalUsage: 0,
-            expiredCoupons: 0,
-          },
-        })
-      }
-      throw error
-    }
+    const [coupons, total] = await Promise.all([
+      db.coupon.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: limit,
+      }),
+      db.coupon.count({ where }),
+    ])
 
     // Get stats
-    const now = new Date().toISOString()
-    
-    const { count: activeCount } = await supabase
-      .from('coupons')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'active')
-      .gte('valid_until', now)
-
-    const { count: expiredCount } = await supabase
-      .from('coupons')
-      .select('*', { count: 'exact', head: true })
-      .or(`status.eq.expired,valid_until.lt.${now}`)
-
-    const { data: usageData } = await supabase
-      .from('coupons')
-      .select('usage_count')
-
-    const totalUsage = usageData?.reduce((sum, c) => sum + (c.usage_count || 0), 0) || 0
+    const now = new Date()
+    const activeCoupons = await db.coupon.count({
+      where: { is_active: true, valid_until: { gte: now } },
+    })
+    const expiredCoupons = await db.coupon.count({
+      where: { OR: [{ is_active: false }, { valid_until: { lt: now } }] },
+    })
+    const allCoupons = await db.coupon.findMany({ select: { used_count: true } })
+    const totalUsage = allCoupons.reduce((sum, c) => sum + (c.used_count || 0), 0)
 
     return NextResponse.json({
       success: true,
-      data: coupons || [],
+      data: coupons,
       pagination: {
-        total: count || 0,
+        total,
         page,
         limit,
-        totalPages: Math.ceil((count || 0) / limit),
+        totalPages: Math.ceil(total / limit),
       },
       stats: {
-        activeCoupons: activeCount || 0,
+        activeCoupons,
         totalUsage,
-        expiredCoupons: expiredCount || 0,
+        expiredCoupons,
       },
     })
   } catch (error) {
@@ -121,12 +78,12 @@ export async function GET(request: NextRequest) {
 // POST - Create new coupon
 export async function POST(request: NextRequest) {
   try {
-    await verifyAdmin(request)
-    const supabase = getSupabaseAdmin()
     const body = await request.json()
 
     const {
       code,
+      name,
+      description,
       discount_type,
       discount_value,
       max_discount,
@@ -134,8 +91,8 @@ export async function POST(request: NextRequest) {
       valid_from,
       valid_until,
       usage_limit,
-      applicable_to,
-      status,
+      per_user_limit,
+      is_active,
     } = body
 
     // Validate required fields
@@ -147,11 +104,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if code already exists
-    const { data: existing } = await supabase
-      .from('coupons')
-      .select('id')
-      .eq('code', code.toUpperCase())
-      .single()
+    const existing = await db.coupon.findUnique({
+      where: { code: code.toUpperCase() },
+    })
 
     if (existing) {
       return NextResponse.json(
@@ -160,43 +115,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const couponData = {
-      id: randomUUID(),
-      code: code.toUpperCase(),
-      discount_type,
-      discount_value: Number(discount_value),
-      max_discount: max_discount ? Number(max_discount) : null,
-      min_purchase: Number(min_purchase) || 0,
-      valid_from: valid_from || null,
-      valid_until: valid_until || null,
-      usage_limit: usage_limit ? Number(usage_limit) : null,
-      usage_count: 0,
-      applicable_to: applicable_to || 'all',
-      status: status || 'active',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
-
-    const { data, error } = await supabase
-      .from('coupons')
-      .insert(couponData)
-      .select()
-      .single()
-
-    if (error) {
-      // If table doesn't exist
-      if (error.code === '42P01') {
-        return NextResponse.json(
-          { success: false, error: 'Coupons table not found. Please run database migrations.' },
-          { status: 500 }
-        )
-      }
-      throw error
-    }
+    const coupon = await db.coupon.create({
+      data: {
+        code: code.toUpperCase(),
+        name: name || code.toUpperCase(),
+        description: description || null,
+        discount_type: discount_type || 'percentage',
+        discount_value: Number(discount_value),
+        max_discount: max_discount ? Number(max_discount) : null,
+        min_purchase: Number(min_purchase) || 0,
+        valid_from: valid_from ? new Date(valid_from) : null,
+        valid_until: valid_until ? new Date(valid_until) : null,
+        usage_limit: usage_limit ? Number(usage_limit) : null,
+        used_count: 0,
+        per_user_limit: per_user_limit ? Number(per_user_limit) : 1,
+        is_active: is_active !== undefined ? is_active : true,
+      },
+    })
 
     return NextResponse.json({
       success: true,
-      data,
+      data: coupon,
     })
   } catch (error) {
     console.error('Error creating coupon:', error)
@@ -210,10 +149,7 @@ export async function POST(request: NextRequest) {
 // PATCH - Update coupon
 export async function PATCH(request: NextRequest) {
   try {
-    await verifyAdmin(request)
-    const supabase = getSupabaseAdmin()
     const body = await request.json()
-
     const { id, ...updates } = body
 
     if (!id) {
@@ -225,14 +161,10 @@ export async function PATCH(request: NextRequest) {
 
     // Check if code is being updated and already exists
     if (updates.code) {
-      const { data: existing } = await supabase
-        .from('coupons')
-        .select('id')
-        .eq('code', updates.code.toUpperCase())
-        .neq('id', id)
-        .single()
-
-      if (existing) {
+      const existing = await db.coupon.findUnique({
+        where: { code: updates.code.toUpperCase() },
+      })
+      if (existing && existing.id !== id) {
         return NextResponse.json(
           { success: false, error: 'Coupon code already exists' },
           { status: 400 }
@@ -241,53 +173,25 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Prepare update data
-    const updateData: Record<string, unknown> = {
-      ...updates,
-      updated_at: new Date().toISOString(),
-    }
+    const updateData: Record<string, unknown> = {}
 
-    // Ensure code is uppercase
-    if (updateData.code) {
-      updateData.code = (updateData.code as string).toUpperCase()
-    }
+    if (updates.code !== undefined) updateData.code = updates.code.toUpperCase()
+    if (updates.name !== undefined) updateData.name = updates.name
+    if (updates.description !== undefined) updateData.description = updates.description
+    if (updates.discount_type !== undefined) updateData.discount_type = updates.discount_type
+    if (updates.discount_value !== undefined) updateData.discount_value = Number(updates.discount_value)
+    if (updates.max_discount !== undefined) updateData.max_discount = updates.max_discount ? Number(updates.max_discount) : null
+    if (updates.min_purchase !== undefined) updateData.min_purchase = Number(updates.min_purchase)
+    if (updates.usage_limit !== undefined) updateData.usage_limit = updates.usage_limit ? Number(updates.usage_limit) : null
+    if (updates.per_user_limit !== undefined) updateData.per_user_limit = Number(updates.per_user_limit)
+    if (updates.is_active !== undefined) updateData.is_active = updates.is_active
+    if (updates.valid_from !== undefined) updateData.valid_from = updates.valid_from ? new Date(updates.valid_from) : null
+    if (updates.valid_until !== undefined) updateData.valid_until = updates.valid_until ? new Date(updates.valid_until) : null
 
-    // Ensure numeric fields
-    if (updateData.discount_value !== undefined) {
-      updateData.discount_value = Number(updateData.discount_value)
-    }
-    if (updateData.max_discount !== undefined) {
-      updateData.max_discount = updateData.max_discount ? Number(updateData.max_discount) : null
-    }
-    if (updateData.min_purchase !== undefined) {
-      updateData.min_purchase = Number(updateData.min_purchase)
-    }
-    if (updateData.usage_limit !== undefined) {
-      updateData.usage_limit = updateData.usage_limit ? Number(updateData.usage_limit) : null
-    }
-
-    const { data, error } = await supabase
-      .from('coupons')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single()
-
-    if (error) {
-      if (error.code === '42P01') {
-        return NextResponse.json(
-          { success: false, error: 'Coupons table not found' },
-          { status: 500 }
-        )
-      }
-      throw error
-    }
-
-    if (!data) {
-      return NextResponse.json(
-        { success: false, error: 'Coupon not found' },
-        { status: 404 }
-      )
-    }
+    const data = await db.coupon.update({
+      where: { id },
+      data: updateData,
+    })
 
     return NextResponse.json({
       success: true,
@@ -305,8 +209,6 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete coupon
 export async function DELETE(request: NextRequest) {
   try {
-    await verifyAdmin(request)
-    const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -317,20 +219,9 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const { error } = await supabase
-      .from('coupons')
-      .delete()
-      .eq('id', id)
-
-    if (error) {
-      if (error.code === '42P01') {
-        return NextResponse.json(
-          { success: false, error: 'Coupons table not found' },
-          { status: 500 }
-        )
-      }
-      throw error
-    }
+    await db.coupon.delete({
+      where: { id },
+    })
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase, getSupabaseAdmin } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 // GET - Get certificate info
 export async function GET(request: NextRequest) {
@@ -8,30 +8,32 @@ export async function GET(request: NextRequest) {
     const inspectionId = searchParams.get('inspection_id')
     const userId = searchParams.get('user_id')
 
-    let query = supabase
-      .from('certificate_purchases')
-      .select(`
-        *,
-        inspection:car_inspections(
-          id,
-          overall_grade,
-          inspection_score,
-          car_listing_id,
-          car_listings(title, brands(name), car_models(name), year)
-        )
-      `)
-      .order('created_at', { ascending: false })
+    const where: any = {}
+    if (inspectionId) where.inspection_id = inspectionId
+    if (userId) where.user_id = userId
 
-    if (inspectionId) {
-      query = query.eq('inspection_id', inspectionId)
-    }
-    if (userId) {
-      query = query.eq('user_id', userId)
-    }
-
-    const { data, error } = await query
-
-    if (error) throw error
+    const data = await db.certificatePurchase.findMany({
+      where,
+      include: {
+        inspection: {
+          select: {
+            id: true,
+            overall_grade: true,
+            inspection_score: true,
+            car_listing_id: true,
+            listing: {
+              select: {
+                title: true,
+                brand: { select: { name: true } },
+                model: { select: { name: true } },
+                year: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { created_at: 'desc' }
+    })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
@@ -47,18 +49,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const adminClient = getSupabaseAdmin()
-
     const { inspection_id, user_id, car_listing_id } = body
 
     // Get inspection details
-    const { data: inspection, error: inspectionError } = await supabase
-      .from('car_inspections')
-      .select('*')
-      .eq('id', inspection_id)
-      .single()
+    const inspection = await db.carInspection.findUnique({
+      where: { id: inspection_id }
+    })
 
-    if (inspectionError) throw inspectionError
+    if (!inspection) {
+      return NextResponse.json(
+        { success: false, error: 'Inspection not found' },
+        { status: 404 }
+      )
+    }
 
     if (inspection.has_certificate) {
       return NextResponse.json(
@@ -68,14 +71,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Get certificate pricing
-    const { data: pricing, error: pricingError } = await supabase
-      .from('inspection_pricing')
-      .select('*')
-      .eq('type', 'certificate')
-      .eq('is_active', true)
-      .single()
+    const pricing = await db.inspectionPricing.findFirst({
+      where: { type: 'certificate', is_active: true }
+    })
 
-    if (pricingError) throw pricingError
+    if (!pricing) {
+      return NextResponse.json(
+        { success: false, error: 'Certificate pricing not found' },
+        { status: 404 }
+      )
+    }
 
     // Generate purchase and certificate numbers
     const purchaseNumber = `CERT-PURCHASE-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`
@@ -83,38 +88,35 @@ export async function POST(request: NextRequest) {
     const validityDays = pricing.certificate_validity_days || 90
 
     // Create certificate purchase record
-    const { data: purchase, error: purchaseError } = await adminClient
-      .from('certificate_purchases')
-      .insert({
+    const purchase = await db.certificatePurchase.create({
+      data: {
         purchase_number: purchaseNumber,
         inspection_id,
         user_id,
+        price: pricing.price,
         car_listing_id,
         token_cost: pricing.token_cost,
-        payment_status: pricing.token_cost === 0 ? 'paid' : 'pending',
-        paid_at: pricing.token_cost === 0 ? new Date().toISOString() : null,
+        payment_status: (!pricing.token_cost || pricing.token_cost === 0) ? 'paid' : 'pending',
+        paid_at: (!pricing.token_cost || pricing.token_cost === 0) ? new Date() : null,
         certificate_number,
-        issued_at: pricing.token_cost === 0 ? new Date().toISOString() : null,
-        expires_at: pricing.token_cost === 0 
-          ? new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000).toISOString() 
+        issued_at: (!pricing.token_cost || pricing.token_cost === 0) ? new Date() : null,
+        expires_at: (!pricing.token_cost || pricing.token_cost === 0) 
+          ? new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000) 
           : null
-      })
-      .select()
-      .single()
-
-    if (purchaseError) throw purchaseError
+      }
+    })
 
     // If free, update inspection immediately
-    if (pricing.token_cost === 0) {
-      await adminClient
-        .from('car_inspections')
-        .update({
+    if (!pricing.token_cost || pricing.token_cost === 0) {
+      await db.carInspection.update({
+        where: { id: inspection_id },
+        data: {
           has_certificate: true,
-          certificate_purchased_at: new Date().toISOString(),
+          certificate_issued_at: new Date(),
           certificate_number,
           certificate_url: `/certificates/${certificateNumber}`
-        })
-        .eq('id', inspection_id)
+        }
+      })
     }
 
     return NextResponse.json({ 
@@ -139,42 +141,29 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const adminClient = getSupabaseAdmin()
-
     const { purchase_id, inspection_id } = body
 
-    // Get validity days from pricing
-    const { data: purchase } = await supabase
-      .from('certificate_purchases')
-      .select('token_cost')
-      .eq('id', purchase_id)
-      .single()
-
     // Update purchase status
-    const { data, error } = await adminClient
-      .from('certificate_purchases')
-      .update({
+    const data = await db.certificatePurchase.update({
+      where: { id: purchase_id },
+      data: {
         payment_status: 'paid',
-        paid_at: new Date().toISOString(),
-        issued_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
-      })
-      .eq('id', purchase_id)
-      .select()
-      .single()
-
-    if (error) throw error
+        paid_at: new Date(),
+        issued_at: new Date(),
+        expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+      }
+    })
 
     // Update inspection
-    await adminClient
-      .from('car_inspections')
-      .update({
+    await db.carInspection.update({
+      where: { id: inspection_id },
+      data: {
         has_certificate: true,
-        certificate_purchased_at: new Date().toISOString(),
+        certificate_issued_at: new Date(),
         certificate_number: data.certificate_number,
         certificate_url: `/certificates/${data.certificate_number}`
-      })
-      .eq('id', inspection_id)
+      }
+    })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {

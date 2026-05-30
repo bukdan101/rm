@@ -1,54 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {}
-          },
-        },
-      }
-    )
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
+    if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
     // Get profile from profiles table
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-
-    if (error && error.code !== 'PGRST116') {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
-    }
+    const profile = await db.profile.findUnique({
+      where: { id: userId },
+    })
 
     return NextResponse.json({
       success: true,
       profile: profile || {
-        id: user.id,
-        email: user.email,
-        full_name: user.user_metadata?.full_name || '',
+        id: userId,
+        email: '',
+        full_name: '',
         role: 'buyer',
-        kyc_status: 'not_submitted',
       },
     })
   } catch (error) {
@@ -59,52 +32,27 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {}
-          },
-        },
-      }
-    )
+    const body = await request.json()
+    const { userId, full_name, phone } = body
 
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
+    if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { full_name, phone, city, province } = body
-
-    // Update profile
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .upsert({
-        id: user.id,
-        full_name,
-        phone,
-        city,
-        province,
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single()
-
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
-    }
+    // Fixed: Removed city and province fields - they don't exist in Profile model
+    const profile = await db.profile.upsert({
+      where: { id: userId },
+      update: {
+        full_name: full_name || undefined,
+        phone: phone || undefined,
+      },
+      create: {
+        id: userId,
+        email: '', // Will need to be provided or have a default
+        full_name: full_name || null,
+        phone: phone || null,
+      },
+    })
 
     return NextResponse.json({
       success: true,

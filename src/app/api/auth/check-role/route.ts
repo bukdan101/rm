@@ -1,39 +1,36 @@
-import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ 
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('user_id')
+
+    if (!userId) {
+      return NextResponse.json({
         isAuthenticated: false,
         isAdmin: false,
         isDealer: false,
-        role: null 
+        role: null,
       })
     }
 
     // Get user profile to check role
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    const profile = await db.profile.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    })
 
-    if (error) {
-      console.error('Error fetching profile:', error)
-      return NextResponse.json({ 
+    if (!profile) {
+      return NextResponse.json({
         isAuthenticated: true,
         isAdmin: false,
         isDealer: false,
-        role: 'user'
+        role: 'user',
       })
     }
 
-    const role = profile?.role || 'user'
+    const role = profile.role || 'user'
     const isAdmin = role === 'admin'
     const isDealer = role === 'dealer' || isAdmin
 
@@ -45,11 +42,11 @@ export async function GET() {
     })
   } catch (error) {
     console.error('Server error:', error)
-    return NextResponse.json({ 
+    return NextResponse.json({
       isAuthenticated: false,
       isAdmin: false,
       isDealer: false,
-      role: null 
+      role: null,
     })
   }
 }

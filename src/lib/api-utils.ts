@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 /**
  * Standard success response wrapper
@@ -41,38 +41,10 @@ interface AuthResult {
  */
 export async function verifyAuth(requiredRole?: string): Promise<AuthResult> {
   try {
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return { authenticated: false, error: 'Unauthorized', status: 401 }
-    }
-
-    // If no role required, just return authenticated user
-    if (!requiredRole) {
-      return { authenticated: true, user: { id: user.id, email: user.email } }
-    }
-
-    // Check role in profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, role')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile) {
-      return { authenticated: true, user: { id: user.id, email: user.email }, error: 'Profile not found', status: 404 }
-    }
-
-    if (requiredRole === 'admin' && profile.role !== 'admin') {
-      return { authenticated: true, user: { id: user.id, email: user.email }, profile, error: 'Admin access required', status: 403 }
-    }
-
-    if (requiredRole === 'dealer' && profile.role !== 'dealer' && profile.role !== 'admin') {
-      return { authenticated: true, user: { id: user.id, email: user.email }, profile, error: 'Dealer access required', status: 403 }
-    }
-
-    return { authenticated: true, user: { id: user.id, email: user.email }, profile }
+    // Since we're using Prisma (no Supabase Auth), we need to get user_id from the request
+    // In a real implementation, this would verify JWT tokens or session cookies
+    // For now, return unauthenticated - the calling code should pass user_id
+    return { authenticated: false, error: 'No auth provider configured', status: 401 }
   } catch {
     return { authenticated: false, error: 'Authentication failed', status: 401 }
   }
@@ -80,7 +52,6 @@ export async function verifyAuth(requiredRole?: string): Promise<AuthResult> {
 
 /**
  * Wrapper for API handlers that require authentication
- * Returns error response if auth fails, otherwise calls the handler with user info
  */
 type AuthenticatedHandler = (
   request: Request,

@@ -1,53 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { db } from '@/lib/db'
+
+// Helper to verify admin access
+async function verifyAdmin(request: NextRequest) {
+  const userId = request.headers.get('x-user-id')
+  if (!userId) {
+    return { authorized: false, error: NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }) }
+  }
+  const profile = await db.profile.findUnique({ where: { id: userId }, select: { role: true } })
+  if (!profile || profile.role !== 'admin') {
+    return { authorized: false, error: NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 }) }
+  }
+  return { authorized: true, userId }
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    // Check authentication
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.authorized) return authResult.error!
 
-    // Check admin role
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
+    // Fetch token settings (single-row wide table)
+    const tokenSettings = await db.tokenSetting.findFirst()
 
-    if (!profile || profile.role !== 'admin') {
-      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
-    }
+    // Fetch fee settings
+    const feeSettings = await db.feeSetting.findFirst()
 
-    // Fetch all settings from different tables
-    const [tokenSettings, feeSettings, systemSettings] = await Promise.all([
-      supabase.from('token_settings').select('*').single(),
-      supabase.from('fee_settings').select('*').single(),
-      supabase.from('system_settings').select('*').single(),
-    ])
+    // No system_settings table - use defaults
+    const systemSettings = null
 
     return NextResponse.json({
       success: true,
       data: {
-        tokenSettings: tokenSettings.data || {
-          token_per_listing: 5,
-          token_per_feature: 10,
-          token_per_bump: 15,
-          free_tokens_on_signup: 10,
-          referral_bonus: 5,
+        tokenSettings: tokenSettings || {
+          token_price_base: 10000,
+          token_price_currency: 'IDR',
+          listing_normal_tokens: 3,
+          listing_dealer_tokens: 5,
+          boost_tokens: 5,
+          highlight_tokens: 3,
+          featured_tokens: 10,
+          ai_prediction_tokens: 5,
+          dealer_contact_tokens: 2,
         },
-        feeSettings: feeSettings.data || {
-          platform_fee_percent: 2.5,
-          transaction_fee: 5000,
-          withdrawal_fee: 10000,
-          min_withdrawal: 50000,
-          dealer_subscription_monthly: 100000,
+        feeSettings: feeSettings || {
+          fee_type: 'platform',
+          fee_percentage: 2.5,
+          fee_fixed_amount: 5000,
+          min_fee_amount: 0,
+          applies_to: 'all',
         },
-        systemSettings: systemSettings.data || {
+        systemSettings: systemSettings || {
           site_name: 'AutoMarket',
           contact_email: 'support@automarket.id',
           maintenance_mode: false,
@@ -68,24 +70,8 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    // Check authentication
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Check admin role
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
-
-    if (!profile || profile.role !== 'admin') {
-      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.authorized) return authResult.error!
 
     const body = await request.json()
     const { type, settings } = body
@@ -94,49 +80,49 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Type and settings required' }, { status: 400 })
     }
 
-    let tableName = ''
+    let result
+
     switch (type) {
-      case 'token':
-        tableName = 'token_settings'
+      case 'token': {
+        // TokenSetting is a single-row wide table
+        const existing = await db.tokenSetting.findFirst()
+        if (existing) {
+          result = await db.tokenSetting.update({
+            where: { id: existing.id },
+            data: settings,
+          })
+        } else {
+          result = await db.tokenSetting.create({
+            data: settings,
+          })
+        }
         break
-      case 'fee':
-        tableName = 'fee_settings'
+      }
+      case 'fee': {
+        // FeeSetting is a single-row table
+        const existing = await db.feeSetting.findFirst()
+        if (existing) {
+          result = await db.feeSetting.update({
+            where: { id: existing.id },
+            data: settings,
+          })
+        } else {
+          result = await db.feeSetting.create({
+            data: settings,
+          })
+        }
         break
-      case 'system':
-        tableName = 'system_settings'
+      }
+      case 'system': {
+        // No system_settings table - return the settings as-is
+        result = settings
         break
+      }
       default:
         return NextResponse.json({ success: false, error: 'Invalid settings type' }, { status: 400 })
     }
 
-    // Try to update, if no row exists, insert
-    const { data: existing } = await supabase
-      .from(tableName)
-      .select('id')
-      .single()
-
-    let result
-    if (existing) {
-      result = await supabase
-        .from(tableName)
-        .update({ ...settings, updated_at: new Date().toISOString() })
-        .eq('id', existing.id)
-        .select()
-        .single()
-    } else {
-      result = await supabase
-        .from(tableName)
-        .insert({ ...settings, created_at: new Date().toISOString() })
-        .select()
-        .single()
-    }
-
-    if (result.error) {
-      console.error('Error saving settings:', result.error)
-      return NextResponse.json({ success: false, error: result.error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, data: result.data })
+    return NextResponse.json({ success: true, data: result })
   } catch (error) {
     console.error('Error in admin settings PATCH:', error)
     return NextResponse.json(

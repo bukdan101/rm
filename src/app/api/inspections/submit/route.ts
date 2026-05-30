@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase, getSupabaseAdmin } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 // POST - Submit self inspection with AI analysis
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const adminClient = getSupabaseAdmin()
-
     const { 
       car_listing_id, 
       user_id, 
@@ -55,24 +53,18 @@ export async function POST(request: NextRequest) {
     else if (criticalFailures >= 2) riskLevel = 'high'
     else if (criticalFailures >= 1 || inspectionScore < 70) riskLevel = 'medium'
 
-    // Generate inspection number
-    const inspectionNumber = `INSP-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`
-
     // Get car listing details for AI price estimation
-    const { data: listing } = await supabase
-      .from('car_listings')
-      .select(`
-        *,
-        brands(name),
-        car_models(name),
-        car_variants(name, year_start)
-      `)
-      .eq('id', car_listing_id)
-      .single()
+    const listing = await db.carListing.findUnique({
+      where: { id: car_listing_id },
+      include: {
+        brand: { select: { name: true } },
+        model: { select: { name: true } },
+        variant: { select: { name: true, year_start: true } }
+      }
+    })
 
     // AI Price Estimation (simplified algorithm)
-    // In production, this would call an ML model or external API
-    const basePrice = purchase_price || listing?.price || 0
+    const basePrice = purchase_price || listing?.price_cash || 0
     const conditionMultiplier = inspectionScore / 100
     
     // Market factors
@@ -95,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     // Determine demand level
     let demandLevel = 'medium'
-    if (inspectionScore >= 85 && listing?.vehicle_condition === 'baru') {
+    if (inspectionScore >= 85 && listing?.condition === 'baru') {
       demandLevel = 'high'
     } else if (inspectionScore < 65 || age > 10) {
       demandLevel = 'low'
@@ -109,14 +101,13 @@ export async function POST(request: NextRequest) {
     else if (inspectionScore >= 70) daysToSell = 21
 
     // Create inspection record
-    const { data: inspection, error: inspectionError } = await adminClient
-      .from('car_inspections')
-      .insert({
+    const inspection = await db.carInspection.create({
+      data: {
         car_listing_id,
         inspector_id: user_id,
         inspector_name: 'Self Inspection',
         inspection_place: 'Self Assessment',
-        inspection_date: new Date().toISOString(),
+        inspection_date: new Date(),
         total_points: totalItems,
         passed_points: results.filter((r: { status: string }) => r.status === 'baik' || r.status === 'istimewa').length,
         failed_points: results.filter((r: { status: string }) => r.status === 'perlu_perbaikan').length,
@@ -139,11 +130,8 @@ export async function POST(request: NextRequest) {
         ai_demand_level: demandLevel,
         days_to_sell_estimate: daysToSell,
         has_certificate: false
-      })
-      .select()
-      .single()
-
-    if (inspectionError) throw inspectionError
+      }
+    })
 
     // Insert inspection results
     if (results && results.length > 0) {
@@ -154,28 +142,20 @@ export async function POST(request: NextRequest) {
         notes: r.notes || null
       }))
 
-      const { error: resultsError } = await adminClient
-        .from('inspection_results')
-        .insert(resultsToInsert)
-
-      if (resultsError) throw resultsError
+      await db.inspectionResult.createMany({ data: resultsToInsert })
     }
 
     // Update booking status if exists
     if (booking_id) {
-      await adminClient
-        .from('inspection_bookings')
-        .update({ 
-          status: 'completed',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', booking_id)
+      await db.inspectionBooking.update({
+        where: { id: booking_id },
+        data: { status: 'completed' }
+      })
     }
 
     // Create AI analysis log
-    await adminClient
-      .from('ai_price_analysis')
-      .insert({
+    await db.aiPriceAnalysis.create({
+      data: {
         inspection_id: inspection.id,
         car_listing_id,
         purchase_price,
@@ -188,7 +168,8 @@ export async function POST(request: NextRequest) {
         days_to_sell_estimate: daysToSell,
         profit_margin_percent: profitMargin,
         recommendation: generateRecommendation(inspectionScore, riskLevel, demandLevel)
-      })
+      }
+    })
 
     return NextResponse.json({ 
       success: true, 

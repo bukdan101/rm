@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { db } from './db'
 import { CarListing } from '@/types/marketplace'
 
 export interface LandingData {
@@ -45,15 +45,10 @@ const fallbackCategories = [
 async function getCategoriesFromDB() {
   try {
     // Get count of listings by body_type
-    const { data: listingsData, error } = await supabase
-      .from('car_listings')
-      .select('body_type')
-      .eq('status', 'active')
-
-    if (error) {
-      console.error('Error fetching categories:', error)
-      return null
-    }
+    const listingsData = await db.carListing.findMany({
+      where: { status: 'active' },
+      select: { body_type: true },
+    })
 
     if (!listingsData || listingsData.length === 0) {
       return fallbackCategories
@@ -61,7 +56,7 @@ async function getCategoriesFromDB() {
 
     // Count by body_type
     const bodyTypeCounts: Record<string, number> = {}
-    listingsData.forEach((listing: { body_type: string }) => {
+    listingsData.forEach((listing) => {
       const bodyType = listing.body_type || 'sedan'
       bodyTypeCounts[bodyType] = (bodyTypeCounts[bodyType] || 0) + 1
     })
@@ -87,24 +82,20 @@ async function getCategoriesFromDB() {
 
 export async function getLandingData(): Promise<LandingData> {
   try {
-    // Fetch listings with relations from database using correct foreign key syntax
-    const { data: listingsData, error: listingsError } = await supabase
-      .from('car_listings')
-      .select(`
-        *,
-        brand:brands!car_listings_brand_id_fkey(id, name, slug, logo_url, country, is_popular, display_order, created_at),
-        model:car_models!car_listings_model_id_fkey(id, brand_id, name, slug, body_type, is_popular, display_order, created_at),
-        images:car_images(id, car_listing_id, image_url, thumbnail_url, caption, is_primary, display_order, created_at)
-      `)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(50)
-
-    // If database error, throw to trigger fallback
-    if (listingsError) {
-      console.error('Database error:', listingsError)
-      throw listingsError
-    }
+    // Fetch listings with relations from database
+    const listingsData = await db.carListing.findMany({
+      where: { status: 'active' },
+      include: {
+        brand: { select: { id: true, name: true, slug: true, logo_url: true, country: true, is_popular: true, display_order: true, created_at: true } },
+        model: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
+        images: {
+          select: { id: true, car_listing_id: true, image_url: true, thumbnail_url: true, caption: true, is_primary: true, display_order: true, created_at: true },
+          orderBy: { display_order: 'asc' },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+      take: 50,
+    })
 
     // If no data, return empty state with categories
     if (!listingsData || listingsData.length === 0) {
@@ -117,11 +108,11 @@ export async function getLandingData(): Promise<LandingData> {
         highlightedListingIds: [],
         latestListings: [],
         popularListings: [],
-        activeAuctions: []
+        activeAuctions: [],
       }
     }
 
-    const listings = listingsData as CarListing[]
+    const listings = listingsData as unknown as CarListing[]
     console.log(`Loaded ${listings.length} listings from database`)
 
     // Get categories from database
@@ -156,7 +147,7 @@ export async function getLandingData(): Promise<LandingData> {
       highlightedListingIds,
       latestListings,
       popularListings,
-      activeAuctions
+      activeAuctions,
     }
   } catch (error) {
     console.error('Error in getLandingData:', error)
@@ -173,27 +164,30 @@ function getEmptyState(): LandingData {
     highlightedListingIds: [],
     latestListings: [],
     popularListings: [],
-    activeAuctions: []
+    activeAuctions: [],
   }
 }
 
 // Get featured listings only
 export async function getFeaturedaListings(): Promise<CarListing[]> {
   try {
-    const { data, error } = await supabase
-      .from('car_listings')
-      .select(`
-        *,
-        brand:brands!car_listings_brand_id_fkey(id, name, slug, logo_url, country, is_popular, display_order, created_at),
-        model:car_models!car_listings_model_id_fkey(id, brand_id, name, slug, body_type, is_popular, display_order, created_at),
-        images:car_images(id, car_listing_id, image_url, thumbnail_url, caption, is_primary, display_order, created_at)
-      `)
-      .eq('status', 'active')
-      .eq('is_featured', true)
-      .limit(10)
+    const data = await db.carListing.findMany({
+      where: {
+        status: 'active',
+        featured_until: { gte: new Date() },
+      },
+      include: {
+        brand: { select: { id: true, name: true, slug: true, logo_url: true, country: true, is_popular: true, display_order: true, created_at: true } },
+        model: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
+        images: {
+          select: { id: true, car_listing_id: true, image_url: true, thumbnail_url: true, caption: true, is_primary: true, display_order: true, created_at: true },
+          orderBy: { display_order: 'asc' },
+        },
+      },
+      take: 10,
+    })
 
-    if (error) throw error
-    return (data as CarListing[]) || []
+    return (data as unknown as CarListing[]) || []
   } catch (error) {
     console.error('Error fetching featured listings:', error)
     return []
@@ -203,20 +197,21 @@ export async function getFeaturedaListings(): Promise<CarListing[]> {
 // Get popular listings only
 export async function getPopularListings(): Promise<CarListing[]> {
   try {
-    const { data, error } = await supabase
-      .from('car_listings')
-      .select(`
-        *,
-        brand:brands!car_listings_brand_id_fkey(id, name, slug, logo_url, country, is_popular, display_order, created_at),
-        model:car_models!car_listings_model_id_fkey(id, brand_id, name, slug, body_type, is_popular, display_order, created_at),
-        images:car_images(id, car_listing_id, image_url, thumbnail_url, caption, is_primary, display_order, created_at)
-      `)
-      .eq('status', 'active')
-      .order('view_count', { ascending: false })
-      .limit(10)
+    const data = await db.carListing.findMany({
+      where: { status: 'active' },
+      include: {
+        brand: { select: { id: true, name: true, slug: true, logo_url: true, country: true, is_popular: true, display_order: true, created_at: true } },
+        model: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
+        images: {
+          select: { id: true, car_listing_id: true, image_url: true, thumbnail_url: true, caption: true, is_primary: true, display_order: true, created_at: true },
+          orderBy: { display_order: 'asc' },
+        },
+      },
+      orderBy: { view_count: 'desc' },
+      take: 10,
+    })
 
-    if (error) throw error
-    return (data as CarListing[]) || []
+    return (data as unknown as CarListing[]) || []
   } catch (error) {
     console.error('Error fetching popular listings:', error)
     return []
@@ -226,20 +221,20 @@ export async function getPopularListings(): Promise<CarListing[]> {
 // Get listings by body type
 export async function getListingsByBodyType(bodyType: string): Promise<CarListing[]> {
   try {
-    const { data, error } = await supabase
-      .from('car_listings')
-      .select(`
-        *,
-        brand:brands!car_listings_brand_id_fkey(id, name, slug, logo_url, country, is_popular, display_order, created_at),
-        model:car_models!car_listings_model_id_fkey(id, brand_id, name, slug, body_type, is_popular, display_order, created_at),
-        images:car_images(id, car_listing_id, image_url, thumbnail_url, caption, is_primary, display_order, created_at)
-      `)
-      .eq('status', 'active')
-      .eq('body_type', bodyType)
-      .limit(20)
+    const data = await db.carListing.findMany({
+      where: { status: 'active', body_type: bodyType },
+      include: {
+        brand: { select: { id: true, name: true, slug: true, logo_url: true, country: true, is_popular: true, display_order: true, created_at: true } },
+        model: { select: { id: true, brand_id: true, name: true, slug: true, body_type: true, is_popular: true, display_order: true, created_at: true } },
+        images: {
+          select: { id: true, car_listing_id: true, image_url: true, thumbnail_url: true, caption: true, is_primary: true, display_order: true, created_at: true },
+          orderBy: { display_order: 'asc' },
+        },
+      },
+      take: 20,
+    })
 
-    if (error) throw error
-    return (data as CarListing[]) || []
+    return (data as unknown as CarListing[]) || []
   } catch (error) {
     console.error('Error fetching listings by body type:', error)
     return []

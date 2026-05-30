@@ -1,36 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 // Helper to check if user is dealer admin/owner
-async function isDealerAdmin(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, dealerId: string): Promise<boolean> {
+async function isDealerAdmin(userId: string, dealerId: string): Promise<boolean> {
   // Check if user is the owner
-  const { data: dealer } = await supabase
-    .from('dealers')
-    .select('owner_id')
-    .eq('id', dealerId)
-    .single()
+  const dealer = await db.dealer.findUnique({
+    where: { id: dealerId },
+    select: { owner_id: true },
+  })
 
   if (dealer?.owner_id === userId) {
     return true
   }
 
   // Check if user is a manager in dealer_staff
-  const { data: staff } = await supabase
-    .from('dealer_staff')
-    .select('role')
-    .eq('dealer_id', dealerId)
-    .eq('user_id', userId)
-    .single()
+  const staff = await db.dealerStaff.findFirst({
+    where: {
+      dealer_id: dealerId,
+      user_id: userId,
+      role: { in: ['manager', 'owner'] },
+    },
+  })
 
-  return staff?.role === 'manager' || staff?.role === 'owner'
+  return !!staff
 }
 
 // GET: Fetch team members for a dealer
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
-    
     const dealerId = searchParams.get('dealer_id')
 
     if (!dealerId) {
@@ -41,90 +39,84 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch team members with user profile data
-    const { data: teamMembers, error } = await supabase
-      .from('dealer_staff')
-      .select(`
-        id,
-        dealer_id,
-        user_id,
-        role,
-        can_edit,
-        can_delete,
-        created_at,
-        user:profiles!dealer_staff_user_id_fkey (
-          id,
-          name,
-          email,
-          phone,
-          avatar_url
-        )
-      `)
-      .eq('dealer_id', dealerId)
-      .order('created_at', { ascending: true })
-
-    if (error) {
-      console.error('Error fetching team members:', error)
-      return NextResponse.json(
-        { success: false, error: 'Failed to fetch team members' },
-        { status: 500 }
-      )
-    }
+    const teamMembers = await db.dealerStaff.findMany({
+      where: { dealer_id: dealerId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            full_name: true,
+            email: true,
+            phone: true,
+            avatar_url: true,
+          },
+        },
+      },
+      orderBy: { created_at: 'asc' },
+    })
 
     // Also get the dealer owner
-    const { data: dealer, error: dealerError } = await supabase
-      .from('dealers')
-      .select(`
-        id,
-        owner_id,
-        owner:profiles!dealers_owner_id_fkey (
-          id,
-          name,
-          email,
-          phone,
-          avatar_url
-        )
-      `)
-      .eq('id', dealerId)
-      .single()
-
-    if (dealerError) {
-      console.error('Error fetching dealer:', dealerError)
-    }
+    const dealer = await db.dealer.findUnique({
+      where: { id: dealerId },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            full_name: true,
+            email: true,
+            phone: true,
+            avatar_url: true,
+          },
+        },
+      },
+    })
 
     // Transform the data to include permissions object
-    const transformedMembers = teamMembers?.map(member => ({
+    const transformedMembers = teamMembers.map(member => ({
       id: member.id,
       dealer_id: member.dealer_id,
       user_id: member.user_id,
       role: member.role,
       permissions: {
         can_edit: member.can_edit ?? false,
-        can_delete: member.can_delete ?? false
+        can_delete: member.can_delete ?? false,
       },
       joined_at: member.created_at,
       user: member.user
-    })) || []
+        ? {
+            ...member.user,
+            name: member.user.full_name || 'Unknown',
+          }
+        : null,
+    }))
 
     // Add owner as first member if not already in the list
-    const ownerInTeam = teamMembers?.some(m => m.user_id === dealer?.owner_id)
-    const ownerMember = dealer?.owner_id && !ownerInTeam ? {
-      id: 'owner-' + dealer.owner_id,
-      dealer_id: dealer.id,
-      user_id: dealer.owner_id,
-      role: 'owner' as const,
-      permissions: {
-        can_edit: true,
-        can_delete: true
-      },
-      joined_at: null,
-      user: dealer.owner
-    } : null
+    const ownerInTeam = teamMembers.some(m => m.user_id === dealer?.owner_id)
+    const ownerMember = dealer?.owner_id && !ownerInTeam
+      ? {
+          id: 'owner-' + dealer.owner_id,
+          dealer_id: dealer.id,
+          user_id: dealer.owner_id,
+          role: 'owner' as const,
+          permissions: {
+            can_edit: true,
+            can_delete: true,
+          },
+          joined_at: null,
+          user: dealer.owner
+            ? {
+                ...dealer.owner,
+                name: dealer.owner.full_name || 'Unknown',
+              }
+            : null,
+        }
+      : null
 
     const allMembers = ownerMember ? [ownerMember, ...transformedMembers] : transformedMembers
 
     return NextResponse.json({
       success: true,
-      data: allMembers
+      data: allMembers,
     })
   } catch (error) {
     console.error('Error in team GET:', error)
@@ -138,20 +130,8 @@ export async function GET(request: NextRequest) {
 // POST: Add team member
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
     const body = await request.json()
-    const { dealer_id, user_id, role, permissions } = body
+    const { dealer_id, user_id, role, permissions, auth_user_id } = body
 
     // Validate required fields
     if (!dealer_id || !user_id || !role) {
@@ -170,23 +150,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user is dealer admin/owner
-    const isAdmin = await isDealerAdmin(supabase, user.id, dealer_id)
-    if (!isAdmin) {
-      return NextResponse.json(
-        { success: false, error: 'Only dealer admin/owner can add team members' },
-        { status: 403 }
-      )
+    // Check if auth_user is dealer admin/owner
+    if (auth_user_id) {
+      const isAdmin = await isDealerAdmin(auth_user_id, dealer_id)
+      if (!isAdmin) {
+        return NextResponse.json(
+          { success: false, error: 'Only dealer admin/owner can add team members' },
+          { status: 403 }
+        )
+      }
     }
 
     // Check if user exists
-    const { data: targetUser, error: userError } = await supabase
-      .from('profiles')
-      .select('id, name, email, avatar_url')
-      .eq('id', user_id)
-      .single()
+    const targetUser = await db.profile.findUnique({
+      where: { id: user_id },
+      select: { id: true, full_name: true, email: true, avatar_url: true },
+    })
 
-    if (userError || !targetUser) {
+    if (!targetUser) {
       return NextResponse.json(
         { success: false, error: 'User not found' },
         { status: 404 }
@@ -194,12 +175,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user is already a team member
-    const { data: existingMember } = await supabase
-      .from('dealer_staff')
-      .select('id')
-      .eq('dealer_id', dealer_id)
-      .eq('user_id', user_id)
-      .single()
+    const existingMember = await db.dealerStaff.findFirst({
+      where: { dealer_id, user_id },
+    })
 
     if (existingMember) {
       return NextResponse.json(
@@ -209,40 +187,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Create team member
-    const { data: teamMember, error: createError } = await supabase
-      .from('dealer_staff')
-      .insert({
+    const teamMember = await db.dealerStaff.create({
+      data: {
         dealer_id,
         user_id,
         role,
         can_edit: permissions?.can_edit ?? false,
-        can_delete: permissions?.can_delete ?? false
-      })
-      .select(`
-        id,
-        dealer_id,
-        user_id,
-        role,
-        can_edit,
-        can_delete,
-        created_at,
-        user:profiles!dealer_staff_user_id_fkey (
-          id,
-          name,
-          email,
-          phone,
-          avatar_url
-        )
-      `)
-      .single()
-
-    if (createError) {
-      console.error('Error creating team member:', createError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to add team member' },
-        { status: 500 }
-      )
-    }
+        can_delete: permissions?.can_delete ?? false,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            full_name: true,
+            email: true,
+            phone: true,
+            avatar_url: true,
+          },
+        },
+      },
+    })
 
     // Transform response
     const response = {
@@ -252,16 +216,21 @@ export async function POST(request: NextRequest) {
       role: teamMember.role,
       permissions: {
         can_edit: teamMember.can_edit ?? false,
-        can_delete: teamMember.can_delete ?? false
+        can_delete: teamMember.can_delete ?? false,
       },
       joined_at: teamMember.created_at,
       user: teamMember.user
+        ? {
+            ...teamMember.user,
+            name: teamMember.user.full_name || 'Unknown',
+          }
+        : null,
     }
 
     return NextResponse.json({
       success: true,
       data: response,
-      message: 'Team member added successfully'
+      message: 'Team member added successfully',
     })
   } catch (error) {
     console.error('Error in team POST:', error)
@@ -275,20 +244,8 @@ export async function POST(request: NextRequest) {
 // PUT: Update team member role/permissions
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
     const body = await request.json()
-    const { id, dealer_id, role, permissions } = body
+    const { id, dealer_id, role, permissions, auth_user_id } = body
 
     // Validate required fields
     if (!id || !dealer_id) {
@@ -298,24 +255,23 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Check if user is dealer admin/owner
-    const isAdmin = await isDealerAdmin(supabase, user.id, dealer_id)
-    if (!isAdmin) {
-      return NextResponse.json(
-        { success: false, error: 'Only dealer admin/owner can update team members' },
-        { status: 403 }
-      )
+    // Check if auth_user is dealer admin/owner
+    if (auth_user_id) {
+      const isAdmin = await isDealerAdmin(auth_user_id, dealer_id)
+      if (!isAdmin) {
+        return NextResponse.json(
+          { success: false, error: 'Only dealer admin/owner can update team members' },
+          { status: 403 }
+        )
+      }
     }
 
     // Get existing team member
-    const { data: existingMember, error: fetchError } = await supabase
-      .from('dealer_staff')
-      .select('*')
-      .eq('id', id)
-      .eq('dealer_id', dealer_id)
-      .single()
+    const existingMember = await db.dealerStaff.findFirst({
+      where: { id, dealer_id },
+    })
 
-    if (fetchError || !existingMember) {
+    if (!existingMember) {
       return NextResponse.json(
         { success: false, error: 'Team member not found' },
         { status: 404 }
@@ -340,35 +296,21 @@ export async function PUT(request: NextRequest) {
     if (permissions?.can_delete !== undefined) updateData.can_delete = permissions.can_delete
 
     // Update team member
-    const { data: teamMember, error: updateError } = await supabase
-      .from('dealer_staff')
-      .update(updateData)
-      .eq('id', id)
-      .select(`
-        id,
-        dealer_id,
-        user_id,
-        role,
-        can_edit,
-        can_delete,
-        created_at,
-        user:profiles!dealer_staff_user_id_fkey (
-          id,
-          name,
-          email,
-          phone,
-          avatar_url
-        )
-      `)
-      .single()
-
-    if (updateError) {
-      console.error('Error updating team member:', updateError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to update team member' },
-        { status: 500 }
-      )
-    }
+    const teamMember = await db.dealerStaff.update({
+      where: { id },
+      data: updateData,
+      include: {
+        user: {
+          select: {
+            id: true,
+            full_name: true,
+            email: true,
+            phone: true,
+            avatar_url: true,
+          },
+        },
+      },
+    })
 
     // Transform response
     const response = {
@@ -378,16 +320,21 @@ export async function PUT(request: NextRequest) {
       role: teamMember.role,
       permissions: {
         can_edit: teamMember.can_edit ?? false,
-        can_delete: teamMember.can_delete ?? false
+        can_delete: teamMember.can_delete ?? false,
       },
       joined_at: teamMember.created_at,
       user: teamMember.user
+        ? {
+            ...teamMember.user,
+            name: teamMember.user.full_name || 'Unknown',
+          }
+        : null,
     }
 
     return NextResponse.json({
       success: true,
       data: response,
-      message: 'Team member updated successfully'
+      message: 'Team member updated successfully',
     })
   } catch (error) {
     console.error('Error in team PUT:', error)
@@ -401,21 +348,10 @@ export async function PUT(request: NextRequest) {
 // DELETE: Remove team member
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     const dealerId = searchParams.get('dealer_id')
+    const authUserId = searchParams.get('auth_user_id')
 
     // Validate required fields
     if (!id || !dealerId) {
@@ -426,23 +362,22 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Check if user is dealer admin/owner
-    const isAdmin = await isDealerAdmin(supabase, user.id, dealerId)
-    if (!isAdmin) {
-      return NextResponse.json(
-        { success: false, error: 'Only dealer admin/owner can remove team members' },
-        { status: 403 }
-      )
+    if (authUserId) {
+      const isAdmin = await isDealerAdmin(authUserId, dealerId)
+      if (!isAdmin) {
+        return NextResponse.json(
+          { success: false, error: 'Only dealer admin/owner can remove team members' },
+          { status: 403 }
+        )
+      }
     }
 
     // Get existing team member to verify it exists and is not the owner
-    const { data: existingMember, error: fetchError } = await supabase
-      .from('dealer_staff')
-      .select('role, user_id')
-      .eq('id', id)
-      .eq('dealer_id', dealerId)
-      .single()
+    const existingMember = await db.dealerStaff.findFirst({
+      where: { id, dealer_id: dealerId },
+    })
 
-    if (fetchError || !existingMember) {
+    if (!existingMember) {
       return NextResponse.json(
         { success: false, error: 'Team member not found' },
         { status: 404 }
@@ -458,23 +393,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete team member
-    const { error: deleteError } = await supabase
-      .from('dealer_staff')
-      .delete()
-      .eq('id', id)
-      .eq('dealer_id', dealerId)
-
-    if (deleteError) {
-      console.error('Error deleting team member:', deleteError)
-      return NextResponse.json(
-        { success: false, error: 'Failed to remove team member' },
-        { status: 500 }
-      )
-    }
+    await db.dealerStaff.delete({
+      where: { id },
+    })
 
     return NextResponse.json({
       success: true,
-      message: 'Team member removed successfully'
+      message: 'Team member removed successfully',
     })
   } catch (error) {
     console.error('Error in team DELETE:', error)

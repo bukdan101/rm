@@ -1,6 +1,6 @@
 // ==============================================================
 // AUTOMARKET - Prisma Schema for SQLite
-// Covers core tables used by API routes
+// Consolidated & Fixed - All models aligned with API code
 // ==============================================================
 
 generator client {
@@ -46,7 +46,6 @@ model Profile {
   dealerStaffEntries DealerStaff[]
   inspections    CarInspection[] @relation("InspectorInspections")
   dealerRegistration DealerRegistration?
-
   @@map("profiles")
 }
 
@@ -417,10 +416,6 @@ model CarRentalPrice {
   mileage_limit_per_day  Int?
   excess_mileage_charge  Int?
   terms                  String?
-  daily_price            Int?
-  weekly_price           Int?
-  monthly_price          Int?
-  min_rent_days          Int?
   created_at             DateTime  @default(now())
   updated_at             DateTime  @updatedAt
 
@@ -439,7 +434,6 @@ model InspectionCategory {
   slug         String?
   description  String?
   icon         String?
-  order_index  Int       @default(0)
   display_order Int      @default(0)
   total_items  Int       @default(0)
   created_at   DateTime  @default(now())
@@ -454,11 +448,9 @@ model InspectionItem {
   category_id   Int?
   name          String
   description   String?
-  order_index   Int       @default(0)
   display_order Int       @default(0)
   is_active     Boolean   @default(true)
   is_critical   Boolean   @default(false)
-  category      String?
   created_at    DateTime  @default(now())
 
   inspectionCategory InspectionCategory? @relation(fields: [category_id], references: [id])
@@ -518,7 +510,6 @@ model InspectionResult {
   status              String    @default("baik")
   notes               String?
   image_url           String?
-  photo_url           String?
   severity            String?
   repair_cost_estimate Int?
   created_at          DateTime  @default(now())
@@ -530,41 +521,68 @@ model InspectionResult {
 }
 
 model InspectionBooking {
-  id          String    @id @default(uuid())
-  user_id     String?
-  car_listing_id String?
-  inspector_id String?
-  scheduled_date DateTime?
-  status      String    @default("pending")
-  notes       String?
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  user_id          String?
+  car_listing_id   String?
+  inspector_id     String?
+  scheduled_date   DateTime?
+  status           String    @default("pending")
+  notes            String?
+  booking_number   String?
+  pricing_id       String?
+  inspection_type  String?
+  token_cost       Int?
+  location_address String?
+  location_lat     Float?
+  location_lng     Float?
+  payment_status   String?
+  paid_at          DateTime?
+  cancelled_at     DateTime?
+  cancellation_reason String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
 
   @@map("inspection_bookings")
 }
 
 model InspectionPricing {
-  id          String    @id @default(uuid())
-  name        String
-  description String?
-  price       Int
-  duration_days Int?
-  is_active   Boolean   @default(true)
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
+  id                      String    @id @default(uuid())
+  name                    String
+  description             String?
+  price                   Int
+  duration_days           Int?
+  type                    String?
+  token_cost              Int?
+  includes_inspector      Boolean   @default(false)
+  includes_certificate    Boolean   @default(false)
+  includes_ai_analysis    Boolean   @default(false)
+  certificate_validity_days Int?
+  is_popular              Boolean   @default(false)
+  is_active               Boolean   @default(true)
+  display_order           Int       @default(0)
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @updatedAt
 
   @@map("inspection_pricing")
 }
 
 model CertificatePurchase {
-  id              String    @id @default(uuid())
-  inspection_id   String
-  user_id         String
-  price           Int
-  status          String    @default("pending")
-  payment_id      String?
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @updatedAt
+  id                String    @id @default(uuid())
+  inspection_id     String
+  user_id           String
+  price             Int
+  status            String    @default("pending")
+  payment_id        String?
+  purchase_number   String?
+  car_listing_id    String?
+  token_cost        Int?
+  payment_status    String?
+  paid_at           DateTime?
+  issued_at         DateTime?
+  expires_at        DateTime?
+  certificate_number String?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
 
   @@map("certificate_purchases")
 }
@@ -600,20 +618,23 @@ model KycVerification {
 }
 
 // ==============================
-// MODULE 7: CREDIT / TOKEN SYSTEM
+// MODULE 7: CREDIT / TOKEN SYSTEM (CONSOLIDATED)
 // ==============================
 
 model UserCredit {
-  id           String    @id @default(uuid())
-  user_id      String?   @unique
-  dealer_id    String?
-  balance      Int       @default(0)
-  total_earned Int       @default(0)
-  total_spent  Int       @default(0)
-  created_at   DateTime  @default(now())
-  updated_at   DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  user_id         String?   @unique
+  dealer_id       String?
+  balance         Int       @default(0)
+  total_earned    Int       @default(0)
+  total_spent     Int       @default(0)
+  total_bonus     Int       @default(0)
+  last_usage_at   DateTime?
+  last_purchase_at DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
 
-  transactions CreditTransaction[]
+  transactions    CreditTransaction[]
 
   @@map("user_credits")
 }
@@ -678,65 +699,39 @@ model RegistrationBonusTracker {
 }
 
 model TokenSetting {
-  id            String    @id @default(uuid())
-  key           String    @unique
-  name          String
-  tokens        Int
-  category      String    @default("listing")
-  description   String?
-  is_active     Boolean   @default(true)
-  display_order Int       @default(0)
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
+  id                            String    @id @default(uuid())
+  token_price_base              Int       @default(10000)
+  token_price_currency          String    @default("IDR")
+  ai_prediction_tokens          Int       @default(5)
+  ai_prediction_duration_hours  Int       @default(24)
+  listing_normal_tokens         Int       @default(3)
+  listing_normal_duration_days  Int       @default(30)
+  listing_normal_chat_free      Boolean   @default(true)
+  listing_dealer_tokens         Int       @default(5)
+  listing_dealer_duration_days  Int       @default(30)
+  listing_dealer_multiplier     Float     @default(1.0)
+  dealer_contact_tokens         Int       @default(2)
+  dealer_contact_multiplier     Float     @default(1.0)
+  boost_tokens                  Int       @default(5)
+  boost_duration_days           Int       @default(7)
+  highlight_tokens              Int       @default(3)
+  highlight_duration_days       Int       @default(7)
+  featured_tokens               Int       @default(10)
+  featured_duration_days        Int       @default(7)
+  premium_badge_tokens          Int       @default(8)
+  premium_badge_duration_days   Int       @default(30)
+  top_search_tokens             Int       @default(6)
+  top_search_duration_days      Int       @default(7)
+  inspection_tokens             Int       @default(5)
+  inspection_mandatory          Boolean   @default(false)
+  auto_move_to_public           Boolean   @default(false)
+  auto_move_gratis              Boolean   @default(false)
+  remind_before_expire_days     Int       @default(3)
+  is_active                     Boolean   @default(true)
+  created_at                    DateTime  @default(now())
+  updated_at                    DateTime  @updatedAt
 
   @@map("token_settings")
-}
-
-model TokenPackage {
-  id            String    @id @default(uuid())
-  name          String
-  tokens        Int
-  price_rupiah  Int
-  is_active     Boolean   @default(true)
-  display_order Int       @default(0)
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
-
-  @@map("token_packages")
-}
-
-model TokenTransaction {
-  id              String    @id @default(uuid())
-  user_id         String
-  type            String
-  amount          Int
-  balance_after   Int?
-  description     String?
-  reference_type  String?
-  reference_id    String?
-  created_at      DateTime  @default(now())
-
-  @@map("token_transactions")
-}
-
-model TokenBalance {
-  id          String    @id @default(uuid())
-  user_id     String    @unique
-  balance     Int       @default(0)
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-
-  @@map("token_balances")
-}
-
-model UserToken {
-  id          String    @id @default(uuid())
-  user_id     String    @unique
-  balance     Int       @default(0)
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-
-  @@map("user_tokens")
 }
 
 // ==============================
@@ -757,6 +752,10 @@ model Payment {
   va_number        String?
   platform_fee     Int       @default(0)
   processing_fee   Int       @default(0)
+  invoice_number   String?
+  package_id       String?
+  verified_by      String?
+  admin_notes      String?
   paid_at          DateTime?
   verified_at      DateTime?
   failed_at        DateTime?
@@ -791,6 +790,10 @@ model BoostFeature {
   description   String?
   credits       Int
   duration_days Int
+  slug          String?
+  icon          String?
+  color         String?
+  benefits      String?
   is_active     Boolean   @default(true)
   display_order Int       @default(0)
   created_at    DateTime  @default(now())
@@ -970,6 +973,14 @@ model DealerMarketplaceSettings {
   default_offer_duration_hours Int      @default(72)
   max_counter_offers          Int       @default(5)
   auto_reject_hours           Int       @default(48)
+  is_active                   Boolean   @default(true)
+  token_cost_public           Int       @default(3)
+  token_cost_dealer_marketplace Int     @default(5)
+  token_cost_both             Int       @default(7)
+  inspection_cost             Int       @default(5)
+  inspection_required_for_dealer_marketplace Boolean @default(false)
+  platform_fee_percentage     Float     @default(0)
+  platform_fee_enabled        Boolean   @default(false)
   created_at                  DateTime  @default(now())
   updated_at                  DateTime  @updatedAt
 
@@ -981,6 +992,13 @@ model DealerOfferSettings {
   key                 String    @unique
   value               String
   description         String?
+  fee_type            String?
+  fee_percentage      Float?
+  fee_fixed_amount    Int?
+  applies_to          String?
+  is_active           Boolean   @default(true)
+  valid_from          DateTime?
+  valid_until         DateTime?
   created_at          DateTime  @default(now())
   updated_at          DateTime  @updatedAt
 
@@ -1205,15 +1223,22 @@ model Village {
 // ==============================
 
 model Banner {
-  id          String    @id @default(uuid())
-  title       String
-  image_url   String
-  target_url  String?
-  position    String?
-  impressions Int       @default(0)
-  clicks      Int       @default(0)
-  is_active   Boolean   @default(true)
-  created_at  DateTime  @default(now())
+  id           String    @id @default(uuid())
+  title        String
+  description  String?
+  image_url    String
+  target_url   String?
+  position     String?
+  status       String    @default("active")
+  is_active    Boolean   @default(true)
+  start_date   DateTime?
+  end_date     DateTime?
+  display_order Int      @default(0)
+  impressions  Int       @default(0)
+  clicks       Int       @default(0)
+  budget_total Int?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
 
   @@map("banners")
 }
@@ -1223,15 +1248,18 @@ model Banner {
 // ==============================
 
 model UserSetting {
-  id                String    @id @default(uuid())
-  user_id           String    @unique
-  theme             String    @default("system")
-  language          String    @default("id")
-  notification_push Boolean   @default(true)
-  notification_email Boolean  @default(true)
-  notification_sms  Boolean   @default(false)
-  created_at        DateTime  @default(now())
-  updated_at        DateTime  @updatedAt
+  id                   String    @id @default(uuid())
+  user_id              String    @unique
+  theme                String    @default("system")
+  language             String    @default("id")
+  notification_push    Boolean   @default(true)
+  notification_email   Boolean   @default(true)
+  notification_sms     Boolean   @default(false)
+  promo_notifications  Boolean   @default(true)
+  chat_notifications   Boolean   @default(true)
+  currency             String    @default("IDR")
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
 
   @@map("user_settings")
 }
@@ -1263,21 +1291,7 @@ model CarView {
 }
 
 // ==============================
-// MODULE 18: WALLET
-// ==============================
-
-model Wallet {
-  id          String    @id @default(uuid())
-  user_id     String    @unique
-  balance     Int       @default(0)
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-
-  @@map("wallets")
-}
-
-// ==============================
-// MODULE 19: ASTRAPAY INTEGRATION
+// MODULE 18: ASTRAPAY INTEGRATION
 // ==============================
 
 model AstraPayConfig {
@@ -1328,7 +1342,7 @@ model AstraPayTransaction {
   user_id               String?
   dealer_id             String?
   listing_id            String?
-  credit_application_id String?   @unique
+  credit_application_id String?
   merchant_trx_id       String    @unique
   astrapay_trx_id       String?
   amount                Int
@@ -1354,7 +1368,7 @@ model AstraPayTransaction {
 }
 
 // ==============================
-// MODULE 20: CREDIT / FINANCING
+// MODULE 19: CREDIT / FINANCING
 // ==============================
 
 model CreditApplication {
@@ -1388,7 +1402,7 @@ model CreditApplication {
   updated_at            DateTime  @updatedAt
 
   payments              CreditPayment[]
-  astraPayTransaction   AstraPayTransaction?
+  astraPayTransactions  AstraPayTransaction[]
 
   @@map("credit_applications")
 }
@@ -1414,4 +1428,161 @@ model CreditPayment {
   application           CreditApplication @relation(fields: [credit_application_id], references: [id])
 
   @@map("credit_payments")
+}
+
+// ==============================
+// MODULE 20: ADMIN SYSTEM
+// ==============================
+
+model Transaction {
+  id                String    @id @default(uuid())
+  transaction_number String?   @unique
+  user_id           String?
+  type              String
+  amount            Int
+  fee               Int        @default(0)
+  net_amount        Int?
+  status            String     @default("pending")
+  payment_method    String?
+  reference_type    String?
+  reference_id      String?
+  description       String?
+  metadata          String?
+  created_at        DateTime   @default(now())
+  updated_at        DateTime   @updatedAt
+
+  @@map("transactions")
+}
+
+model Withdrawal {
+  id                String    @id @default(uuid())
+  withdrawal_number String?   @unique
+  user_id           String?
+  dealer_id         String?
+  amount            Int
+  fee               Int        @default(0)
+  net_amount        Int?
+  bank_name         String?
+  bank_account_name String?
+  bank_account_number String?
+  status            String     @default("pending")
+  rejection_reason  String?
+  processed_by      String?
+  processed_at      DateTime?
+  notes             String?
+  created_at        DateTime   @default(now())
+  updated_at        DateTime   @updatedAt
+
+  @@map("withdrawals")
+}
+
+model SupportTicket {
+  id                String    @id @default(uuid())
+  ticket_number     String?   @unique
+  user_id           String?
+  subject           String
+  description       String?
+  category          String?
+  priority          String     @default("medium")
+  status            String     @default("open")
+  assigned_to       String?
+  resolution        String?
+  closed_at         DateTime?
+  created_at        DateTime   @default(now())
+  updated_at        DateTime   @updatedAt
+
+  messages          SupportTicketMessage[]
+
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id          String    @id @default(uuid())
+  ticket_id   String
+  sender_id   String?
+  message     String
+  attachments String?
+  is_internal Boolean   @default(false)
+  created_at  DateTime  @default(now())
+
+  ticket      SupportTicket @relation(fields: [ticket_id], references: [id])
+
+  @@map("support_ticket_messages")
+}
+
+model ActivityLog {
+  id          String    @id @default(uuid())
+  user_id     String?
+  action      String
+  entity_type String?
+  entity_id   String?
+  description String?
+  ip_address  String?
+  user_agent  String?
+  metadata    String?
+  created_at  DateTime  @default(now())
+
+  @@map("activity_logs")
+}
+
+model Coupon {
+  id              String    @id @default(uuid())
+  code            String    @unique
+  name            String
+  description     String?
+  discount_type   String    @default("percentage")
+  discount_value  Int
+  min_purchase    Int       @default(0)
+  max_discount    Int?
+  usage_limit     Int?
+  used_count      Int       @default(0)
+  per_user_limit  Int       @default(1)
+  valid_from      DateTime?
+  valid_until     DateTime?
+  is_active       Boolean   @default(true)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@map("coupons")
+}
+
+model TopupRequest {
+  id                String    @id @default(uuid())
+  topup_number      String?   @unique
+  user_id           String?
+  amount            Int
+  tokens            Int
+  payment_method    String?
+  payment_proof_url String?
+  payment_reference String?
+  status            String    @default("pending")
+  rejection_reason  String?
+  processed_by      String?
+  processed_at      DateTime?
+  notes             String?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  @@map("topup_requests")
+}
+
+model FeeSetting {
+  id              String    @id @default(uuid())
+  fee_type        String
+  fee_percentage  Float     @default(0)
+  fee_fixed_amount Int      @default(0)
+  fee_tiers       String?
+  min_fee_amount  Int       @default(0)
+  max_fee_amount  Int?
+  applies_to      String?
+  min_vehicle_price Int?
+  max_vehicle_price Int?
+  is_active       Boolean   @default(true)
+  valid_from      DateTime?
+  valid_until     DateTime?
+  created_by      String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@map("fee_settings")
 }

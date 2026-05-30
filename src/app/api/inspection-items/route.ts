@@ -1,37 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const category = searchParams.get('category')
+    const categoryId = searchParams.get('category_id')
 
-    let query = supabase
-      .from('inspection_items')
-      .select('*')
-      .order('display_order')
-
-    if (category) {
-      query = query.eq('category', category)
+    const where: Record<string, unknown> = {}
+    if (categoryId) {
+      where.category_id = parseInt(categoryId)
     }
 
-    const { data, error } = await query
+    const data = await db.inspectionItem.findMany({
+      where,
+      include: {
+        inspectionCategory: {
+          select: { id: true, name: true },
+        },
+      },
+      orderBy: { display_order: 'asc' },
+    })
 
-    if (error) throw error
-
-    // Group by category
+    // Group by category name
     const grouped: Record<string, typeof data> = {}
     for (const item of data) {
-      if (!grouped[item.category]) {
-        grouped[item.category] = []
+      const category = item.inspectionCategory?.name || 'Other'
+      if (!grouped[category]) {
+        grouped[category] = []
       }
-      grouped[item.category].push(item)
+      grouped[category].push(item)
     }
 
     return NextResponse.json({
       success: true,
       data,
-      grouped
+      grouped,
     })
   } catch (error) {
     console.error('Error fetching inspection items:', error)

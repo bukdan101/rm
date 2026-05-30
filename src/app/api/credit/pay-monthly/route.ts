@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
         user_id: auth.userId,
         dealer_id: application.dealer_id,
         listing_id: application.listing_id,
+        credit_application_id: creditApplicationId,
         merchant_trx_id: merchantTrxId,
         amount: payment.amount_due,
         currency: 'IDR',

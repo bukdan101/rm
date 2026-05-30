@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { db } from '@/lib/db'
 import { 
   calculateTokenCost, 
   getTokenBalance, 
@@ -32,7 +31,6 @@ interface ReactivateListingRequest {
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const marketplace = searchParams.get('marketplace') || 'public' // 'dealer' or 'public'
     const page = parseInt(searchParams.get('page') || '1')
@@ -46,83 +44,54 @@ export async function GET(request: NextRequest) {
     const yearMax = searchParams.get('year_max')
     const priceMin = searchParams.get('price_min')
     const priceMax = searchParams.get('price_max')
-    const provinceId = searchParams.get('province_id')
-    const cityId = searchParams.get('city_id')
     const search = searchParams.get('search')
 
-    if (marketplace === 'dealer') {
-      // Dealer marketplace - only for dealers
-      let query = supabase
-        .from('car_listings')
-        .select('*', { count: 'exact' })
-        .eq('status', 'active')
-
-      // Apply filters
-      if (brandId) query = query.eq('variant_id', brandId) // use appropriate column
-      if (modelId) query = query.eq('variant_id', modelId) // use appropriate column
-      if (yearMin) query = query.gte('year', parseInt(yearMin))
-      if (yearMax) query = query.lte('year', parseInt(yearMax))
-      if (priceMin) query = query.gte('price', parseInt(priceMin))
-      if (priceMax) query = query.lte('price', parseInt(priceMax))
-      if (search) {
-        query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`)
-      }
-
-      query = query
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1)
-
-      const { data, error, count } = await query
-
-      if (error) throw error
-
-      return successResponse({
-        data,
-        marketplace: 'dealer',
-        pagination: {
-          page,
-          limit,
-          total: count || 0,
-          totalPages: Math.ceil((count || 0) / limit)
-        }
-      })
-    } else {
-      // Public marketplace - for all users
-      let query = supabase
-        .from('car_listings')
-        .select('*', { count: 'exact' })
-        .eq('status', 'active')
-
-      // Apply filters
-      if (brandId) query = query.eq('variant_id', brandId) // use appropriate column
-      if (modelId) query = query.eq('variant_id', modelId) // use appropriate column
-      if (yearMin) query = query.gte('year', parseInt(yearMin))
-      if (yearMax) query = query.lte('year', parseInt(yearMax))
-      if (priceMin) query = query.gte('price', parseInt(priceMin))
-      if (priceMax) query = query.lte('price', parseInt(priceMax))
-      if (search) {
-        query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`)
-      }
-
-      query = query
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1)
-
-      const { data, error, count } = await query
-
-      if (error) throw error
-
-      return successResponse({
-        data,
-        marketplace: 'public',
-        pagination: {
-          page,
-          limit,
-          total: count || 0,
-          totalPages: Math.ceil((count || 0) / limit)
-        }
-      })
+    // Build where clause
+    const where: any = {
+      status: 'active',
+      deleted_at: null
     }
+
+    if (brandId) where.brand_id = parseInt(brandId)
+    if (modelId) where.model_id = parseInt(modelId)
+    if (yearMin) where.year = { ...where.year, gte: parseInt(yearMin) }
+    if (yearMax) where.year = { ...where.year, lte: parseInt(yearMax) }
+    if (priceMin) where.price_cash = { ...where.price_cash, gte: parseInt(priceMin) }
+    if (priceMax) where.price_cash = { ...where.price_cash, lte: parseInt(priceMax) }
+    if (search) {
+      where.OR = [
+        { title: { contains: search } },
+        { description: { contains: search } }
+      ]
+    }
+
+    // Filter by marketplace type
+    if (marketplace === 'dealer') {
+      where.visibility = { in: ['dealer_marketplace', 'both'] }
+    } else {
+      where.visibility = { in: ['public', 'both'] }
+    }
+
+    const [data, count] = await Promise.all([
+      db.carListing.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip: offset,
+        take: limit
+      }),
+      db.carListing.count({ where })
+    ])
+
+    return successResponse({
+      data,
+      marketplace: marketplace === 'dealer' ? 'dealer' : 'public',
+      pagination: {
+        page,
+        limit,
+        total: count,
+        totalPages: Math.ceil(count / limit)
+      }
+    })
   } catch (error) {
     console.error('Error fetching marketplace listings:', error)
     return errorResponse('Failed to fetch listings', 500)
@@ -135,8 +104,6 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const adminClient = getSupabaseAdmin()
     const body: ActivateListingRequest = await request.json()
     const { listing_id, user_id, dealer_id, marketplace_type, prediction_id } = body
 
@@ -149,18 +116,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Get listing
-    const { data: listing, error: listingError } = await supabase
-      .from('car_listings')
-      .select('*')
-      .eq('id', listing_id)
-      .single()
+    const listing = await db.carListing.findUnique({
+      where: { id: listing_id }
+    })
 
-    if (listingError || !listing) {
+    if (!listing) {
       return errorResponse('Listing not found', 404)
     }
 
     // Check ownership
-    const isOwner = (user_id && listing.seller_id === user_id) || 
+    const isOwner = (user_id && listing.user_id === user_id) || 
                     (dealer_id && listing.dealer_id === dealer_id)
     
     if (!isOwner) {
@@ -244,25 +209,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update listing using admin client for elevated access
-    const updateData: Record<string, unknown> = {
+    // Determine visibility based on marketplace type
+    let visibility = 'public'
+    if (marketplace_type === 'dealer_only') visibility = 'dealer_marketplace'
+    else if (marketplace_type === 'both') visibility = 'both'
+
+    // Update listing
+    const updateData: any = {
       status: 'active',
-      updated_at: now.toISOString()
+      visibility,
+      expired_at: publicExpiresAt || dealerExpiresAt
     }
 
-    if (listing.status === 'suspended' || listing.status === 'expired') {
-      updateData.updated_at = now.toISOString()
+    if (marketplace_type === 'dealer_only' || marketplace_type === 'both') {
+      updateData.published_to_dealer_marketplace_at = now
     }
 
-    const { error: updateError } = await adminClient
-      .from('car_listings')
-      .update(updateData)
-      .eq('id', listing_id)
-
-    if (updateError) {
-      console.error('Error updating listing:', updateError)
-      return errorResponse('Failed to activate listing', 500)
-    }
+    await db.carListing.update({
+      where: { id: listing_id },
+      data: updateData
+    })
 
     return successResponse({
       message: 'Listing activated successfully',
@@ -286,7 +252,6 @@ export async function POST(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient()
     const body: ReactivateListingRequest = await request.json()
     const { listing_id, user_id, dealer_id, marketplace_type } = body
 
@@ -295,13 +260,11 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Get listing
-    const { data: listing, error: listingError } = await supabase
-      .from('car_listings')
-      .select('*')
-      .eq('id', listing_id)
-      .single()
+    const listing = await db.carListing.findUnique({
+      where: { id: listing_id }
+    })
 
-    if (listingError || !listing) {
+    if (!listing) {
       return errorResponse('Listing not found', 404)
     }
 
@@ -325,33 +288,4 @@ export async function PATCH(request: NextRequest) {
     console.error('Error reactivating listing:', error)
     return errorResponse('Failed to reactivate listing', 500)
   }
-}
-
-/**
- * GET /api/marketplace-listings/my
- * Get user's own listings with marketplace status
- */
-export async function getMyListings(userId?: string, dealerId?: string) {
-  if (!userId && !dealerId) {
-    return { success: false, error: 'User ID or Dealer ID is required' }
-  }
-
-  const supabase = await createClient()
-  let query = supabase
-    .from('car_listings')
-    .select('*')
-
-  if (userId) {
-    query = query.eq('seller_id', userId)
-  } else if (dealerId) {
-    query = query.eq('dealer_id', dealerId)
-  }
-
-  const { data, error } = await query.order('created_at', { ascending: false })
-
-  if (error) {
-    return { success: false, error: error.message }
-  }
-
-  return { success: true, data }
 }

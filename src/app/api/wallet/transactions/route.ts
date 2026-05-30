@@ -1,84 +1,56 @@
-import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Unauthorized - Silakan login terlebih dahulu' 
-      }, { status: 401 })
-    }
-
     const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId')
     const limit = parseInt(searchParams.get('limit') || '20')
     const type = searchParams.get('type') // 'purchase', 'usage', 'bonus', etc.
 
-    // Get user's wallet
-    const { data: wallet, error: walletError } = await supabase
-      .from('user_credits')
-      .select('id, balance, total_earned, total_spent')
-      .eq('user_id', user.id)
-      .single()
+    if (!userId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized - Silakan login terlebih dahulu',
+      }, { status: 401 })
+    }
 
-    if (walletError || !wallet) {
+    // Get user's credit record using db.userCredit
+    let wallet = await db.userCredit.findUnique({
+      where: { user_id: userId },
+    })
+
+    if (!wallet) {
       // Create wallet if not exists
-      const { data: newWallet, error: createError } = await supabase
-        .from('user_credits')
-        .insert({
-          user_id: user.id,
+      wallet = await db.userCredit.create({
+        data: {
+          user_id: userId,
           balance: 0,
           total_earned: 0,
           total_spent: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-
-      if (createError) {
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Gagal membuat dompet pengguna' 
-        }, { status: 500 })
-      }
+        },
+      })
 
       return NextResponse.json({
         success: true,
         transactions: [],
         balance: 0,
-        walletId: newWallet.id,
+        walletId: wallet.id,
       })
     }
 
-    // Build query for transactions
-    let query = supabase
-      .from('credit_transactions')
-      .select('*')
-      .eq('user_credit_id', wallet.id)
-      .order('created_at', { ascending: false })
-      .limit(limit)
+    // Build query for transactions using db.creditTransaction
+    const where: Record<string, unknown> = { user_credit_id: wallet.id }
+    if (type) where.type = type
 
-    if (type) {
-      query = query.eq('type', type)
-    }
-
-    const { data: transactions, error: txError } = await query
-
-    if (txError) {
-      console.error('Error fetching transactions:', txError)
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Gagal mengambil data transaksi' 
-      }, { status: 500 })
-    }
+    const transactions = await db.creditTransaction.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      take: limit,
+    })
 
     // Transform for frontend
-    const transformedTransactions = (transactions || []).map(tx => ({
+    const transformedTransactions = transactions.map(tx => ({
       id: tx.id,
       type: tx.amount >= 0 ? 'credit' : 'debit',
       transactionType: tx.type,
@@ -101,9 +73,9 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     console.error('Server error:', error)
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Terjadi kesalahan server' 
+    return NextResponse.json({
+      success: false,
+      error: 'Terjadi kesalahan server',
     }, { status: 500 })
   }
 }

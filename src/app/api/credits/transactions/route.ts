@@ -1,69 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 // GET: Get user's credit transaction history
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('user_id')
+
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    
-    const searchParams = request.nextUrl.searchParams
+
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = parseInt(searchParams.get('offset') || '0')
     const type = searchParams.get('type')
-    
+
     // Check if user is a dealer
-    const { data: dealer } = await supabase
-      .from('dealers')
-      .select('id')
-      .eq('owner_id', user.id)
-      .single()
-    
+    const dealer = await db.dealer.findFirst({
+      where: { owner_id: userId },
+      select: { id: true },
+    })
+
     // Get user credits
-    let creditQuery = supabase
-      .from('user_credits')
-      .select('id')
-    
-    if (dealer) {
-      creditQuery = creditQuery.eq('dealer_id', dealer.id)
-    } else {
-      creditQuery = creditQuery.eq('user_id', user.id)
-    }
-    
-    const { data: userCredit } = await creditQuery.single()
-    
+    const userCredit = await db.userCredit.findFirst({
+      where: dealer
+        ? { dealer_id: dealer.id }
+        : { user_id: userId },
+    })
+
     if (!userCredit) {
       return NextResponse.json({ transactions: [], total: 0 })
     }
-    
+
     // Build transaction query
-    let transactionQuery = supabase
-      .from('credit_transactions')
-      .select('*', { count: 'exact' })
-      .eq('user_credit_id', userCredit.id)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
-    
+    const where: Record<string, unknown> = {
+      user_credit_id: userCredit.id,
+    }
     if (type) {
-      transactionQuery = transactionQuery.eq('type', type)
+      where.type = type
     }
-    
-    const { data: transactions, count, error } = await transactionQuery
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-    
+
+    const [transactions, count] = await Promise.all([
+      db.creditTransaction.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip: offset,
+        take: limit,
+      }),
+      db.creditTransaction.count({ where }),
+    ])
+
     return NextResponse.json({
       transactions,
-      total: count || 0,
+      total: count,
       limit,
-      offset
+      offset,
     })
   } catch (error) {
     console.error('Error fetching transactions:', error)

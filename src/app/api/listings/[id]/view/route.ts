@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 export async function POST(
   request: NextRequest,
@@ -8,29 +8,22 @@ export async function POST(
   try {
     const { id } = await params
 
-    // Increment view count
-    const { error } = await supabase.rpc('increment_view_count', { listing_id: id })
+    // Get current view count and increment
+    const listing = await db.carListing.findUnique({
+      where: { id },
+      select: { view_count: true },
+    })
 
-    // If RPC doesn't exist, use direct update
-    if (error) {
-      // Get current view count
-      const { data: listing } = await supabase
-        .from('car_listings')
-        .select('view_count')
-        .eq('id', id)
-        .single()
-
-      if (listing) {
-        await supabase
-          .from('car_listings')
-          .update({ view_count: (listing.view_count || 0) + 1 })
-          .eq('id', id)
-      }
+    if (listing) {
+      await db.carListing.update({
+        where: { id },
+        data: { view_count: (listing.view_count || 0) + 1 },
+      })
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error incrementing view count:', error)
-    return NextResponse.json({ success: true }) // Don't fail silently
+    return NextResponse.json({ success: true })
   }
 }

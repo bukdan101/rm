@@ -1,67 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
-
-    if (!profile || profile.role !== 'admin') {
-      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
-    }
-
     const searchParams = request.nextUrl.searchParams
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const status = searchParams.get('status') || ''
-    const from = (page - 1) * limit
-    const to = from + limit - 1
+    const skip = (page - 1) * limit
 
-    let query = supabase
-      .from('withdrawals')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
+    const where: Record<string, unknown> = {}
+    if (status && status !== 'all') where.status = status
 
-    if (status && status !== 'all') {
-      query = query.eq('status', status)
-    }
-
-    query = query.range(from, to)
-
-    const { data: withdrawals, error, count } = await query
-
-    if (error) {
-      console.error('Error fetching withdrawals:', error)
-      return NextResponse.json({
-        success: true,
-        data: [],
-        pagination: { page, limit, total: 0, totalPages: 0 },
-      })
-    }
+    const [withdrawals, total] = await Promise.all([
+      db.withdrawal.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: limit,
+      }),
+      db.withdrawal.count({ where }),
+    ])
 
     // Fetch user profiles
-    const userIds = [...new Set(withdrawals?.map(w => w.user_id).filter(Boolean))]
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, full_name')
-      .in('id', userIds)
+    const userIds = [...new Set(withdrawals.map(w => w.user_id).filter(Boolean))] as string[]
+    const profiles = await db.profile.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, full_name: true },
+    })
 
-    const profilesMap = new Map(profiles?.map(p => [p.id, p]))
+    const profilesMap = new Map(profiles.map(p => [p.id, p]))
 
-    const enrichedWithdrawals = withdrawals?.map(w => ({
+    const enrichedWithdrawals = withdrawals.map(w => ({
       ...w,
-      user: profilesMap.get(w.user_id) || null,
+      user: profilesMap.get(w.user_id || '') || null,
     }))
 
     return NextResponse.json({
@@ -70,8 +42,8 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit),
+        total,
+        totalPages: Math.ceil(total / limit),
       },
     })
   } catch (error) {
@@ -82,49 +54,24 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
-
-    if (!profile || profile.role !== 'admin') {
-      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
-    }
-
     const body = await request.json()
-    const { id, status, rejection_reason } = body
+    const { id, status, rejection_reason, processed_by } = body
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'ID required' }, { status: 400 })
     }
 
-    const updateData: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-      reviewed_by: session.user.id,
-      reviewed_at: new Date().toISOString(),
-    }
+    const updateData: Record<string, unknown> = {}
     if (status) updateData.status = status
     if (rejection_reason) updateData.rejection_reason = rejection_reason
-    if (status === 'completed') updateData.processed_at = new Date().toISOString()
+    // Withdrawal model uses processed_by (not reviewed_by)
+    if (processed_by) updateData.processed_by = processed_by
+    if (status === 'completed') updateData.processed_at = new Date()
 
-    const { data: withdrawal, error } = await supabase
-      .from('withdrawals')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single()
-
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
-    }
+    const withdrawal = await db.withdrawal.update({
+      where: { id },
+      data: updateData,
+    })
 
     return NextResponse.json({ success: true, data: withdrawal })
   } catch (error) {

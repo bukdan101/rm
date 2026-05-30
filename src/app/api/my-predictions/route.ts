@@ -1,32 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {}
-          },
-        },
-      }
-    )
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('user_id')
 
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
+    if (!userId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -48,111 +28,94 @@ export async function GET(request: NextRequest) {
     }> = []
 
     // 1. Fetch AI price analysis from inspections
-    const { data: aiAnalysis, error: aiError } = await supabase
-      .from('ai_price_analysis')
-      .select(`
-        id,
-        estimated_price_min,
-        estimated_price_max,
-        recommended_price,
-        condition_score,
-        market_demand,
-        days_to_sell_estimate,
-        profit_margin_percent,
-        created_at,
-        car_listing_id,
-        car_listings (
-          id,
-          year,
-          price_cash,
-          user_id,
-          brand_id,
-          model_id,
-          variant_id,
-          brands ( name ),
-          car_models ( name ),
-          car_variants ( name )
-        ),
-        car_inspections (
-          overall_grade,
-          inspection_score
-        )
-      `)
-      .order('created_at', { ascending: false })
+    const aiAnalysis = await db.aiPriceAnalysis.findMany({
+      where: {
+        listing: {
+          user_id: userId,
+        },
+      },
+      select: {
+        id: true,
+        estimated_price_min: true,
+        estimated_price_max: true,
+        recommended_price: true,
+        condition_score: true,
+        market_demand: true,
+        days_to_sell_estimate: true,
+        profit_margin_percent: true,
+        created_at: true,
+        car_listing_id: true,
+        listing: {
+          select: {
+            id: true,
+            year: true,
+            price_cash: true,
+            user_id: true,
+            brand_id: true,
+            model_id: true,
+            variant_id: true,
+            brand: { select: { name: true } },
+            model: { select: { name: true } },
+            variant: { select: { name: true } },
+            inspection: {
+              select: { overall_grade: true, inspection_score: true },
+            },
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    })
 
-    if (aiError) {
-      console.error('Error fetching AI analysis:', aiError)
-    }
-
-    // Process AI analysis results - only include user's own listings
+    // Process AI analysis results
     if (aiAnalysis && aiAnalysis.length > 0) {
       for (const analysis of aiAnalysis) {
-        const listing = analysis.car_listings as {
-          id?: string
-          year?: number
-          price_cash?: number
-          user_id?: string
-          brand_id?: string
-          model_id?: string
-          variant_id?: string
-          brands?: { name: string }
-          car_models?: { name: string }
-          car_variants?: { name: string }
-        } | null
+        const listing = analysis.listing
+        if (!listing) continue
 
-        // Only include predictions for user's own listings
-        if (listing && listing.user_id === user.id) {
-          const inspection = Array.isArray(analysis.car_inspections) 
-            ? analysis.car_inspections[0] 
-            : analysis.car_inspections as { overall_grade?: string; inspection_score?: number } | null
-          
-          predictions.push({
-            id: analysis.id,
-            year: listing.year || new Date().getFullYear(),
-            predicted_price_min: analysis.estimated_price_min || 0,
-            predicted_price_max: analysis.estimated_price_max || 0,
-            confidence_score: analysis.condition_score || 0,
-            inspection_grade: inspection?.overall_grade || null,
-            inspection_score: inspection?.inspection_score || null,
-            status: 'completed',
-            created_at: analysis.created_at,
-            expires_at: null,
-            listing_created: true, // Already has a listing
-            brand: listing.brands || null,
-            model: listing.car_models || null,
-            variant: listing.car_variants || null
-          })
-        }
+        const inspection = listing.inspection
+
+        predictions.push({
+          id: analysis.id,
+          year: listing.year || new Date().getFullYear(),
+          predicted_price_min: analysis.estimated_price_min || 0,
+          predicted_price_max: analysis.estimated_price_max || 0,
+          confidence_score: analysis.condition_score || 0,
+          inspection_grade: inspection?.overall_grade || null,
+          inspection_score: inspection?.inspection_score || null,
+          status: 'completed',
+          created_at: analysis.created_at.toISOString(),
+          expires_at: null,
+          listing_created: true,
+          brand: listing.brand,
+          model: listing.model,
+          variant: listing.variant,
+        })
       }
     }
 
     // 2. Also fetch user's listings without inspections and create sample predictions
-    const { data: userListings, error: listingsError } = await supabase
-      .from('car_listings')
-      .select(`
-        id,
-        year,
-        price_cash,
-        created_at,
-        brand:brands(name),
-        model:car_models(name),
-        variant:car_variants(name)
-      `)
-      .eq('user_id', user.id)
-      .not('status', 'eq', 'deleted')
-      .order('created_at', { ascending: false })
-
-    if (listingsError) {
-      console.error('Error fetching user listings:', listingsError)
-    }
+    const userListings = await db.carListing.findMany({
+      where: {
+        user_id: userId,
+        status: { not: 'deleted' },
+      },
+      select: {
+        id: true,
+        year: true,
+        price_cash: true,
+        created_at: true,
+        brand: { select: { name: true } },
+        model: { select: { name: true } },
+        variant: { select: { name: true } },
+      },
+      orderBy: { created_at: 'desc' },
+    })
 
     // Create sample predictions for listings without inspections
     if (userListings && userListings.length > 0) {
       // Get listing IDs that already have AI analysis
       const analyzedListingIds = new Set(
-        (aiAnalysis || [])
-          .map((a: { car_listing_id?: string }) => a.car_listing_id)
-          .filter(Boolean)
+        aiAnalysis.map(a => a.car_listing_id).filter(Boolean)
       )
 
       for (const listing of userListings) {
@@ -160,13 +123,11 @@ export async function GET(request: NextRequest) {
         if (analyzedListingIds.has(listing.id)) continue
 
         const basePrice = listing.price_cash || 0
-        
-        // Generate sample prediction based on listing price (simulated AI prediction)
-        // In real scenario, this would call an actual AI model
-        const variancePercent = 0.1 + (Math.random() * 0.1) // 10-20% variance
+
+        const variancePercent = 0.1 + Math.random() * 0.1
         const predicted_price_min = Math.round(basePrice * (1 - variancePercent))
         const predicted_price_max = Math.round(basePrice * (1 + variancePercent))
-        const confidence_score = 70 + Math.round(Math.random() * 20) // 70-90% confidence
+        const confidence_score = 70 + Math.round(Math.random() * 20)
 
         predictions.push({
           id: `listing-${listing.id}`,
@@ -176,19 +137,19 @@ export async function GET(request: NextRequest) {
           confidence_score,
           inspection_grade: null,
           inspection_score: null,
-          status: 'sample', // Mark as sample prediction
-          created_at: listing.created_at,
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+          status: 'sample',
+          created_at: listing.created_at.toISOString(),
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           listing_created: true,
-          brand: listing.brand as { name: string } | null,
-          model: listing.model as { name: string } | null,
-          variant: listing.variant as { name: string } | null
+          brand: listing.brand,
+          model: listing.model,
+          variant: listing.variant,
         })
       }
     }
 
     // Sort by created_at descending
-    predictions.sort((a, b) => 
+    predictions.sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 // GET - Get dealer's favorite listings
 export async function GET(request: NextRequest) {
@@ -17,34 +17,46 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    const { data: favorites, error, count } = await supabaseAdmin
-      .from('dealer_marketplace_favorites')
-      .select(`
-        *,
-        car_listings!dealer_marketplace_favorites_car_listing_id_fkey (
-          id, listing_number, title, year, price_cash, mileage, city, province,
-          brands:brand_id (name),
-          car_models:model_id (name),
-          car_images!car_images_car_listing_id_fkey (image_url, is_primary)
-        )
-      `, { count: 'exact' })
-      .eq('dealer_id', dealerId)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    const [favorites, count] = await Promise.all([
+      db.dealerMarketplaceFavorite.findMany({
+        where: { dealer_id: dealerId },
+        include: {
+          listing: {
+            select: {
+              id: true,
+              listing_number: true,
+              title: true,
+              year: true,
+              price_cash: true,
+              mileage: true,
+              city: true,
+              province: true,
+              brand: { select: { name: true } },
+              model: { select: { name: true } },
+              images: { select: { image_url: true, is_primary: true } }
+            }
+          }
+        },
+        orderBy: { created_at: 'desc' },
+        skip: offset,
+        take: limit
+      }),
+      db.dealerMarketplaceFavorite.count({
+        where: { dealer_id: dealerId }
+      })
+    ])
 
-    if (error) throw error
-
-    const transformedFavorites = favorites?.map(fav => {
-      const listing = fav.car_listings as any
-      const primaryImage = listing?.car_images?.find((img: any) => img.is_primary)?.image_url || 
-                          listing?.car_images?.[0]?.image_url
+    const transformedFavorites = favorites.map(fav => {
+      const listing = fav.listing as any
+      const primaryImage = listing?.images?.find((img: any) => img.is_primary)?.image_url || 
+                          listing?.images?.[0]?.image_url
 
       return {
         ...fav,
         listing: {
           ...listing,
-          brand_name: listing?.brands?.name,
-          model_name: listing?.car_models?.name,
+          brand_name: listing?.brand?.name,
+          model_name: listing?.model?.name,
           primary_image_url: primaryImage
         }
       }
@@ -56,8 +68,8 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit)
+        total: count,
+        totalPages: Math.ceil(count / limit)
       }
     })
   } catch (error: any) {
@@ -73,28 +85,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { dealer_id, car_listing_id, staff_id, notes } = body
+    const { dealer_id, car_listing_id } = body
 
-    const { data: favorite, error } = await supabaseAdmin
-      .from('dealer_marketplace_favorites')
-      .insert({
+    const favorite = await db.dealerMarketplaceFavorite.create({
+      data: {
         dealer_id,
-        car_listing_id,
-        staff_id,
-        notes
-      })
-      .select()
-      .single()
-
-    if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json({
-          success: false,
-          error: 'Listing already in favorites'
-        }, { status: 400 })
+        car_listing_id
       }
-      throw error
-    }
+    })
 
     return NextResponse.json({
       success: true,
@@ -102,6 +100,13 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error adding favorite:', error)
+    // Check for unique constraint violation
+    if (error.code === 'P2002') {
+      return NextResponse.json({
+        success: false,
+        error: 'Listing already in favorites'
+      }, { status: 400 })
+    }
     return NextResponse.json({
       success: false,
       error: error.message
@@ -123,13 +128,12 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 })
     }
 
-    const { error } = await supabaseAdmin
-      .from('dealer_marketplace_favorites')
-      .delete()
-      .eq('dealer_id', dealerId)
-      .eq('car_listing_id', listingId)
-
-    if (error) throw error
+    await db.dealerMarketplaceFavorite.deleteMany({
+      where: {
+        dealer_id: dealerId,
+        car_listing_id: listingId
+      }
+    })
 
     return NextResponse.json({
       success: true,

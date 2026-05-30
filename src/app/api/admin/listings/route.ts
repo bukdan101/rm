@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
-import { checkAuth } from '@/lib/api-auth'
+import { db } from '@/lib/db'
+
+// Helper to verify admin access
+async function verifyAdmin(request: NextRequest) {
+  const userId = request.headers.get('x-user-id')
+  if (!userId) {
+    return { authorized: false, error: NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }) }
+  }
+  const profile = await db.profile.findUnique({ where: { id: userId }, select: { role: true } })
+  if (!profile || profile.role !== 'admin') {
+    return { authorized: false, error: NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 }) }
+  }
+  return { authorized: true, userId }
+}
 
 // GET - Fetch all listings for admin
 export async function GET(request: NextRequest) {
   try {
-    // Verify admin access
-    const authResult = await checkAuth(request, 'admin')
-    if (!authResult.authorized) {
-      return authResult.response
-    }
-
-    const supabase = getSupabaseAdmin()
+    const authResult = await verifyAdmin(request)
+    if (!authResult.authorized) return authResult.error!
 
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status')
@@ -19,107 +26,97 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
-    // Build base query
-    let query = supabase
-      .from('car_listings')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    // Build where clause
+    const where: Record<string, unknown> = {}
 
     if (status && status !== 'all') {
-      query = query.eq('status', status)
+      where.status = status
     }
 
     if (search) {
-      query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`)
+      where.OR = [
+        { title: { contains: search } },
+        { description: { contains: search } },
+      ]
     }
 
-    const { data: listings, count, error } = await query
+    // Fetch listings with count
+    const [listings, count] = await Promise.all([
+      db.carListing.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip: offset,
+        take: limit,
+        include: {
+          seller: {
+            select: { id: true, full_name: true, email: true, phone: true, avatar_url: true },
+          },
+          images: {
+            select: { image_url: true, is_primary: true, car_listing_id: true },
+          },
+        },
+      }),
+      db.carListing.count({ where }),
+    ])
 
-    if (error) {
-      console.error('Error fetching listings:', error)
-      return NextResponse.json({ 
-        success: false, 
-        error: error.message 
-      }, { status: 500 })
-    }
+    // Get unique variant IDs
+    const variantIds = [...new Set(listings.map(l => l.variant_id).filter(Boolean))] as number[]
 
-    // Get unique seller IDs
-    const sellerIds = [...new Set(listings?.map((l: Record<string, unknown>) => l.seller_id).filter(Boolean))]
-    
-    // Get sellers
-    const { data: sellers } = sellerIds.length > 0 
-      ? await supabase.from('profiles').select('id, full_name, email, phone, avatar_url').in('id', sellerIds)
-      : { data: [] }
-
-    // Get variant IDs
-    const variantIds = [...new Set(listings?.map((l: Record<string, unknown>) => l.variant_id).filter(Boolean))]
-    
     // Get variants with models and brands
-    const { data: variants } = variantIds.length > 0
-      ? await supabase.from('car_variants').select('id, name, year_start, model_id').in('id', variantIds)
-      : { data: [] }
+    const variants = variantIds.length > 0
+      ? await db.carVariant.findMany({
+          where: { id: { in: variantIds } },
+          select: { id: true, name: true, year_start: true, model_id: true },
+        })
+      : []
 
     // Get models
-    const modelIds = [...new Set(variants?.map((v: Record<string, unknown>) => v.model_id).filter(Boolean))]
-    const { data: models } = modelIds.length > 0
-      ? await supabase.from('car_models').select('id, name, brand_id').in('id', modelIds)
-      : { data: [] }
+    const modelIds = [...new Set(variants.map(v => v.model_id).filter(Boolean))]
+    const models = modelIds.length > 0
+      ? await db.carModel.findMany({
+          where: { id: { in: modelIds } },
+          select: { id: true, name: true, brand_id: true },
+        })
+      : []
 
     // Get brands
-    const brandIds = [...new Set(models?.map((m: Record<string, unknown>) => m.brand_id).filter(Boolean))]
-    const { data: brands } = brandIds.length > 0
-      ? await supabase.from('brands').select('id, name').in('id', brandIds)
-      : { data: [] }
-
-    // Get images for listings
-    const listingIds = listings?.map((l: Record<string, unknown>) => l.id) || []
-    const { data: allImages } = listingIds.length > 0
-      ? await supabase.from('car_images').select('listing_id, image_url, is_primary').in('listing_id', listingIds)
-      : { data: [] }
+    const brandIds = [...new Set(models.map(m => m.brand_id).filter(Boolean))]
+    const brands = brandIds.length > 0
+      ? await db.brand.findMany({
+          where: { id: { in: brandIds } },
+          select: { id: true, name: true },
+        })
+      : []
 
     // Create lookup maps
-    const sellerMap = Object.fromEntries((sellers || []).map((s: Record<string, unknown>) => [s.id, s]))
-    const variantMap = Object.fromEntries((variants || []).map((v: Record<string, unknown>) => [v.id, v]))
-    const modelMap = Object.fromEntries((models || []).map((m: Record<string, unknown>) => [m.id, m]))
-    const brandMap = Object.fromEntries((brands || []).map((b: Record<string, unknown>) => [b.id, b]))
-
-    // Group images by listing
-    const imagesByListing: Record<string, Array<{ image_url: string; is_primary: boolean }>> = {}
-    allImages?.forEach((img: Record<string, unknown>) => {
-      if (!imagesByListing[img.listing_id as string]) {
-        imagesByListing[img.listing_id as string] = []
-      }
-      imagesByListing[img.listing_id as string].push({
-        image_url: img.image_url as string,
-        is_primary: img.is_primary as boolean
-      })
-    })
+    const variantMap = Object.fromEntries(variants.map(v => [v.id, v]))
+    const modelMap = Object.fromEntries(models.map(m => [m.id, m]))
+    const brandMap = Object.fromEntries(brands.map(b => [b.id, b]))
 
     // Transform data
-    const transformedListings = listings?.map((listing: Record<string, unknown>) => {
-      const variant = variantMap[listing.variant_id as string] as Record<string, unknown> | undefined
-      const model = variant ? modelMap[variant.model_id as string] as Record<string, unknown> | undefined : undefined
-      const brand = model ? brandMap[model.brand_id as string] as Record<string, unknown> | undefined : undefined
-      const images = imagesByListing[listing.id as string]
+    const transformedListings = listings.map((listing) => {
+      const variant = variantMap[listing.variant_id ?? 0] as { id: number; name: string; year_start: number | null; model_id: number } | undefined
+      const model = variant ? modelMap[variant.model_id] as { id: number; name: string; brand_id: number } | undefined : undefined
+      const brand = model ? brandMap[model.brand_id] as { id: number; name: string } | undefined : undefined
+      const images = listing.images
       const primaryImage = images?.find(img => img.is_primary)?.image_url || images?.[0]?.image_url || null
 
       // Generate placeholder image based on title if no image exists
-      const placeholderImage = `https://picsum.photos/seed/${encodeURIComponent(listing.title as string)}/400/300`
+      const placeholderImage = `https://picsum.photos/seed/${encodeURIComponent(listing.title || 'car')}/400/300`
 
       return {
         id: listing.id,
         title: listing.title,
-        price: listing.price,
+        price: listing.price_cash,
         year: listing.year,
         mileage: listing.mileage,
         status: listing.status,
-        vehicle_condition: listing.vehicle_condition,
+        condition: listing.condition,
         transaction_type: listing.transaction_type,
-        location_city: listing.location_city,
-        location_province: listing.location_province,
+        city: listing.city,
+        province: listing.province,
         view_count: listing.view_count,
-        is_featured: listing.is_featured,
+        featured_until: listing.featured_until,
         created_at: listing.created_at,
         published_at: listing.published_at,
         sold_at: listing.sold_at,
@@ -128,41 +125,36 @@ export async function GET(request: NextRequest) {
         model_name: model?.name || 'Unknown',
         variant_name: variant?.name || 'Unknown',
         primary_image: primaryImage || placeholderImage,
-        seller: sellerMap[listing.seller_id as string] || null,
+        seller: listing.seller,
       }
-    }) || []
+    })
 
     // Get stats
-    const [
-      statsTotal, 
-      statsActive, 
-      statsBanned, 
-      statsSold
-    ] = await Promise.all([
-      supabase.from('car_listings').select('id', { count: 'exact', head: true }),
-      supabase.from('car_listings').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-      supabase.from('car_listings').select('id', { count: 'exact', head: true }).eq('status', 'banned'),
-      supabase.from('car_listings').select('id', { count: 'exact', head: true }).eq('status', 'sold'),
+    const [statsTotal, statsActive, statsBanned, statsSold] = await Promise.all([
+      db.carListing.count(),
+      db.carListing.count({ where: { status: 'active' } }),
+      db.carListing.count({ where: { is_banned: true } }),
+      db.carListing.count({ where: { status: 'sold' } }),
     ])
 
     return NextResponse.json({
       success: true,
       listings: transformedListings,
-      total: count || 0,
+      total: count,
       limit,
       offset,
       stats: {
-        total: statsTotal.count || 0,
-        active: statsActive.count || 0,
-        banned: statsBanned.count || 0,
-        sold: statsSold.count || 0,
-      }
+        total: statsTotal,
+        active: statsActive,
+        banned: statsBanned,
+        sold: statsSold,
+      },
     })
   } catch (error) {
     console.error('Error in admin listings API:', error)
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Internal server error' 
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error',
     }, { status: 500 })
   }
 }
@@ -170,13 +162,9 @@ export async function GET(request: NextRequest) {
 // PUT - Update listing status (ban/unban)
 export async function PUT(request: NextRequest) {
   try {
-    // Verify admin access
-    const authResult = await checkAuth(request, 'admin')
-    if (!authResult.authorized) {
-      return authResult.response
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.authorized) return authResult.error!
 
-    const supabase = getSupabaseAdmin()
     const body = await request.json()
     const { listing_id, status, reason } = body
 
@@ -189,27 +177,20 @@ export async function PUT(request: NextRequest) {
 
     const updateData: Record<string, unknown> = {
       status,
-      updated_at: new Date().toISOString(),
     }
 
     if (status === 'banned') {
-      updateData.banned_at = new Date().toISOString()
-      updateData.ban_reason = reason
+      updateData.is_banned = true
+      updateData.rejected_reason = reason
     } else if (status === 'active') {
-      updateData.banned_at = null
-      updateData.ban_reason = null
+      updateData.is_banned = false
+      updateData.rejected_reason = null
     }
 
-    const { data, error } = await supabase
-      .from('car_listings')
-      .update(updateData)
-      .eq('id', listing_id)
-      .select()
-      .single()
-
-    if (error) {
-      throw error
-    }
+    const data = await db.carListing.update({
+      where: { id: listing_id },
+      data: updateData,
+    })
 
     return NextResponse.json({
       success: true,
@@ -228,13 +209,9 @@ export async function PUT(request: NextRequest) {
 // DELETE - Delete listing permanently
 export async function DELETE(request: NextRequest) {
   try {
-    // Verify admin access
-    const authResult = await checkAuth(request, 'admin')
-    if (!authResult.authorized) {
-      return authResult.response
-    }
+    const authResult = await verifyAdmin(request)
+    if (!authResult.authorized) return authResult.error!
 
-    const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
     const listing_id = searchParams.get('id')
 
@@ -246,17 +223,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Soft delete
-    const { error } = await supabase
-      .from('car_listings')
-      .update({
-        deleted_at: new Date().toISOString(),
-        status: 'deleted'
-      })
-      .eq('id', listing_id)
-
-    if (error) {
-      throw error
-    }
+    await db.carListing.update({
+      where: { id: listing_id },
+      data: {
+        deleted_at: new Date(),
+        status: 'deleted',
+      },
+    })
 
     return NextResponse.json({
       success: true,

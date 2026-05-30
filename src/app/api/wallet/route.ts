@@ -1,66 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db'
 
 // GET - Fetch user wallet/credits balance
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Unauthorized - Silakan login terlebih dahulu' 
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId')
+
+    if (!userId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized - Silakan login terlebih dahulu',
       }, { status: 401 })
     }
 
-    // Get user credits from database
-    const { data: userCredit, error } = await supabase
-      .from('user_credits')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (error) {
-      console.error('Error fetching user credits:', error)
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Gagal mengambil data kredit' 
-      }, { status: 500 })
-    }
+    // Get user credits from database using db.userCredit
+    let userCredit = await db.userCredit.findUnique({
+      where: { user_id: userId },
+    })
 
     // If no credit record exists, create one
     if (!userCredit) {
-      const { data: newCredit, error: createError } = await supabase
-        .from('user_credits')
-        .insert({
-          user_id: user.id,
+      userCredit = await db.userCredit.create({
+        data: {
+          user_id: userId,
           balance: 0,
           total_earned: 0,
           total_spent: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-
-      if (createError) {
-        console.error('Error creating user credits:', createError)
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Gagal membuat data kredit' 
-        }, { status: 500 })
-      }
-
-      return NextResponse.json({
-        success: true,
-        credits: {
-          id: newCredit.id,
-          balance: 0,
-          total_earned: 0,
-          total_spent: 0
-        }
+        },
       })
     }
 
@@ -70,14 +37,14 @@ export async function GET(request: NextRequest) {
         id: userCredit.id,
         balance: userCredit.balance || 0,
         total_earned: userCredit.total_earned || 0,
-        total_spent: userCredit.total_spent || 0
-      }
+        total_spent: userCredit.total_spent || 0,
+      },
     })
   } catch (error) {
     console.error('Wallet API error:', error)
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Terjadi kesalahan server' 
+    return NextResponse.json({
+      success: false,
+      error: 'Terjadi kesalahan server',
     }, { status: 500 })
   }
 }
@@ -85,19 +52,15 @@ export async function GET(request: NextRequest) {
 // POST - Add credits to wallet (after purchase)
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Unauthorized - Silakan login terlebih dahulu' 
+    const body = await request.json()
+    const { userId, amount, packageId, paymentMethod, transactionId } = body
+
+    if (!userId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized - Silakan login terlebih dahulu',
       }, { status: 401 })
     }
-
-    const body = await request.json()
-    const { amount, packageId, paymentMethod, transactionId } = body
 
     if (!amount || amount <= 0) {
       return NextResponse.json(
@@ -107,19 +70,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has a credit record
-    const { data: existingCredit, error: fetchError } = await supabase
-      .from('user_credits')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (fetchError) {
-      console.error('Error checking existing credits:', fetchError)
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Gagal memeriksa saldo' 
-      }, { status: 500 })
-    }
+    let existingCredit = await db.userCredit.findUnique({
+      where: { user_id: userId },
+    })
 
     let newBalance = amount
     let result
@@ -127,55 +80,43 @@ export async function POST(request: NextRequest) {
     if (existingCredit) {
       // Update existing record
       newBalance = existingCredit.balance + amount
-      const { data, error } = await supabase
-        .from('user_credits')
-        .update({
+      result = await db.userCredit.update({
+        where: { id: existingCredit.id },
+        data: {
           balance: newBalance,
           total_earned: existingCredit.total_earned + amount,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingCredit.id)
-        .select()
-        .single()
-
-      if (error) throw error
-      result = data
+        },
+      })
     } else {
       // Create new record
-      const { data, error } = await supabase
-        .from('user_credits')
-        .insert({
-          user_id: user.id,
+      result = await db.userCredit.create({
+        data: {
+          user_id: userId,
           balance: amount,
           total_earned: amount,
           total_spent: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-      result = data
+        },
+      })
     }
 
-    // Record transaction
-    await supabase
-      .from('credit_transactions')
-      .insert({
+    // Record transaction using db.creditTransaction
+    await db.creditTransaction.create({
+      data: {
         user_credit_id: result.id,
+        user_id: userId,
         type: 'purchase',
         amount: amount,
         balance_before: existingCredit?.balance || 0,
         balance_after: newBalance,
         description: `Pembelian via ${paymentMethod || 'manual'} - Package: ${packageId || 'N/A'}`,
-        reference_id: transactionId || packageId
-      })
+        reference_id: transactionId || packageId,
+      },
+    })
 
     return NextResponse.json({
       success: true,
       credits: result,
-      message: 'Kredit berhasil ditambahkan'
+      message: 'Kredit berhasil ditambahkan',
     })
   } catch (error) {
     console.error('Error adding credits:', error)
@@ -189,19 +130,15 @@ export async function POST(request: NextRequest) {
 // PUT - Deduct credits (for internal use)
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Unauthorized' 
+    const body = await request.json()
+    const { userId, amount, description, referenceId, referenceType } = body
+
+    if (!userId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized',
       }, { status: 401 })
     }
-
-    const body = await request.json()
-    const { amount, description, referenceId, referenceType } = body
 
     if (!amount || amount <= 0) {
       return NextResponse.json(
@@ -211,62 +148,56 @@ export async function PUT(request: NextRequest) {
     }
 
     // Get current balance
-    const { data: existingCredit, error: fetchError } = await supabase
-      .from('user_credits')
-      .select('*')
-      .eq('user_id', user.id)
-      .single()
+    const existingCredit = await db.userCredit.findUnique({
+      where: { user_id: userId },
+    })
 
-    if (fetchError || !existingCredit) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Data kredit tidak ditemukan' 
+    if (!existingCredit) {
+      return NextResponse.json({
+        success: false,
+        error: 'Data kredit tidak ditemukan',
       }, { status: 404 })
     }
 
     if (existingCredit.balance < amount) {
-      return NextResponse.json({ 
-        success: false, 
+      return NextResponse.json({
+        success: false,
         error: 'Saldo tidak mencukupi',
         currentBalance: existingCredit.balance,
-        requestedAmount: amount
+        requestedAmount: amount,
       }, { status: 400 })
     }
 
     const newBalance = existingCredit.balance - amount
 
     // Update balance
-    const { data: result, error: updateError } = await supabase
-      .from('user_credits')
-      .update({
+    const result = await db.userCredit.update({
+      where: { id: existingCredit.id },
+      data: {
         balance: newBalance,
         total_spent: existingCredit.total_spent + amount,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', existingCredit.id)
-      .select()
-      .single()
+      },
+    })
 
-    if (updateError) throw updateError
-
-    // Record transaction
-    await supabase
-      .from('credit_transactions')
-      .insert({
+    // Record transaction using db.creditTransaction
+    await db.creditTransaction.create({
+      data: {
         user_credit_id: existingCredit.id,
+        user_id: userId,
         type: 'usage',
         amount: -amount, // Negative for deduction
         balance_before: existingCredit.balance,
         balance_after: newBalance,
         description: description || 'Penggunaan kredit',
-        reference_id: referenceId,
-        reference_type: referenceType
-      })
+        reference_id: referenceId || null,
+        reference_type: referenceType || null,
+      },
+    })
 
     return NextResponse.json({
       success: true,
       credits: result,
-      message: 'Kredit berhasil dikurangi'
+      message: 'Kredit berhasil dikurangi',
     })
   } catch (error) {
     console.error('Error deducting credits:', error)

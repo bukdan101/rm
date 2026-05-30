@@ -1,822 +1,1127 @@
-# 📋 PRODUCT REQUIREMENTS DOCUMENT (PRD)
-## AutoMarket — Marketplace Mobil Bekas Terpercaya Indonesia
-
-> **Versi:** 2.0 — Comprehensive Edition  
-> **Tanggal:** Maret 2026  
-> **Platform:** Web Application (Mobile-First Responsive)  
-> **Tech Stack:** Next.js 16 · TypeScript · Tailwind CSS 4 · shadcn/ui · Supabase · Prisma  
-> **Database:** 90 tabel PostgreSQL (Supabase) + 62 model Prisma (SQLite dev)  
+# 🚗 AutoMarket — Product Requirements Document (PRD)
+## Versi 2.0 | 4 Maret 2026
 
 ---
 
 ## DAFTAR ISI
 
-1. [Executive Summary](#1-executive-summary)
-2. [User Personas](#2-user-personas)
-3. [Product Architecture](#3-product-architecture)
-4. [Database Schema](#4-database-schema)
-5. [Feature Specifications](#5-feature-specifications)
-6. [Business Rules & Logic](#6-business-rules--logic)
-7. [API Specifications](#7-api-specifications)
-8. [UI/UX Specifications](#8-uiux-specifications)
-9. [Non-Functional Requirements](#9-non-functional-requirements)
-10. [Status & Known Issues](#10-status--known-issues)
-11. [Roadmap](#11-roadmap)
-12. [Glossary](#12-glossary)
+1. [Visi & Misi Produk](#1-visi--misi-produk)
+2. [User Roles & Personas](#2-user-roles--personas)
+3. [Arsitektur Sistem](#3-arsitektur-sistem)
+4. [User Flow — Lengkap](#4-user-flow--lengkap)
+5. [Feature Matrix — Per Role](#5-feature-matrix--per-role)
+6. [Detail Fitur Per Modul](#6-detail-fitur-per-modul)
+7. [Gap Analysis vs Kompetitor](#7-gap-analysis-vs-kompetitor)
+8. [Status Implementasi](#8-status-implementasi)
+9. [Roadmap](#9-roadmap)
 
 ---
 
-## 1. EXECUTIVE SUMMARY
+## 1. Visi & Misi Produk
 
-### 1.1 Visi Produk
-AutoMarket adalah platform marketplace jual-beli mobil bekas terpercaya di Indonesia yang menggabungkan **sistem inspeksi 160 titik**, **AI Price Prediction berbasis VLM**, dan **Dual Marketplace (C2C + B2B)** untuk menciptakan ekosistem otomotif yang transparan, aman, dan efisien.
+### Visi
+Menjadi marketplace otomotif #1 di Indonesia yang menghubungkan pembeli, penjual, dan dealer dalam satu ekosistem terpadu — dari listing, inspeksi, pembiayaan (kredit), hingga pembayaran via AstraPay.
 
-### 1.2 Masalah yang Dipecahkan
-| # | Masalah | Solusi AutoMarket |
-|---|---------|-------------------|
-| 1 | **Informasi mobil tidak transparan** — Pembeli tidak tahu kondisi aktual mobil | Inspeksi 160 titik dengan grading A+ s/d E |
-| 2 | **Harga tidak pasti** — Sulit menentukan harga wajar | AI Price Prediction dengan analisis foto VLM |
-| 3 | **Transaksi tidak aman** — Risiko penipuan tinggi | Escrow system + KYC verification |
-| 4 | **Dealer kesulitan cari stok** — Proses akuisisi mobil manual | Dealer Marketplace dengan sistem penawaran |
-| 5 | **Proses jual mobil ribet** — Harus negosiasi satu-satu | Dual marketplace + counter-offer system |
+### Misi
+- Memberikan pengalaman jual-beli mobil yang aman dan transparan: listing → inspeksi → negosiasi → transaksi
+- Menyediakan alat kredit/pembiayaan berbasis AstraPay dengan kalkulasi bunga flat dan jadwal cicilan
+- Memberdayakan dealer dengan dashboard khusus, inventory management, dan dealer marketplace
+- Membangun ekonomi token: 1 token = Rp 10.000 untuk akses fitur marketplace
+- Mengintegrasikan AI (VLM) untuk prediksi harga dan analisis kondisi kendaraan
 
-### 1.3 Proposisi Nilai Unik
-- 🔍 **Inspeksi 160 Titik** — Grading objektif A+ (Istimewa) sampai E (Perlu Perbaikan)
-- 🤖 **AI Price Prediction** — VLM menganalisis 5 foto kendaraan + data pasar
-- 🏪 **Dual Marketplace** — Public (C2C, 30 hari) + Dealer (B2B, 7 hari)
-- 🔐 **KYC + Escrow** — Verifikasi KTP & selfie, dana ditahan sampai deal
-- 💰 **Token Economy** — 1 token = Rp 10.000, paket mulai 50 token
-- 🇮🇩 **100% Bahasa Indonesia** — UI, error messages, format mata uang IDR
-
----
-
-## 2. USER PERSONAS
-
-### 👤 Persona 1: "Andi si Pemula Jual Mobil"
-
-| Atribut | Detail |
-|---------|--------|
-| **Nama** | Andi Wijaya |
-| **Usia** | 28 tahun |
-| **Pekerjaan** | Karyawan Swasta di Jakarta |
-| **Penghasilan** | Rp 8.000.000/bulan |
-| **Teknologi** | Android user, aktif Instagram & Tokopedia |
-| **Kendaraan** | Toyota Avanza 2018, mau dijual untuk upgrade |
-
-**Kebutuhan:**
-- ❓ "Berapa harga wajar Avanza 2018 saya?"
-- ❓ "Bagaimana cara jual mobil agar cepat laku?"
-- ❓ "Takut ditipu pembeli, gimana caranya aman?"
-
-**Frustrasi:**
-- Tidak tahu harga pasar mobilnya
-- Bingung negosiasi dengan pembeli/calon
-- Khawatir proses transaksi tidak aman
-- Tidak punya waktu untuk handle proses jual yang ribet
-
-**User Journey di AutoMarket:**
-```
-1. Buka AutoMarket → Lihat "AI Prediction" → Masukkan data Avanza
-2. Upload 5 foto → Isi form 160 titik → Dapat prediksi: Rp 125-140 juta
-3. "Oke, saya mau jual!" → Daftar akun (Google OAuth)
-4. KYC Verification → Upload KTP + Selfie → Menunggu approval (1x24 jam)
-5. Buat Listing → Pilih "Marketplace Umum" (3 token = Rp 30.000)
-6. Listing aktif 30 hari → Dapat 5 penawaran dari pembeli
-7. Terima penawaran terbaik → Transaksi via Escrow → Mobil terjual!
-```
-
-**Fitur yang Paling Dipakai:**
-- 🏠 Landing Page (browse kategori brand)
-- 🤖 AI Price Prediction (cek harga dulu)
-- 📝 Create Listing (jual mobil)
-- 📊 Dashboard (monitor penawaran)
-- 💬 Chat (negosiasi dengan pembeli)
+### Referensi Kompetitor
+| Platform | URL | Model Bisnis |
+|----------|-----|-------------|
+| Mobil123 | mobil123.com | Listing gratis + premium, dealer subscription |
+| Carmudi | carmudi.co.id | Listing fee, lead generation, dealer portal |
+| OLX Autos | olxautos.co.id | C2C marketplace, inspeksi, buyback guarantee |
+| Rotogravure | roto.com | Inspeksi mobil, sertifikasi, guarantee |
+| Carsome | carsome.id | B2C auction, inspeksi, dealer bidding |
 
 ---
 
-### 👤 Persona 2: "Sari si Pembeli Cerdas"
+## 2. User Roles & Personas
 
-| Atribut | Detail |
-|---------|--------|
-| **Nama** | Sari Putri |
-| **Usia** | 32 tahun |
-| **Pekerjaan** | Manager Marketing di Bandung |
-| **Penghasilan** | Rp 15.000.000/bulan |
-| **Teknologi** | iPhone user, aktif OLX & Instagram |
-| **Kebutuhan** | Cari mobil keluarga yang terjamin kualitasnya |
+### 2.1 Role Hierarchy
 
-**Kebutuhan:**
-- ❓ "Mau beli mobil bekas tapi takut mendapat bodi jelek"
-- ❓ "Bagaimana yakin kondisi mobil sesuai iklan?"
-- ❓ "Butuh mobil yang inspeksinya lengkap dan transparan"
-
-**Frustrasi:**
-- Sering melihat iklan mobil yang foto tidak sesuai aktual
-- Tidak bisa percaya kata penjual tanpa bukti inspeksi
-- Proses cek mobil harus ke bengkel sendiri, ribet
-- Harga penjual sering di atas pasar
-
-**User Journey di AutoMarket:**
 ```
-1. Buka AutoMarket → Cari "SUV" → Filter brand Toyota, harga <200jt
-2. Lihat listing dengan badge "Inspeksi A" → Klik detail
-3. Baca laporan 160 titik → Semua "Baik" → Confidence tinggi
-4. Favoritkan 3 mobil → Bandingkan side-by-side (Compare)
-5. Chat penjual → Tanya service record → Negosiasi harga
-6. Setuju harga → Proses order via Escrow → Bayar → Mobil diterima!
+ADMIN
+  └── (full platform access)
+BUYER (public register)
+  └── bisa upgrade → SELLER (via KYC)
+        └── bisa upgrade → DEALER (via dealer registration + admin approval)
+              └── DEALER_STAFF (created by DEALER)
+INSPECTOR (assigned by system/admin)
 ```
 
-**Fitur yang Paling Dipakai:**
-- 🔍 Search & Filter (cari mobil spesifik)
-- 📋 Inspection Report (baca laporan inspeksi)
-- ⚖️ Compare (bandingkan 4 mobil)
-- ❤️ Favorites (simpan mobil potensial)
-- 💬 Chat (tanya penjual)
+### 2.2 Persona Detail
+
+| Role | Deskripsi | Akses Utama | Login Via |
+|------|-----------|-------------|-----------|
+| **ADMIN** | Platform owner, mengelola seluruh sistem, approve KYC & dealer | `/admin` — Semua menu | NextAuth / Supabase |
+| **BUYER** | Pengguna umum yang mencari & membeli mobil | `/` — Marketplace + `/dashboard` (terbatas) | NextAuth / Google |
+| **SELLER** | Pemilik mobil yang ingin menjual (wajib KYC) | `/dashboard` — Listing, inspeksi, pesan | NextAuth / Google |
+| **DEALER** | Showroom/dealer resmi dengan banyak inventory | `/dealer` — Dealer dashboard + marketplace | NextAuth / Google |
+| **DEALER_STAFF** | Staf dealer yang membantu operasional | `/dealer` — Menu terbatas sesuai permission | NextAuth / Google |
+| **INSPECTOR** | Pihak ketiga yang melakukan inspeksi kendaraan | `/dashboard/inspeksi` — Input hasil inspeksi | NextAuth / Google |
+
+### 2.3 Perbandingan Dashboard
+
+| Aspek | ADMIN | DEALER | SELLER | BUYER |
+|-------|-------|--------|--------|-------|
+| **Dashboard** | Platform-wide KPIs: total listings, revenue, users | Dealer-scope: inventory, offers, team | My listings, views, inquiries | My favorites, orders, predictions |
+| **Listings** | Semua listing di platform | Hanya listing dealer sendiri | Hanya listing milik sendiri | Browse & search saja |
+| **Keuangan** | Semua transaksi, fee, withdrawal | Pendapatan dealer, saldo, withdrawal | Penjualan, saldo | Pembayaran, kredit |
+| **Dealer** | Approve/reject dealer, set fee | Edit profil, kelola tim | Tidak ada akses | Lihat profil dealer |
+| **Inspeksi** | Semua inspeksi, kategori, pricing | Inspeksi listing dealer | Inspeksi listing sendiri | Lihat hasil inspeksi |
+| **Settings** | Fee, AstraPay, token, sistem | Pengaturan dealer marketplace | Pengaturan profil | Pengaturan profil |
 
 ---
 
-### 👤 Persona 3: "Pak Budi si Dealer Profesional"
+## 3. Arsitektur Sistem
 
-| Atribut | Detail |
-|---------|--------|
-| **Nama** | Budi Santoso |
-| **Usia** | 45 tahun |
-| **Pekerjaan** | Pemilik Showroom "Budi Motor" di Surabaya |
-| **Penghasilan** | Rp 50.000.000/bulan (turnover showroom) |
-| **Teknologi** | Laptop + Android, pakai Excel untuk inventory |
-| **Inventori** | 30 mobil di showroom, butuh 10 mobil/bulan |
+### 3.1 Infrastructure
 
-**Kebutuhan:**
-- ❓ "Butuh stok mobil bekas berkualitas untuk showroom"
-- ❓ "Mau beli langsung dari pemilik, tanpa perantara"
-- ❓ "Perlu analitik penjualan showroom"
-
-**Frustrasi:**
-- Susah cari mobil bekas berkualitas dari pemilik langsung
-- Proses akuisisi mobil lama (datang satu-satu, tawar-menawar)
-- Tidak ada dashboard yang tracking performa showroom
-- Kompetisi dengan dealer lain yang lebih cepat akuisisi
-
-**User Journey di AutoMarket:**
 ```
-1. Daftar Dealer → Submit dokumen (NPWP, NIB, SIUP, KTP) → Menunggu approval
-2. Login → Dashboard Dealer → Lihat inventori & stats
-3. Buka Dealer Marketplace → Filter mobil dengan inspeksi A/B
-4. Temukan 5 mobil cocok → Buat penawaran pada masing-masing
-5. Seller terima penawaran → Bayar via Escrow → Mobil dikirim ke showroom
-6. Listing mobil di Public Marketplace → Terjual ke end-buyer
-7. Lihat analitik: 12 mobil terjual bulan ini, revenue Rp 180jt
-```
-
-**Fitur yang Paling Dipakai:**
-- 🏪 Dealer Marketplace (cari stok mobil)
-- 💰 Dealer Offers (buat/terima penawaran)
-- 📊 Dealer Stats & Analytics (monitor performa)
-- 📦 Dealer Inventory (kelola stok)
-- 👥 Team Management (kelola staf showroom)
-- ⭐ Reviews (reputation management)
-
----
-
-### 👤 Persona 4: "Rina si Admin Platform"
-
-| Atribut | Detail |
-|---------|--------|
-| **Nama** | Rina Kusuma |
-| **Usia** | 30 tahun |
-| **Pekerjaan** | Operations Manager AutoMarket |
-| **Penghasilan** | Rp 12.000.000/bulan |
-| **Teknologi** | Desktop, pakai CRM & analytics tools |
-| **Tanggung Jawab** | Moderasi platform, review KYC, kelola user |
-
-**Kebutuhan:**
-- ❓ "Harus bisa review KYC dengan cepat dan akurat"
-- ❓ "Perlu monitoring listing yang melanggar aturan"
-- ❓ "Butuh data analytics untuk report ke management"
-
-**Frustrasi:**
-- Banyak listing spam/fraud yang harus di-moderasi manual
-- Proses KYC review lama karena tidak terautomasi
-- Sulit tracking revenue dan growth tanpa dashboard yang proper
-
-**User Journey di AutoMarket:**
-```
-1. Login → Admin Dashboard → 8 stat cards (users, listings, revenue, dll)
-2. Review KYC → 10 pengajuan menunggu → Approve/Reject dengan alasan
-3. Review Dealer Registration → Cek dokumen → Approve/Reject
-4. Moderasi Listings → Ban listing yang melanggar → Beri alasan
-5. Cek Revenue → Chart pendapatan bulanan → Export report
-6. Kelola Token Settings → Update harga token
-7. Broadcast → Kirim notifikasi ke semua user
-```
-
-**Fitur yang Paling Dipakai:**
-- 📊 Admin Dashboard (overview stats)
-- ✅ KYC Review (verifikasi user)
-- 🏪 Dealer Approval (approve/reject dealer)
-- 📝 Listings Moderation (ban/feature listing)
-- 💰 Revenue & Analytics (monitor pendapatan)
-- ⚙️ Settings (konfigurasi platform)
-
----
-
-### 👤 Persona 5: "Dimas si Inspector"
-
-| Atribut | Detail |
-|---------|--------|
-| **Nama** | Dimas Pratama |
-| **Usia** | 35 tahun |
-| **Pekerjaan** | Mekanik Profesional / Inspector |
-| **Penghasilan** | Rp 7.000.000/bulan + fee inspeksi |
-| **Teknologi** | Android, aktif WhatsApp |
-| **Spesialis** | Inspeksi 160 titik, grading kendaraan |
-
-**Kebutuhan:**
-- ❓ "Mau kerja sebagai inspector freelance"
-- ❓ "Butuh jadwal inspeksi yang terorganisir"
-- ❓ "Ingin hasil inspeksi saya terdokumentasi rapi"
-
-**User Journey di AutoMarket:**
-```
-1. Daftar akun → Role: Inspector
-2. Terima booking inspeksi → Lihat jadwal → Datang ke lokasi
-3. Isi form 160 titik → Upload foto → Submit
-4. AI menganalisis → Grade: B+ → Estimasi harga: Rp 130-145jt
-5. Seller beli sertifikat → Sertifikat terbit → Inspector dapat fee
-```
-
----
-
-## 3. PRODUCT ARCHITECTURE
-
-### 3.1 System Architecture
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    FRONTEND (Next.js 16)                      │
-│                                                               │
-│  ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────┐   │
-│  │ Landing  │ │Marketplace│ │Dashboard │ │  Admin Panel   │   │
-│  │  Page    │ │  & Search │ │  (User)  │ │  (Management)  │   │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └───────┬────────┘   │
-│       │            │            │                │             │
-│  ┌────▼────────────▼────────────▼────────────────▼─────────┐  │
-│  │              API Routes (80+ endpoints)                  │  │
-│  │  Listings │ Marketplace │ Credits │ Inspections │ Admin  │  │
-│  └──────────────────────┬──────────────────────────────────┘  │
-│                         │                                     │
-│  ┌──────────────────────▼──────────────────────────────────┐  │
-│  │              Business Logic Layer                         │  │
-│  │  api-auth │ api-utils │ token-service │ dealer-offer-svc │  │
-│  └──────────────────────┬──────────────────────────────────┘  │
-│                         │                                     │
-│  ┌──────────────────────▼──────────────────────────────────┐  │
-│  │              Data Layer                                   │  │
-│  │  Supabase Client (PostgreSQL) │ Prisma (SQLite dev)      │  │
-│  │  90 Tables │ Auth │ Storage │ Realtime                   │  │
-│  └─────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                  Next.js 16 (App Router)             │
+│                  Port: 3000                          │
+│                                                      │
+│  ┌──────────────────┐    ┌──────────────────────┐   │
+│  │  Frontend (SSR)  │    │  API Routes (127)     │   │
+│  │  React 19        │    │  /api/*               │   │
+│  │  shadcn/ui       │    │  NextAuth + RBAC      │   │
+│  └────────┬─────────┘    └───────────┬───────────┘   │
+│           │                          │               │
+│           ▼                          ▼               │
+│  ┌──────────────────┐    ┌──────────────────────┐   │
+│  │  Zustand         │    │  Prisma ORM           │   │
+│  │  TanStack Query  │    │  SQLite (dev)         │   │
+│  │  (Client State)  │    │  67 Models            │   │
+│  └──────────────────┘    └──────────────────────┘   │
+│                                                      │
+│  ┌──────────────────┐    ┌──────────────────────┐   │
+│  │  Supabase        │    │  AstraPay API         │   │
+│  │  (Legacy/Auth)   │    │  OAuth2 + Payment     │   │
+│  └──────────────────┘    │  + Paylater + KYC     │   │
+│                          └──────────────────────┘   │
+│  ┌──────────────────┐    ┌──────────────────────┐   │
+│  │  z-ai-web-dev-sdk│    │  Local Filesystem     │   │
+│  │  (VLM, LLM)      │    │  (images, documents)  │   │
+│  └──────────────────┘    └──────────────────────┘   │
+└─────────────────────────────────────────────────────┘
 ```
 
 ### 3.2 Tech Stack
-| Komponen | Teknologi | Versi |
-|----------|-----------|-------|
-| Framework | Next.js (App Router) | 16.x |
-| Language | TypeScript | 5.x |
-| Styling | Tailwind CSS + shadcn/ui | 4.x |
-| Database | Supabase (PostgreSQL) | - |
-| ORM (Dev) | Prisma (SQLite) | 6.x |
-| Auth | Supabase Auth (Google OAuth) | - |
-| Charts | Recharts | 2.x |
-| Animation | Framer Motion | 12.x |
-| State | React hooks + Zustand | 5.x |
-| Forms | React Hook Form + Zod | 7.x / 4.x |
-| AI | z-ai-web-dev-sdk (VLM, LLM) | 0.0.18 |
+
+| Layer | Teknologi |
+|-------|-----------|
+| **Framework** | Next.js 16, React 19, TypeScript 5 |
+| **Styling** | Tailwind CSS 4, shadcn/ui (New York style), Framer Motion |
+| **Database** | Prisma ORM + SQLite (dev), Supabase (auth/legacy) |
+| **Payment** | AstraPay SNAP API (VA, QRIS, e-wallet, paylater, direct debit) |
+| **Auth** | NextAuth.js v4 + Supabase Auth + Google OAuth |
+| **State** | Zustand (client) + TanStack Query (server) |
+| **AI** | z-ai-web-dev-sdk (VLM untuk analisis gambar, LLM untuk prediksi harga) |
+| **Forms** | React Hook Form + Zod validation |
+| **Charts** | Recharts |
+| **i18n** | next-intl (Bahasa Indonesia) |
+| **Runtime** | Bun |
+
+### 3.3 Database — 67 Models (20 Modul)
+
+| # | Model | Modul | Fungsi |
+|---|-------|-------|--------|
+| 1 | `Profile` | USER | Semua user (5 role), soft-delete, last_login |
+| 2 | `Dealer` | DEALER | Profil dealer, slug, rating, subscription_tier, verified |
+| 3 | `DealerStaff` | DEALER | Staf→Dealer assignment dengan permission (can_edit, can_delete) |
+| 4 | `DealerReview` | DEALER | Review & rating dealer dari buyer |
+| 5 | `DealerRegistration` | DEALER | Pendaftaran dealer baru (KTP, NPWP, NIB, SIUP, dokumen) |
+| 6 | `Brand` | CAR MASTER | Merk mobil (logo, country, is_popular) |
+| 7 | `CarModel` | CAR MASTER | Model mobil per brand (body_type) |
+| 8 | `CarVariant` | CAR MASTER | Varian per model (year, transmission, fuel, engine, price) |
+| 9 | `CarColor` | CAR MASTER | Warna mobil (hex_code, is_metallic) |
+| 10 | `CarListing` | LISTING | Listing mobil utama (30+ field, slug, status, marketplace_type) |
+| 11 | `CarImage` | LISTING | Gambar listing (is_primary, display_order) |
+| 12 | `CarVideo` | LISTING | Video listing |
+| 13 | `CarDocument` | LISTING | Dokumen (STNK, BPKB, faktur, verified) |
+| 14 | `CarFeature` | LISTING | 20 fitur boolean (sunroof, cruise_control, airbag, dll.) |
+| 15 | `CarFavorite` | LISTING | Favorit user (unique user+listing) |
+| 16 | `CarRentalPrice` | LISTING | Harga sewa (per jam/hari/minggu/bulan + deposit) |
+| 17 | `InspectionCategory` | INSPECTION | Kategori inspeksi (icon, order_index) |
+| 18 | `InspectionItem` | INSPECTION | Item inspeksi per kategori (is_critical) |
+| 19 | `CarInspection` | INSPECTION | Hasil inspeksi (160 poin, grade, sertifikat, AI price) |
+| 20 | `InspectionResult` | INSPECTION | Detail hasil per item (status, foto, severity) |
+| 21 | `InspectionBooking` | INSPECTION | Booking jadwal inspeksi |
+| 22 | `InspectionPricing` | INSPECTION | Paket harga inspeksi |
+| 23 | `CertificatePurchase` | INSPECTION | Pembelian sertifikat inspeksi |
+| 24 | `KycVerification` | KYC | Verifikasi identitas (KTP, selfie, alamat) |
+| 25 | `UserCredit` | CREDIT | Saldo kredit user (balance, total_earned, total_spent) |
+| 26 | `CreditTransaction` | CREDIT | Riwayat transaksi kredit |
+| 27 | `CreditPackage` | CREDIT | Paket kredit yang bisa dibeli |
+| 28 | `CreditUsageLog` | CREDIT | Log penggunaan kredit |
+| 29 | `RegistrationBonusTracker` | CREDIT | Bonus registrasi |
+| 30 | `TokenSetting` | TOKEN | Setting token per aksi (key, tokens, category) |
+| 31 | `TokenPackage` | TOKEN | Paket token yang bisa dibeli |
+| 32 | `TokenTransaction` | TOKEN | Riwayat transaksi token |
+| 33 | `TokenBalance` | TOKEN | Saldo token user |
+| 34 | `UserToken` | TOKEN | Saldo token user (alternate) |
+| 35 | `Payment` | PAYMENT | Pembayaran (credits_awarded, proof_url, va_number) |
+| 36 | `ListingBoost` | PAYMENT | Boost listing (featured, urgent, dll.) |
+| 37 | `BoostFeature` | PAYMENT | Jenis boost yang tersedia |
+| 38 | `Conversation` | CHAT | Percakapan buyer↔seller per listing |
+| 39 | `Message` | CHAT | Pesan dalam percakapan (text, is_read) |
+| 40 | `Order` | ORDER | Transaksi jual-beli (escrow, fee breakdown) |
+| 41 | `Notification` | NOTIFICATION | Notifikasi user (type, action_url) |
+| 42 | `DealerOffer` | DEALER MKT | Penawaran dealer ke listing (counter-offer, financing) |
+| 43 | `DealerOfferHistory` | DEALER MKT | Riwayat negosiasi offer |
+| 44 | `DealerMarketplaceFavorite` | DEALER MKT | Favorit dealer di marketplace |
+| 45 | `DealerMarketplaceSettings` | DEALER MKT | Setting marketplace (offer_duration, max_counter) |
+| 46 | `DealerOfferSettings` | DEALER MKT | Setting offer (key-value) |
+| 47 | `DealerMarketplaceView` | DEALER MKT | Log view listing oleh dealer |
+| 48 | `AiPrediction` | AI | Prediksi harga AI (VLM analysis, market data, confidence) |
+| 49 | `PredictionPhoto` | AI | Foto untuk prediksi (VLM analyzed) |
+| 50 | `PredictionFactor` | AI | Faktor yang mempengaruhi prediksi (impact, weight) |
+| 51 | `AiPriceAnalysis` | AI | Analisis harga dari inspeksi |
+| 52 | `Country` | LOCATION | Data negara |
+| 53 | `Province` | LOCATION | Data provinsi Indonesia |
+| 54 | `City` | LOCATION | Data kota/kabupaten |
+| 55 | `District` | LOCATION | Data kecamatan |
+| 56 | `Village` | LOCATION | Data kelurahan/desa |
+| 57 | `Banner` | BANNER | Banner promosi (position, impressions, clicks) |
+| 58 | `UserSetting` | SETTINGS | Pengaturan user (theme, language, notifications) |
+| 59 | `AnalyticsPageView` | ANALYTICS | Page view tracking |
+| 60 | `CarView` | ANALYTICS | Listing view tracking |
+| 61 | `Wallet` | WALLET | Saldo dompet user |
+| 62 | `AstraPayConfig` | ASTRAPAY | Konfigurasi AstraPay (client_id, keys, sandbox) |
+| 63 | `AstraPayToken` | ASTRAPAY | Audit trail OAuth token AstraPay |
+| 64 | `AstraPayAccountLink` | ASTRAPAY | User yang sudah link akun AstraPay |
+| 65 | `AstraPayTransaction` | ASTRAPAY | Transaksi pembayaran AstraPay (full lifecycle) |
+| 66 | `CreditApplication` | CREDIT/FIN | Aplikasi kredit kendaraan (bunga flat, tenor 1-84 bulan) |
+| 67 | `CreditPayment` | CREDIT/FIN | Jadwal cicilan bulanan (principal + interest + late fee) |
 
 ---
 
-## 4. DATABASE SCHEMA
+## 4. User Flow — Lengkap
 
-### 4.1 Overview — 90 Tabel dalam 18 Modul
-
-| # | Modul | Jumlah Tabel | Tabel Utama |
-|---|-------|-------------|-------------|
-| 1 | **User System** | 7 | profiles, user_addresses, user_documents, user_verifications, user_sessions, user_notifications, user_settings |
-| 2 | **Dealer System** | 7 | dealers, dealer_branches, dealer_staff, dealer_documents, dealer_reviews, dealer_inventory, dealer_registrations |
-| 3 | **Car Master Data** | 8 | brands, car_models, car_variants, car_generations, car_colors, car_body_types, car_fuel_types, car_transmissions |
-| 4 | **Car Features** | 4 | feature_categories, feature_groups, feature_items, car_feature_values |
-| 5 | **Listing System** | 10 | car_listings ⭐, car_images, car_videos, car_documents, car_features, car_price_history, car_status_history, car_views, car_favorites, car_compares |
-| 6 | **Inspection System** | 12 | inspection_categories, inspection_items, car_inspections, inspection_results, inspection_photos, inspection_certificates, inspection_pricing, inspection_bookings, ai_price_analysis, certificate_purchases, inspector_profiles, inspection_item_comments |
-| 7 | **Rental System** | 6 | car_rental_prices, rental_bookings, rental_availability, rental_payments, rental_reviews, rental_insurance |
-| 8 | **Transaction System** | 8 | orders, order_items, payments, payment_methods, escrow_accounts, transactions, refunds, invoices |
-| 9 | **Chat System** | 3 | conversations, messages, message_attachments |
-| 10 | **Review & Rating** | 3 | car_reviews, review_votes, review_images |
-| 11 | **Search & Discovery** | 4 | search_logs, recommendations, recent_views, trending_cars |
-| 12 | **Analytics** | 4 | analytics_events, analytics_page_views, analytics_clicks, analytics_conversions |
-| 13 | **Notifications** | 3 | notifications, notification_templates, notification_logs |
-| 14 | **Location** | 5 | countries, provinces, cities, districts, villages |
-| 15 | **Credit & Token** | 13 | credit_packages, user_credits, credit_transactions, payments, boost_features, listing_boosts, registration_bonus_tracker, credit_usage_log, token_settings, token_packages, user_tokens, token_transactions, token_usage_logs |
-| 16 | **AI Prediction** | 8 | ai_predictions, prediction_photos, prediction_factors, dealer_offer_settings, dealer_offers, market_price_history, prediction_market_data, ai_prediction_templates |
-| 17 | **Dealer Marketplace** | 5 | dealer_marketplace_settings, dealer_offers, dealer_offer_histories, dealer_marketplace_favorites, dealer_marketplace_views |
-| 18 | **Admin System** | 14 | kyc_verifications, withdrawals, topup_requests, reports, support_tickets, support_ticket_messages, banners, coupons, broadcasts, activity_logs, categories, boost_settings, system_settings, fee_settings |
-
-### 4.2 Central Table: `car_listings`
-Tabel `car_listings` adalah tabel pusat yang terhubung ke hampir semua modul:
+### 4.1 🟢 ADMIN Flow
 
 ```
-car_listings
-├── FK → brands (brand_id)
-├── FK → car_models (model_id)
-├── FK → car_variants (variant_id)
-├── FK → car_colors (exterior_color_id, interior_color_id)
-├── FK → profiles (user_id = seller)
-├── FK → dealers (dealer_id)
-├── 1:N → car_images, car_videos, car_documents, car_features
-├── 1:N → car_favorites, car_views, car_price_history
-├── 1:N → car_inspections, inspection_bookings
-├── 1:N → orders, conversations, car_reviews
-├── 1:N → dealer_offers
-├── 1:1 → car_rental_prices
-└── Fields: visibility, marketplace_type, tokens_used, status, dll.
+┌─────────────────────────────────────────────────────────────────┐
+│                      ADMIN USER FLOW                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Login ──► Dashboard (Platform KPIs)                            │
+│                │                                                 │
+│    ┌───────────┼───────────────┬──────────────┐                  │
+│    ▼           ▼               ▼              ▼                  │
+│  ┌─────────┐ ┌──────────┐ ┌───────────┐ ┌───────────┐         │
+│  │ Users   │ │ Listings │ │  Dealers  │ │  Orders   │         │
+│  │Manage   │ │All+Ban   │ │Approve/   │ │  All      │         │
+│  │Roles    │ │Featured  │ │Reject     │ │Filter     │         │
+│  └─────────┘ └──────────┘ └───────────┘ └───────────┘         │
+│    ┌───────────┼───────────────┬──────────────┐                  │
+│    ▼           ▼               ▼              ▼                  │
+│  ┌─────────┐ ┌──────────┐ ┌───────────┐ ┌───────────┐         │
+│  │ KYC     │ │Payments  │ │ Credits   │ │  Tokens   │         │
+│  │Review   │ │Verify    │ │Packages   │ │Settings   │         │
+│  │Approve/ │ │Proof     │ │Manage     │ │Pricing    │         │
+│  │Reject   │ │          │ │           │ │           │         │
+│  └─────────┘ └──────────┘ └───────────┘ └───────────┘         │
+│    ┌───────────┼───────────────┬──────────────┐                  │
+│    ▼           ▼               ▼              ▼                  │
+│  ┌─────────┐ ┌──────────┐ ┌───────────┐ ┌───────────┐         │
+│  │Analytics│ │ Revenue  │ │  Banners  │ │  Coupons  │         │
+│  │Charts   │ │Reports   │ │  CRUD     │ │  CRUD     │         │
+│  │Advanced │ │Export    │ │           │ │           │         │
+│  └─────────┘ └──────────┘ └───────────┘ └───────────┘         │
+│    ┌───────────┼───────────────┬──────────────┐                  │
+│    ▼           ▼               ▼              ▼                  │
+│  ┌─────────┐ ┌──────────┐ ┌───────────┐ ┌───────────┐         │
+│  │Settings │ │ Activity │ │Withdrawals│ │  Boost    │         │
+│  │Fee/AP/  │ │  Logs    │ │Approve/   │ │  Features │         │
+│  │General  │ │Filterable│ │Reject     │ │  Manage   │         │
+│  └─────────┘ └──────────┘ └───────────┘ └───────────┘         │
+│    ┌───────────┼───────────────┐                                │
+│    ▼           ▼               ▼                                 │
+│  ┌─────────┐ ┌──────────┐ ┌───────────┐                        │
+│  │  Topup  │ │Inspection│ │  Dealer   │                        │
+│  │ Manual  │ │Categories│ │Marketplace│                        │
+│  │         │ │Pricing   │ │ Settings  │                        │
+│  └─────────┘ └──────────┘ └───────────┘                        │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.3 Prisma Schema
-Untuk development lokal, digunakan Prisma dengan SQLite yang mencakup **62 model** dari tabel-tabel yang paling sering diakses API. File: `/prisma/schema.prisma`
+### 4.2 🔵 DEALER Flow
 
-### 4.4 Enum Types (9 PostgreSQL Enums)
-| Enum | Values |
-|------|--------|
-| `fuel_type` | bensin, diesel, electric, hybrid, petrol_hybrid |
-| `transmission_type` | automatic, manual |
-| `body_type` | sedan, suv, mpv, hatchback, pickup, van, coupe, convertible, wagon |
-| `vehicle_transaction_type` | jual, beli, rental |
-| `vehicle_condition` | baru, bekas, sedang, istimewa |
-| `inspection_status` | baik, sedang, perlu_perbaikan, istimewa |
-| `order_status` | pending, confirmed, processing, completed, cancelled, refunded |
-| `payment_status` | pending, paid, failed, refunded |
-| `booking_status` | pending, confirmed, active, completed, cancelled |
-
----
-
-## 5. FEATURE SPECIFICATIONS
-
-### 5.1 LANDING PAGE (`/`)
-
-| Fitur | Deskripsi | Persona |
-|-------|-----------|---------|
-| Hero Banner Iklan | Banner 2/3 + 1/3 layout dengan AdBanner | Semua |
-| Statistik Platform | 10K+ mobil, 8.5K+ inspeksi, 6.2K+ transaksi, 500+ dealer | Sari, Andi |
-| Kategori Brand | 31 brand mobil dengan logo + model sub-kategori | Andi, Sari |
-| Filter Body Type | 11 tipe body dengan ikon SVG custom | Sari |
-| Premium Listings | Listing yang di-boost dengan gradient ring | Sari, Pak Budi |
-| Flash Sale | Featured listing dengan badge Premium | Sari |
-| Auction Section | Lelang dengan countdown timer real-time | Sari, Pak Budi |
-| Listing Terbaru | Grid listing terbaru + skeleton loading | Sari |
-| Listing Populer | Listing populer minggu ini | Sari |
-| Sponsor Logos | Grid 31 logo brand sponsor | - |
-| CTA Section | "Mulai jualan di AutoMarket sekarang!" | Andi |
-| Listing Detail | Detail listing inline via `?id=` | Sari, Andi |
-
-### 5.2 AUTHENTICATION (`/auth`)
-
-| Fitur | Deskripsi | Persona |
-|-------|-----------|---------|
-| Google OAuth | Login via Google Sign-In (Supabase Auth) | Semua |
-| Auto Profile | Otomatis buat profil saat pertama login | Andi |
-| Role System | buyer → seller → dealer → admin | Semua |
-| Redirect | `?redirect=` parameter setelah login | Andi |
-
-### 5.3 MARKETPLACE
-
-#### Public Marketplace (`/marketplace`)
-| Fitur | Deskripsi | Persona |
-|-------|-----------|---------|
-| Search & Filter | Search + 9 filter dimensions | Sari |
-| Filter Panel | Desktop sidebar + mobile sheet | Sari |
-| Sort | Terbaru, harga, mileage, tahun | Sari |
-| Grid/List View | Toggle tampilan | Sari |
-| Compare | Bandingkan hingga 4 mobil | Sari |
-
-#### Dealer Marketplace (`/dealer-marketplace`)
-| Fitur | Deskripsi | Persona |
-|-------|-----------|---------|
-| Workflow Info | 4-tab info lengkap | Pak Budi |
-| 3 Selling Modes | Bidding, Best Offer, Direct Deal | Pak Budi |
-| Token Cost | Perbandingan biota Dealer vs Public | Pak Budi |
-
-#### Listing Detail (`/?id=`)
-| Fitur | Deskripsi | Persona |
-|-------|-----------|---------|
-| Image Gallery | Carousel + thumbnail navigation | Sari |
-| Specs | Harga, dokumen, inspeksi, lokasi, penjual | Sari |
-| Inspection Report | 160 titik per kategori | Sari |
-| Contact Info | Privacy-aware (WA untuk publik, offer untuk dealer) | Sari, Pak Budi |
-| Favorite | Tambah/hapus favorit | Sari |
-| Dealer Offer Modal | Submit penawaran + financing & pickup | Pak Budi |
-| Social Share | Share ke social media | Andi |
-
-### 5.4 CREATE LISTING (`/listing/create`)
-
-**Flow:** Auth → KYC Gate → Credit Check → 5-Step Form → Submit
-
-| Step | Fitur | Persona |
-|------|-------|---------|
-| Gate 1 | Auth Check (redirect login) | Andi |
-| Gate 2 | KYC Verification (wajib verified) | Andi |
-| Gate 3 | Credit Balance (1 credit/listing) | Andi |
-| Step 1 | Basic Info: Brand, Model, Tahun, Judul, Kondisi, Harga | Andi |
-| Step 2 | Details: BBM, Transmisi, Mileage, Warna, Lokasi | Andi |
-| Step 3 | Marketplace: Umum (3 token) / Dealer (5 token) / Both (8 token) | Andi, Pak Budi |
-| Step 4 | Photos: Upload foto kendaraan | Andi |
-| Step 5 | Review & Submit | Andi |
-
-### 5.5 DASHBOARD USER (`/dashboard`)
-
-| Halaman | Fitur Utama | Persona |
-|---------|-------------|---------|
-| **Home** | 4 stats, quick actions, charts, recent activity | Andi |
-| **Notifications** | Filter all/unread, mark read, 30s polling | Andi, Sari |
-| **Predictions** | History AI prediksi, confidence score, grade | Andi |
-| **Prediction Wizard** | 5-step: data → foto → inspeksi → harga → AI | Andi |
-| **Wallet** | Saldo, transaksi, top-up, withdraw | Andi, Pak Budi |
-| **Tokens** | 5 paket (50-1000), usage table, riwayat | Andi |
-| **Credits** | 5 paket, registration bonus 500 | Andi |
-| **Inspeksi** | 3-step wizard, 160 titik, hasil AI | Andi, Dimas |
-| **Offers** | 3-tab, accept/reject/counter-offer | Andi, Pak Budi |
-| **Messages** | Chat, conversation list, unread | Andi, Sari |
-| **My Listings** | Filter status, edit/boost/delete | Andi, Pak Budi |
-| **Favorites** | Grid favorit, view/message/remove | Sari |
-| **KYC** | Upload KTP + selfie, 4 states | Andi, Pak Budi |
-| **Settings** | Theme, notif, bahasa, mata uang | Semua |
-| **Profile** | Edit nama, telepon, avatar | Semua |
-| **Orders** | 4 stats, filter buyer/seller | Andi, Sari |
-| **Withdraw** | Tarik ke rekening bank (6 bank) | Andi, Pak Budi |
-| **Coupons** | Kupon promo aktif/expired | Andi |
-| **Support** | FAQ + form kontak | Semua |
-
-### 5.6 DEALER SECTION (`/dealer`)
-
-| Halaman | Fitur Utama | Persona |
-|---------|-------------|---------|
-| **Dashboard** | Stat penjualan, marketplace comparison, monthly chart | Pak Budi |
-| **Inventory** | Search, filter, grid/list, boost/edit/delete | Pak Budi |
-| **Dealer Marketplace** | Browse & make offers, dealer-only | Pak Budi |
-| **Stats** | Analitik, time range, charts, conversion rate | Pak Budi |
-| **Profile** | Cover, logo, jam operasional, verifikasi | Pak Budi |
-| **Offers** | Kelola penawaran masuk/keluar | Pak Budi |
-| **Reviews** | Review & rating dealer | Pak Budi |
-| **Team** | Kelola tim, roles, permissions | Pak Budi |
-
-### 5.7 ADMIN PANEL (`/admin`)
-
-| Halaman | Fitur Utama | Persona |
-|---------|-------------|---------|
-| **Dashboard** | 8 stats, charts, quick actions | Rina |
-| **Users** | Manajemen pengguna, ban/roles | Rina |
-| **Dealer Approval** | Approve/reject pendaftaran | Rina |
-| **KYC Review** | Review dokumen, approve/reject | Rina |
-| **All Listings** | Moderasi, ban/feature | Rina |
-| **Token Packages** | Konfigurasi paket | Rina |
-| **Boost Features** | Manajemen boost | Rina |
-| **Categories** | CRUD kategori | Rina |
-| **Banners** | CRUD banner iklan | Rina |
-| **Payments** | Verifikasi pembayaran | Rina |
-| **Revenue** | Laporan pendapatan | Rina |
-| **Analytics** | Analitik detail | Rina |
-| **Coupons** | Manajemen kupon | Rina |
-| **Orders** | Manajemen order | Rina |
-| **Withdrawals** | Proses penarikan | Rina |
-| **Tickets** | Tiket support | Rina |
-| **Settings** | Pengaturan platform | Rina |
-| **Inspection Pricing** | Harga inspeksi | Rina |
-| **Activity Logs** | Log aktivitas | Rina |
-| **Broadcast** | Kirim notifikasi | Rina |
-
-### 5.8 AI PRICE PREDICTION
-
-**Flow untuk Andi:**
 ```
-Data Kendaraan → Upload 5 Foto → Self-Inspection 160 Titik → Harga Beli → Hasil AI
+┌─────────────────────────────────────────────────────────────────┐
+│                       DEALER USER FLOW                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Login ──► Dealer Dashboard (Inventory KPIs)                    │
+│                │                                                 │
+│    ┌───────────┼───────────────┬──────────────┐                  │
+│    ▼           ▼               ▼              ▼                  │
+│  ┌─────────┐ ┌──────────┐ ┌───────────┐ ┌───────────┐         │
+│  │Inventory│ │  Offers  │ │ Profile   │ │  Team     │         │
+│  │(Mine)   │ │Received/ │ │Edit+Logo  │ │Staff CRUD │         │
+│  │CRUD     │ │Sent      │ │+Cover     │ │Permission │         │
+│  └─────────┘ └──────────┘ └───────────┘ └───────────┘         │
+│                                                                  │
+│  ── MARKETPLACE ──────────────────────────────────────────────  │
+│    ┌───────────┼───────────────┬──────────────┐                  │
+│    ▼           ▼               ▼              ▼                  │
+│  ┌─────────┐ ┌──────────┐ ┌───────────┐ ┌───────────┐         │
+│  │Browse   │ │  Make    │ │ Favorites │ │ Settings  │         │
+│  │Listings │ │  Offer   │ │Save Cars  │ │Offer Dur. │         │
+│  │Filter   │ │Counter   │ │           │ │Auto-Reject│         │
+│  └─────────┘ └──────────┘ └───────────┘ └───────────┘         │
+│                                                                  │
+│  ── KEUANGAN ─────────────────────────────────────────────────  │
+│    ┌───────────┼───────────────┐                                │
+│    ▼           ▼               ▼                                 │
+│  ┌─────────┐ ┌──────────┐ ┌───────────┐                        │
+│  │ Revenue │ │Withdraw  │ │  Stats    │                        │
+│  │My Sales │ │Request   │ │Dealer     │                        │
+│  │Charts   │ │History   │ │Analytics │                        │
+│  └─────────┘ └──────────┘ └───────────┘                        │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-| Komponen | Detail | Cost |
-|----------|--------|------|
-| VLM Analysis | 5 foto dianalisis menggunakan z-ai-web-dev-sdk | - |
-| Market Data | Fetch listing serupa dari database | - |
-| Seller Trust | Score berdasarkan verifikasi & history | - |
-| Calculation | Condition × depreciation × market × trust | 5 tokens |
-| Output | Price range, confidence, grade, risk level | - |
-| Follow-up | Buat iklan / Inspeksi / Lihat detail | - |
+### 4.3 🟠 SELLER Flow
 
-### 5.9 INSPECTION SYSTEM
-
-| Aspek | Detail |
-|-------|--------|
-| Total Points | 160 titik |
-| Categories | Eksterior, Interior, Mesin, Rangka, Kelistrikan, dll |
-| Status Per Item | Istimewa (100), Baik (80), Sedang (60), Perlu Perbaikan (40) |
-| Grading | A+ (95-100) → E (<60) |
-| Risk Level | Low / Medium / High |
-| Type | Self (gratis) vs Professional (berbayar) |
-| Certificate | 25 tokens |
-| AI Analysis | Score, grade, estimasi harga, risk level |
-
-### 5.10 TOKEN/CREDIT ECONOMY
-
-#### Token Cost Table
-| Aksi | Biaya | Durasi | Persona |
-|------|-------|--------|---------|
-| Marketplace Umum | 3 tokens | 30 hari | Andi |
-| Dealer Marketplace | 5 tokens | 7 hari | Pak Budi |
-| Kedua Marketplace | 8 tokens | 7+30 hari | Pak Budi |
-| Chat Platform | 4 tokens | - | Andi |
-| Inspeksi 160 Titik | 10 tokens | - | Dimas |
-| Featured 7 Hari | 5 tokens | 7 hari | Andi |
-| Perpanjang Listing | 2 tokens | 30 hari | Andi |
-| AI Prediction | 5 tokens | - | Andi |
-| Sertifikat Inspeksi | 25 tokens | - | Andi |
-| **Nilai Token** | **1 token = Rp 10.000** | - | - |
-
-#### Token Packages
-| Paket | Token | Bonus | Harga | Persona |
-|-------|-------|-------|-------|---------|
-| Starter | 50 | 0 | Rp 500.000 | Andi |
-| Basic | 100 | 10 | Rp 1.000.000 | Andi |
-| Popular | 250 | 50 | Rp 2.500.000 | Pak Budi |
-| Business | 500 | 150 | Rp 5.000.000 | Pak Budi |
-| Enterprise | 1000 | 500 | Rp 10.000.000 | Pak Budi |
-
-### 5.11 DEALER OFFER SYSTEM
-
-**Offer Lifecycle:**
 ```
-pending → viewed → negotiating → accepted/rejected/expired/withdrawn
-```
-
-| Fitur | Deskripsi | Persona |
-|-------|-----------|---------|
-| Create Offer | Dealer buat penawaran pada listing | Pak Budi |
-| Counter-Offer | Seller tawar balik dengan harga & pesan | Andi |
-| Accept/Reject | Seller terima/tolak penawaran | Andi |
-| Auto-Reject | Auto reject jika listing dijual/dihapus | Sistem |
-| 7-Day Expiry | Penawaran expired setelah 7 hari | Sistem |
-| Notification | Real-time notifikasi untuk setiap aksi | Andi, Pak Budi |
-| Fee Calculation | Platform fee dihitung saat accept | Pak Budi |
-
-### 5.12 LOCATION SYSTEM
-
-| Level | Deskripsi | API |
-|-------|-----------|-----|
-| Provinces | 34 provinsi Indonesia | `/api/locations/provinces` |
-| Cities | Kota/kabupaten per provinsi | `/api/locations/cities?province_id=` |
-| Districts | Kecamatan per kota | `/api/locations/districts?city_id=` |
-| Villages | Kelurahan + kode pos | `/api/locations/villages?district_id=` |
-
----
-
-## 6. BUSINESS RULES & LOGIC
-
-### 6.1 Listing Rules
-| Rule | Detail |
-|------|--------|
-| Durasi Umum | 30 hari |
-| Durasi Dealer | 7 hari |
-| KYC Required | Ya, untuk semua listing |
-| Status Flow | draft → pending → active → sold/expired/suspended → deleted |
-| Visibility | public / dealer_marketplace / both |
-| Soft Delete | Set deleted_at + status=deleted |
-| Auto-Reject Offers | Jika listing dijual/dihapus, semua pending offer auto-reject |
-
-### 6.2 Credit/Token Rules
-| Rule | Detail |
-|------|--------|
-| Nilai Token | 1 token = Rp 10.000 |
-| Registration Bonus | 500 credits (first 500 users) |
-| Refund | Proportional jika cancel boost >50% remaining |
-| Deduction | Atomic: cek saldo → deduct → record transaksi |
-| No Expiry | Token tidak kadaluarsa |
-
-### 6.3 Dealer Offer Rules
-| Rule | Detail |
-|------|--------|
-| Expiry | 7 hari |
-| Auto-Reject | Saat listing sold/deleted/inactive |
-| Counter-Offer | Tracked dalam counter_history |
-| Platform Fee | Berdasarkan dealer_offer_settings (default 5%) |
-| Exclusive Accept | Accept satu → auto-reject lainnya |
-
-### 6.4 KYC Rules
-| Rule | Detail |
-|------|--------|
-| Required for Listing | Ya |
-| Required for Dealer | Ya + business docs |
-| Documents | KTP + Selfie + data diri |
-| Admin Review | Manual |
-| Re-submission | Bisa jika rejected |
-
-### 6.5 Inspection Rules
-| Rule | Detail |
-|------|--------|
-| Scoring | Istimewa=100, Baik=80, Sedang=60, Perlu Perbaikan=40 |
-| Grading | Weighted average → A+ s/d E |
-| Self Inspection | Gratis |
-| Professional | Berbayar |
-| Certificate | 25 tokens, opsional |
-| AI Analysis | Otomatis setelah submit |
-
----
-
-## 7. API SPECIFICATIONS
-
-### 7.1 API Route Summary (80+ Endpoints)
-
-| Kategori | Jumlah | Key Endpoints |
-|----------|--------|---------------|
-| Listings | 6 | CRUD + view + create with tokens |
-| Marketplace | 7 | Search, compare, rentals, brands, models, colors |
-| Dealer | 7 | CRUD, registration, stats, reviews, team, offers |
-| Dealer Marketplace | 6 | Listings, offers, favorites, settings |
-| Inspections | 7 | CRUD, items, submit, bookings, pricing, certificate |
-| Credits/Tokens | 14 | Balance, deduct, transactions, packages, purchase, boosts |
-| Wallet | 3 | Balance, transactions, add/deduct |
-| Orders | 3 | CRUD + status update |
-| User | 7 | Profile, settings, listings, favorites, predictions |
-| Admin | 30+ | Full CRUD semua modul |
-| Location | 5 | Provinces, cities, districts, villages |
-| Other | 10 | Auth, conversations, notifications, KYC, banners |
-| Seed/Setup | 15 | Seed data, check-db, run-schema |
-
-### 7.2 API Auth Levels
-| Level | Endpoints | Auth Required |
-|-------|-----------|---------------|
-| **Public** | GET listings, brands, models, colors, locations, search | ❌ |
-| **Authenticated** | POST/PUT/DELETE listings, credits, wallet, favorites, chat | ✅ |
-| **Admin Only** | ALL /api/admin/* | ✅ + role=admin |
-| **Dealer Only** | /api/dealer-marketplace/*, /api/dealer/* | ✅ + role=dealer |
-
-### 7.3 API Response Format
-```json
-{
-  "data": { ... },
-  "error": null,
-  "pagination": { "page": 1, "limit": 20, "total": 100, "totalPages": 5 }
-}
+┌─────────────────────────────────────────────────────────────────┐
+│                       SELLER USER FLOW                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │  1. REGISTER & KYC                                    │       │
+│  │  Sign Up → Upload KTP + Selfie → Admin Review         │       │
+│  │  └─► Status: not_submitted → pending → verified       │       │
+│  └──────────────────────┬───────────────────────────────┘       │
+│                         ▼                                        │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │  2. BUAT LISTING                                      │       │
+│  │  Pilih Brand → Model → Varian → Isi detail            │       │
+│  │  └─► Upload foto (maks 20) + video                    │       │
+│  │  └─► Pilih fitur (20 checkbox)                        │       │
+│  │  └─► Set harga cash / kredit / negotiable             │       │
+│  │  └─► Pilih marketplace type (token-based)             │       │
+│  │  └─► 5-step wizard: Basic → Details → Photos →        │       │
+│  │       Marketplace → Review                            │       │
+│  └──────────────────────┬───────────────────────────────┘       │
+│                         ▼                                        │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │  3. PASARKAN LISTING                                  │       │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐              │       │
+│  │  │ Boost    │ │ Dealer   │ │ Inspeksi │              │       │
+│  │  │ Featured │ │Market-   │ │ (Opsional│              │       │
+│  │  │ Urgent   │ │place     │ │  160 poin│              │       │
+│  │  └──────────┘ └──────────┘ └──────────┘              │       │
+│  └──────────────────────┬───────────────────────────────┘       │
+│                         ▼                                        │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │  4. NEGOSIASI & TRANSAKSI                             │       │
+│  │  Chat dengan buyer → Terima tawaran → Buat Order      │       │
+│  │  └─► Atau: Dealer offer → Counter → Accept/Reject     │       │
+│  │  └─► Escrow system (platform_fee + seller_fee)         │       │
+│  └──────────────────────┬───────────────────────────────┘       │
+│                         ▼                                        │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │  5. CAIRKAN DANA                                      │       │
+│  │  Saldo → Withdraw Request → Admin Approve → Transfer  │       │
+│  └──────────────────────────────────────────────────────┘       │
+│                                                                  │
+│  ── AKUN SAYA ────────────────────────────────────────────────  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐         │
+│  │My Listings│ │Messages  │ │Favorites │ │Predictions│         │
+│  │CRUD+Stats │ │Chat      │ │Saved Cars│ │AI Price  │         │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘         │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
+### 4.4 🟣 BUYER Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       BUYER USER FLOW                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │  1. CARI MOBIL                                        │       │
+│  │  Landing Page (/) → Search + Filter                   │       │
+│  │  └─► Filter: brand, model, harga, tahun, lokasi      │       │
+│  │  └─► Bandingkan mobil (compare panel)                 │       │
+│  └──────────────────────┬───────────────────────────────┘       │
+│                         ▼                                        │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │  2. LIHAT DETAIL                                      │       │
+│  │  Gallery foto/video + Spesifikasi + Fitur             │       │
+│  │  └─► Hasil inspeksi (jika ada) + Sertifikat          │       │
+│  │  └─► AI Price Prediction + Market Analysis            │       │
+│  │  └─► Profil seller / dealer                           │       │
+│  └──────────────────────┬───────────────────────────────┘       │
+│                         ▼                                        │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │  3. HUBUNGI / NEGOSIASI                               │       │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐              │       │
+│  │  │  Chat    │ │  Dealer  │ │  Favorite │              │       │
+│  │  │  Seller  │ │  Offer   │ │  Save     │              │       │
+│  │  │(Watsapp) │ │ (B2B)    │ │           │              │       │
+│  │  └──────────┘ └──────────┘ └──────────┘              │       │
+│  └──────────────────────┬───────────────────────────────┘       │
+│                         ▼                                        │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │  4. PEMBELIAN CASH / KREDIT                           │       │
+│  │  ┌────────────────────┐  ┌────────────────────┐      │       │
+│  │  │ CASH               │  │ KREDIT (AstraPay)  │      │       │
+│  │  │ Buat Order →       │  │ Kalkulator Kredit  │      │       │
+│  │  │ Escrow → Bayar     │  │ DP + Tenor + Bunga │      │       │
+│  │  │ Verifikasi → Done  │  │ Apply → AstraPay   │      │       │
+│  │  └────────────────────┘  │ Paylater/Linking   │      │       │
+│  │                           │ Cicilan Bulanan    │      │       │
+│  │                           └────────────────────┘      │       │
+│  └──────────────────────┬───────────────────────────────┘       │
+│                         ▼                                        │
+│  ┌──────────────────────────────────────────────────────┐       │
+│  │  5. PEMBAYARAN (ASTRAPAY)                             │       │
+│  │  Pilih metode:                                        │       │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ │       │
+│  │  │ Payment  │ │  Push    │ │ Direct   │ │Paylater │ │       │
+│  │  │ w/ Link  │ │Payment   │ │ Debit    │ │(Cicilan)│ │       │
+│  │  └──────────┘ └──────────┘ └──────────┘ └─────────┘ │       │
+│  │  └─► Redirect ke AstraPay → Callback → Confirmed     │       │
+│  └──────────────────────────────────────────────────────┘       │
+│                                                                  │
+│  ── AKUN SAYA ────────────────────────────────────────────────  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐         │
+│  │My Orders │ │My Credits│ │My Tokens │ │ Settings │         │
+│  │History   │ │Financing │ │Balance   │ │Profile   │         │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘         │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 4.5 🔴 INSPECTOR Flow
+
+```
+┌──────────────────────────────────────────────────┐
+│              INSPECTOR FLOW                       │
+├──────────────────────────────────────────────────┤
+│                                                   │
+│  Login ──► Dashboard Inspeksi                    │
+│                │                                  │
+│    ┌───────────┼───────────────┐                  │
+│    ▼           ▼               ▼                  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐         │
+│  │  BOOKING │ │ INSPECT  │ │  INPUT   │         │
+│  │  ──────  │ │  ──────  │ │  ──────  │         │
+│  │  Jadwal  │ │  160     │ │  Hasil   │         │
+│  │  inspeksi│ │  poin    │ │  per item│         │
+│  │          │ │  per     │ │          │         │
+│  │  Status: │ │  kategori│ │  Status: │         │
+│  │  Pending │ │          │ │  Baik/   │         │
+│  │  → Done  │ │  Foto    │ │  Rusak/  │         │
+│  └──────────┘ │  per item│ │  Warning │         │
+│               └──────────┘ └──────────┘         │
+│    ┌───────────┼───────────────┐                  │
+│    ▼           ▼               ▼                  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐         │
+│  │CERTIFICATE│ │ PRICING  │ │ AI PRICE │         │
+│  │ ──────── │ │  ──────  │ │  ──────  │         │
+│  │ Generate │ │  Paket   │ │ Analisis │         │
+│  │ Sertifikat│ │  harga   │ │ harga    │         │
+│  │ + Grade  │ │  inspeksi│ │ otomatis │         │
+│  └──────────┘ └──────────┘ └──────────┘         │
+│                                                   │
+└──────────────────────────────────────────────────┘
+```
+
+### 4.6 💰 Financial Flow (Pembayaran → Pencairan)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    FINANCIAL FLOW                                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  BUYER PAYS                     PLATFORM RECEIVES               │
+│  ──────────                      ──────────────                 │
+│  Rp 200.000.000                Rp 200.000.000                   │
+│  (Mobil Avanza)                     │                           │
+│       │                             ▼                           │
+│       │                   ┌─────────────────┐                   │
+│       │                   │  Full Breakdown  │                   │
+│       │                   │  ──────────────  │                   │
+│       │                   │  Agreed Price200M│                   │
+│       │                   │  Platform Fee 1% │ ← Ke platform    │
+│       │                   │    = 2M          │                   │
+│       │                   │  Seller Fee  0%  │ ← Gratis seller  │
+│       │                   │  Buyer Fee   0%  │ ← Gratis buyer   │
+│       │                   │  ──────────────  │                   │
+│       │                   │  Net to Seller198M│ ← Ke seller     │
+│       │                   └─────────────────┘                   │
+│       │                              │                          │
+│       │                              ▼                          │
+│       │                   ┌───────────────┐                     │
+│       │                   │ Escrow System │                     │
+│       │                   │ Status: held  │                     │
+│       │                   └───────┬───────┘                     │
+│       │                           │                             │
+│       │              ┌────────────┼────────────┐                │
+│       │              ▼                         ▼                │
+│       │     ┌───────────────┐      ┌────────────────┐          │
+│       │     │ CONFIRMED     │      │ CANCELLED      │          │
+│       │     │ Release funds │      │ Refund buyer   │          │
+│       │     │ → Seller      │      │ → Full refund  │          │
+│       │     └───────────────┘      └────────────────┘          │
+│       │                                                          │
+│       ▼                                                          │
+│  ┌───────────┐                                                  │
+│  │ AstraPay  │ ◄── Payment Gateway (Linking, Push, DD, Paylater)│
+│  │ SNAP API  │                                                  │
+│  └───────────┘                                                  │
+│                                                                  │
+│  ── KREDIT FLOW ─────────────────────────────────────────────── │
+│                                                                  │
+│  Rp 200.000.000 (Harga Mobil)                                   │
+│  - DP 30% = Rp 60.000.000                                       │
+│  = Pinjaman Rp 140.000.000                                      │
+│  + Bunga Flat 5% x 3 tahun = Rp 21.000.000                     │
+│  = Total Cicilan Rp 161.000.000                                 │
+│  = Per bulan Rp 4.472.222 (x36 bulan)                           │
+│                                                                  │
+│  Pembayaran cicilan via AstraPay:                                │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐                        │
+│  │Pay w/    │ │Push      │ │Paylater  │                        │
+│  │Linking   │ │Payment   │ │(Auto-    │                        │
+│  │(Akun AP) │ │(No link) │ │ debit)   │                        │
+│  └──────────┘ └──────────┘ └──────────┘                        │
+│                                                                  │
+│  Late Fee: 0.1% per hari dari amount_due                        │
+│  Reminder: UPCOMING / OVERDUE / FINAL_NOTICE via AstraPay API   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 4.7 🔄 Listing Lifecycle
+
+```
+                    ┌──────────┐
+                    │  DRAFT   │ ◄── CreateListing
+                    └────┬─────┘
+                         │
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+    ┌──────────┐  ┌──────────┐  ┌──────────┐
+    │PUBLISHED │  │ REJECTED │  │ EXPIRED  │
+    │(Active)  │  │(Admin)   │  │(Auto/    │
+    │          │  │          │  │ Timer)   │
+    └────┬─────┘  └──────────┘  └──────────┘
+         │
+    ┌────┼──────────────┐
+    ▼    ▼              ▼
+  ┌──────────┐  ┌──────────┐  ┌──────────┐
+  │  SOLD    │  │ BANNED   │  │ FEATURED │
+  │(Buyer    │  │(Admin    │  │(Boost    │
+  │ found)   │  │ action)  │  │ active)  │
+  └──────────┘  └──────────┘  └──────────┘
+
+    Marketplace Visibility:
+    - Token required untuk publish ke marketplace
+    - Boost = Featured position (tokens/hari)
+    - Dealer Marketplace = B2B channel terpisah
+```
+
+### 4.8 🚗 Credit Application Lifecycle
+
+```
+    ┌──────────┐     Submit Application     ┌───────────┐
+    │  DRAFT   │ ──────────────────────────►│ SUBMITTED │
+    └──────────┘                            └─────┬─────┘
+                                                  │
+                                   ┌──────────────┼──────────────┐
+                                   ▼              ▼              ▼
+                             ┌───────────┐ ┌───────────┐ ┌───────────┐
+                             │ APPROVED  │ │ REJECTED  │ │ DEFAULTED │
+                             │(Admin)    │ │(Admin)    │ │(Late pay) │
+                             └─────┬─────┘ └───────────┘ └───────────┘
+                                   │
+                                   ▼
+                             ┌───────────┐
+                             │ DISBURSED │ ◄── Dana cair
+                             └─────┬─────┘
+                                   │
+                          ┌────────┼────────┐
+                          ▼                 ▼
+                    ┌───────────┐    ┌───────────┐
+                    │  PAYING   │    │ OVERDUE   │
+                    │(Cicilan   │    │(Late fee  │
+                    │ bulanan)  │    │ 0.1%/hari)│
+                    └─────┬─────┘    └─────┬─────┘
+                          │                 │
+                          ▼                 │
+                    ┌───────────┐           │
+                    │ COMPLETED │ ◄─────────┘
+                    │(Lunas)    │   (Catch up)
+                    └───────────┘
+
+    Bunga Flat: (Pinjaman × rate × tenor) / tenor bulan
+    Min DP: 10%, Max Tenor: 84 bulan
+    Payment via: AstraPay (Linking / Push / Direct Debit / Paylater)
+```
+
 ---
 
-## 8. UI/UX SPECIFICATIONS
+## 5. Feature Matrix — Per Role
 
-### 8.1 Design System
-| Aspek | Spesifikasi |
-|-------|-------------|
-| Brand Colors | Purple #6A0DAD + Blue #0033A0 + Light Blue #0099FF |
-| Gradient | `linear-gradient(135deg, #6A0DAD, #0033A0)` |
-| Dark Mode | Full support via next-themes |
-| Typography | Geist Sans + Geist Mono |
-| Locale | Bahasa Indonesia (id-ID) |
-| Currency | IDR dengan Intl.NumberFormat |
+### 5.1 Core Features
 
-### 8.2 Responsive Grid
-| Breakpoint | Columns | Use Case |
-|------------|---------|----------|
-| Mobile | 2 | Default |
-| SM (640px) | 3 | Small tablet |
-| MD (768px) | 4 | Tablet |
-| LG (1024px) | 5 | Desktop |
+| Feature | ADMIN | DEALER | SELLER | BUYER | INSPECTOR |
+|---------|:-----:|:------:|:------:|:-----:|:---------:|
+| **Dashboard** | ✅ Platform-wide | ✅ Dealer-scope | ✅ My Listings | ✅ My Activity | ✅ Inspections |
+| **Listings** | ✅ All + Ban | ✅ My Inventory | ✅ My Listings | 👁️ Browse | 👁️ View |
+| **Create Listing** | - | ✅ Dealer Token | ✅ Token-based | - | - |
+| **Car Detail** | ✅ All | 👁️ View | ✅ Own | 👁️ View | 👁️ View |
+| **Search & Filter** | ✅ Advanced | ✅ Marketplace | ✅ Basic | ✅ Full | - |
+| **Compare Cars** | - | ✅ | ✅ | ✅ | - |
+| **Favorites** | - | ✅ Marketplace | ✅ My Cars | ✅ My Cars | - |
+| **Inspection** | ✅ All | ✅ My Cars | ✅ My Cars | 👁️ View | ✅ Create |
+| **AI Prediction** | ✅ All | ✅ | ✅ | ✅ | - |
 
-### 8.3 Component Library
-- **40+ shadcn/ui components**
-- **3 custom UI** — Logo, GradientHeading, StatsCard
-- **11 SVG body type icons**
-- **Framer Motion** animations
-- **Skeleton** loading states
+### 5.2 Marketplace & Transaction Features
 
----
+| Feature | ADMIN | DEALER | SELLER | BUYER | INSPECTOR |
+|---------|:-----:|:------:|:------:|:-----:|:---------:|
+| **Dealer Marketplace** | ✅ Settings | ✅ Browse + Offer | ✅ Publish to DM | - | - |
+| **Dealer Offers** | ✅ View All | ✅ Make/Receive | ✅ Accept/Reject | - | - |
+| **Counter Offer** | - | ✅ | ✅ | - | - |
+| **Chat/Messaging** | - | ✅ | ✅ | ✅ | - |
+| **Order System** | ✅ All Orders | ✅ Dealer Orders | ✅ My Orders | ✅ My Orders | - |
+| **Escrow** | ✅ Manage | - | ✅ Receive | ✅ Pay | - |
+| **Credit/Financing** | ✅ Approve/Reject | - | - | ✅ Apply | - |
+| **AstraPay Payment** | - | - | - | ✅ Pay | - |
 
-## 9. NON-FUNCTIONAL REQUIREMENTS
+### 5.3 Financial Features
 
-| Kategori | Target |
-|----------|--------|
-| First Contentful Paint | < 2 detik |
-| Time to Interactive | < 3 detik |
-| Lighthouse Score | > 90 |
-| API Response | < 500ms (95th percentile) |
-| Uptime | 99.9% |
-| Concurrent Users | 1.000+ |
-| Database | 90 tabel, designed for 100K+ listings |
-| Security | RLS + auth middleware + KYC |
+| Feature | ADMIN | DEALER | SELLER | BUYER | INSPECTOR |
+|---------|:-----:|:------:|:------:|:-----:|:---------:|
+| **Revenue Overview** | ✅ Platform | ✅ Dealer Rev | ✅ My Sales | - | - |
+| **Wallet** | ✅ All | ✅ Dealer | ✅ My Balance | ✅ My Balance | - |
+| **Withdraw Request** | ✅ Approve | ✅ Create | ✅ Create | - | - |
+| **Token Management** | ✅ Settings | ✅ Purchase | ✅ Purchase | ✅ Purchase | - |
+| **Credit Packages** | ✅ CRUD | ✅ Purchase | ✅ Purchase | ✅ Purchase | - |
+| **Boost Features** | ✅ CRUD | ✅ Use | ✅ Use | - | - |
+| **Payment Verification** | ✅ Verify | - | - | - | - |
+| **Manual Top-up** | ✅ Create | - | - | - | - |
 
----
+### 5.4 System Features
 
-## 10. STATUS & KNOWN ISSUES
-
-### ✅ Completed
-- [x] Landing page semua section
-- [x] Authentication (Google OAuth)
-- [x] Marketplace public + dealer
-- [x] Listing CRUD dengan token deduction
-- [x] Dashboard user (18 sub-pages)
-- [x] Dashboard dealer (8 sub-pages)
-- [x] Admin panel (25+ sub-pages)
-- [x] AI Price Prediction dengan VLM
-- [x] 160-point Inspection system
-- [x] Token/Credit economy
-- [x] Dealer Offer lifecycle
-- [x] KYC verification
-- [x] Location system (4-level cascade)
-- [x] Chat messaging (basic)
-- [x] Ad banner system
-- [x] Prisma schema (62 models)
-- [x] Admin auth middleware
-- [x] API upload endpoint
-- [x] API auth utilities
-
-### ⚠️ Partially Implemented
-| Fitur | Issue |
-|-------|-------|
-| Chat/Messaging | Bot response masih mock, belum WebSocket |
-| Coupons | Data hardcoded |
-| Withdraw | Mock API |
-| Payment Gateway | BNI VA placeholder |
-
-### ❌ Not Implemented
-| Fitur | Priority |
-|-------|----------|
-| Real-time Chat (WebSocket) | High |
-| Push Notifications | Medium |
-| Email Notifications | Medium |
-| PDF Certificate Generation | Medium |
-| Image Optimization (Sharp) | Low |
-| Rate Limiting | High |
-| Search Recommendations | Low |
-
-### 🔧 Bugs Fixed in This Session
-| # | Bug | Fix |
-|---|-----|-----|
-| 1 | Prisma schema hanya User+Post | Updated ke 62 models |
-| 2 | No `/api/upload` endpoint | Created with Supabase Storage |
-| 3 | Admin routes tanpa auth | Added api-auth middleware |
-| 4 | Admin/Dealer layout tanpa auth guard | Added redirect logic |
-| 5 | `getSupabaseAdmin()` module-scope crash | Moved inside handlers |
-| 6 | `?admin=true` bypass auth on listings | Replaced with proper auth |
-| 7 | No auth on listings/create | Added user verification |
-| 8 | Type inconsistencies marketplace.ts | Aligned with Supabase |
-| 9 | CarCard wrong transaction keys | Fixed to Indonesian values |
-| 10 | useListings wrong API keys | Fixed data.listings |
-| 11 | 36+ API routes using client supabase | Migrated to server client |
-| 12 | Wrong column names (is_banned, car_listing_id) | Fixed |
-| 13 | supabase.ts crash on missing env vars | Safe fallback |
-| 14 | No consistent API error handling | Created api-utils.ts |
+| Feature | ADMIN | DEALER | SELLER | BUYER | INSPECTOR |
+|---------|:-----:|:------:|:------:|:-----:|:---------:|
+| **User Management** | ✅ Role Change | - | - | - | - |
+| **KYC Review** | ✅ Approve/Reject | - | ✅ Submit | - | - |
+| **Dealer Approval** | ✅ Approve/Reject | - | ✅ Register | - | - |
+| **Analytics** | ✅ Advanced | ✅ Dealer | ✅ My Stats | - | - |
+| **Settings** | ✅ Fee/AP/General | ✅ DM Settings | ✅ Profile | ✅ Profile | - |
+| **Banners** | ✅ CRUD | - | - | 👁️ View | - |
+| **Coupons** | ✅ CRUD | - | - | ✅ Use | - |
+| **Notifications** | ✅ Manage | ✅ | ✅ | ✅ | ✅ |
+| **Activity Logs** | ✅ Full | - | - | - | - |
+| **Inspection Pricing** | ✅ CRUD | - | 👁️ View | 👁️ View | 👁️ View |
 
 ---
 
-## 11. ROADMAP
+## 6. Detail Fitur Per Modul
 
-### Phase 1 — Stabilization (Week 1-2) ✅ Done
-- [x] Fix Prisma schema
-- [x] Fix admin auth middleware
-- [x] Fix critical code issues
-- [x] Fix API route consistency
+### 6.1 AUTH MODULE
 
-### Phase 2 — Real-time & Payment (Week 3-4)
-- [ ] WebSocket chat with socket.io
-- [ ] Payment gateway (Midtrans/Xendit)
-- [ ] Real withdraw functionality
-- [ ] Push notification support
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET /api/auth/check-role` | Check user role | Auth | ✅ |
+| `GET/PUT /api/profile` | Get/update profile | Auth | ✅ |
+| `GET/PUT /api/users/[id]` | Get/update user by ID | Auth | ✅ |
+| `GET/PUT /api/user-settings` | Get/update settings | Auth | ✅ |
 
-### Phase 3 — Polish (Week 5-6)
-- [ ] Image optimization pipeline
-- [ ] PDF certificate generation
-- [ ] Email notifications
-- [ ] Rate limiting
+**Flow**:
+- NextAuth.js + Supabase Auth
+- Google OAuth → create/update profile → JWT session
+- Role hierarchy: admin > dealer > seller > buyer
+- KYC verification required for seller actions
 
-### Phase 4 — Growth (Week 7-8)
-- [ ] Recommendation engine
-- [ ] Price alert system
-- [ ] PWA support
-- [ ] Advanced analytics
+### 6.2 LISTING MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET /api/listings` | Search/browse listings | Public | ✅ |
+| `POST /api/listings/create` | Create listing | Auth (seller) | ✅ |
+| `GET/PUT/DELETE /api/listings/[id]` | Get/update/delete | Auth (owner) | ✅ |
+| `POST /api/listings/[id]/view` | Track view | Public | ✅ |
+| `GET /api/my-listings` | My listings | Auth | ✅ |
+| `GET /api/user/listings` | User's listings | Auth | ✅ |
+| `GET /api/marketplace-listings` | Marketplace listings | Public | ✅ |
+| `GET /api/search` | Search | Public | ✅ |
+| `POST /api/compare` | Compare listings | Public | ✅ |
+| `GET /api/rentals` | Rental listings | Public | ✅ |
+| `POST /api/admin/listings/ban` | Ban listing | Admin | ✅ |
+| `GET/PUT /api/admin/listings` | Admin manage | Admin | ✅ |
+
+**Listing Properties**: listing_number, title, slug, brand/model/variant, year, condition, price_cash/credit, mileage, features (20 boolean), marketplace_type, visibility, status (draft/published/sold/banned/expired)
+
+### 6.3 DEALER MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET /api/dealers` | List dealers | Public | ✅ |
+| `GET /api/dealers/[slug]` | Dealer detail | Public | ✅ |
+| `GET/POST /api/dealer/team` | Staff CRUD | Dealer | ✅ |
+| `GET /api/dealer/reviews` | Dealer reviews | Public | ✅ |
+| `GET /api/dealer/stats` | Dealer stats | Dealer | ✅ |
+| `POST /api/dealer-registration` | Register dealer | Auth | ✅ |
+| `GET/POST /api/admin/dealers` | Admin manage | Admin | ✅ |
+
+**Dealer Properties**: name, slug, logo, cover, phone, email, website, address, city/province, rating, review_count, verified, subscription_tier (free/premium), status
+
+### 6.4 DEALER MARKETPLACE MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET /api/dealer-marketplace/listings` | Browse listings | Dealer | ✅ |
+| `GET/POST /api/dealer-marketplace/offers` | Get/create offers | Dealer | ✅ |
+| `GET /api/dealer-marketplace/offers/count` | Offer count | Dealer | ✅ |
+| `GET/POST /api/dealer-marketplace/favorites` | Favorites | Dealer | ✅ |
+| `GET/PUT /api/dealer-marketplace/settings` | Settings | Dealer | ✅ |
+| `GET/POST /api/dealer-offers` | Alt offer endpoints | Dealer/Seller | ✅ |
+
+**Offer Flow**: Dealer makes offer → Seller counter-offer → Accept/Reject/Withdraw
+**Auto-Rejection**: Listing banned/expired → all pending offers auto-rejected
+**Settings**: offer_duration (72h default), max_counter_offers (5), auto_reject_hours (48)
+
+### 6.5 INSPECTION MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET/POST /api/inspections` | List/create inspections | Auth | ✅ |
+| `POST /api/inspections/submit` | Submit results | Inspector | ✅ |
+| `GET /api/inspections/bookings` | Bookings | Auth | ✅ |
+| `GET /api/inspections/pricing` | Pricing | Public | ✅ |
+| `GET /api/inspections/certificate` | Certificate | Auth | ✅ |
+| `GET /api/inspections/[id]/certificate` | Specific certificate | Auth | ✅ |
+| `GET /api/inspections/export-pdf` | Export PDF | Auth | ✅ |
+| `GET /api/inspection-items` | Checklist items | Public | ✅ |
+| `GET/POST /api/admin/categories` | Category CRUD | Admin | ✅ |
+| `GET/PUT/DELETE /api/admin/categories/[id]` | Category manage | Admin | ✅ |
+
+**Inspection Properties**: 160 check points, total_score, grade (A/B/C/D/E), accident/flood/fire_free, odometer_tampered, risk_level, certificate_number, AI price analysis
+
+### 6.6 CREDIT / FINANCING MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `POST /api/credit/calculator` | Credit simulation | Public | ✅ |
+| `POST /api/credit/apply` | Apply for credit | Auth (buyer) | ✅ |
+| `GET /api/credit/apply` | My applications | Auth | ✅ |
+| `GET /api/credit/[id]` | Application detail | Auth (owner) | ✅ |
+| `PUT /api/credit/[id]` | Update status | Auth (admin) | ✅ |
+| `POST /api/credit/pay-monthly` | Pay installment | Auth | ✅ |
+
+**Credit Calculation (Flat Rate)**:
+- Monthly Installment = (Loan Amount + Total Interest) / Tenor
+- Total Interest = Loan Amount × Interest Rate × Tenor (years)
+- Min DP: 10%, Max Tenor: 84 bulan
+- Late Fee: 0.1% per hari dari amount_due
+
+### 6.7 ASTRAPAY PAYMENT MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET /api/astrapay/auth` | Get OAuth token | Auth | ✅ |
+| `POST /api/astrapay/payment` | Create payment | Auth | ✅ |
+| `POST /api/astrapay/callback` | Webhook callback | AstraPay Server | ✅ |
+| `GET /api/astrapay/transaction-status` | Check status | Auth | ✅ |
+| `POST /api/astrapay/account-link` | Generate link URL | Auth | ✅ |
+| `GET /api/astrapay/account-link` | Check link status | Auth | ✅ |
+
+**Payment Methods**:
+- Payment with Linking (akun AstraPay terhubung)
+- Push to Payment (tanpa linking)
+- Direct Debit (otomatis dari saldo)
+- Paylater (cicilan AstraPay)
+
+**Flow**: Create payment → Redirect to AstraPay → Callback (success/fail) → Update DB
+**Amount Range**: Rp 10.000 – Rp 10.000.000
+**Token Expiry**: 15 menit (900 detik)
+
+**AstraPay Service Methods**:
+- `getAccessToken()` — OAuth2 client_credentials, cached in-memory + DB
+- `generateSignatureAuth()` — RSA-SHA256 for auth
+- `generateSignatureService()` — HMAC-SHA512 for service requests
+- `createPayment()` — Payment with account linking
+- `createPushPayment()` — Push-to-payment (no linking)
+- `getTransactionStatus()` — Query + sync with local DB
+- `createAccountLinkUrl()` — Account linking flow
+- `registerPaylater()` — Register for AstraPay Paylater
+- `shareKycData()` — Share KYC data with AstraPay
+- `sendRepaymentReminder()` — UPCOMING/OVERDUE/FINAL_NOTICE
+
+### 6.8 TOKEN & CREDIT MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET /api/token-costs` | Token costs per action | Public | ✅ |
+| `GET /api/token-settings` | Token settings | Auth | ✅ |
+| `GET /api/token-packages` | Purchase packages | Public | ✅ |
+| `POST /api/token-purchase` | Buy tokens | Auth | ✅ |
+| `GET /api/token-transactions` | Transaction history | Auth | ✅ |
+| `GET /api/user-tokens` | Token balance | Auth | ✅ |
+| `GET /api/credits/balance` | Credit balance | Auth | ✅ |
+| `GET /api/credits/transactions` | Credit history | Auth | ✅ |
+| `GET /api/credits/packages` | Credit packages | Public | ✅ |
+| `POST /api/credits/deduct` | Deduct credits | Auth | ✅ |
+| `GET /api/credits/boosts` | Boost features | Auth | ✅ |
+| `GET/POST /api/credits/payments` | Payment history/process | Auth | ✅ |
+| `POST /api/credits/registration-bonus` | Claim bonus | Auth | ✅ |
+| `GET /api/boost-features` | Available boosts | Public | ✅ |
+
+**Token Economy**: 1 token = Rp 10.000
+**Token Actions**: publish listing, boost featured, boost urgent, AI prediction, marketplace publish
+
+### 6.9 CHAT MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET/POST /api/conversations` | List/create conversations | Auth | ✅ |
+| `GET/POST /api/conversations/[id]/messages` | Get/send messages | Auth (participant) | ✅ |
+
+**Chat Properties**: conversation per buyer+seller+listing, unread counts, last_message, message_type (text)
+
+### 6.10 ORDER MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET/POST /api/orders` | List/create orders | Auth | ✅ |
+| `GET /api/admin/orders` | All orders | Admin | ✅ |
+
+**Order Properties**: order_number, agreed_price, platform_fee, seller_fee, buyer_fee, total_amount, escrow_id, escrow_status, status (pending/confirmed/processing/completed/cancelled)
+
+### 6.11 AI PREDICTION MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `POST /api/predictions` | Create prediction | Auth | ✅ |
+| `GET /api/my-predictions` | My predictions | Auth | ✅ |
+
+**AI Features**: VLM image analysis, market price comparison, condition scoring, prediction factors breakdown, confidence level, quick_sale_price, optimal_price, days_to_sell_estimate
+
+### 6.12 KYC MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET/POST /api/kyc` | Get/submit KYC | Auth | ✅ |
+| `GET /api/admin/kyc` | Review KYC | Admin | ✅ |
+
+**KYC Properties**: full_name, ktp_number, phone, address (province/city/district/village), ktp_image_url, selfie_image_url, status (not_submitted/pending/verified/rejected)
+
+### 6.13 WALLET MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET/POST /api/wallet` | Balance / top up | Auth | ✅ |
+| `GET /api/wallet/transactions` | Transaction history | Auth | ✅ |
+| `GET/POST /api/admin/withdrawals` | Manage withdrawals | Admin | ✅ |
+
+### 6.14 LOCATION MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET /api/locations/provinces` | Provinces | Public | ✅ |
+| `GET /api/locations/cities` | Cities | Public | ✅ |
+| `GET /api/locations/districts` | Districts | Public | ✅ |
+| `GET /api/locations/villages` | Villages | Public | ✅ |
+
+**4-level Indonesian admin hierarchy**: Province → City/Kabupaten → District/Kecamatan → Village/Kelurahan
+
+### 6.15 NOTIFICATION MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET /api/notifications` | List notifications | Auth | ✅ |
+| `GET/POST /api/admin/notifications` | Admin manage | Admin | ✅ |
+
+### 6.16 BANNER MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET /api/banners` | Active banners | Public | ✅ |
+| `GET/PUT /api/banners/[id]` | Manage banner | Admin | ✅ |
+| `POST /api/banners/[id]/click` | Track click | Public | ✅ |
+| `GET/POST /api/admin/banners` | Admin CRUD | Admin | ✅ |
+
+### 6.17 DASHBOARD MODULE
+
+| Endpoint | Method | Access | Status |
+|----------|--------|--------|--------|
+| `GET /api/dashboard/stats` | Dashboard stats | Auth | ✅ |
+| `GET /api/dashboard/charts` | Chart data | Auth | ✅ |
+| `GET /api/dashboard/activity` | Recent activity | Auth | ✅ |
+| `GET /api/admin/stats` | Admin stats | Admin | ✅ |
+| `GET /api/admin/analytics` | Admin analytics | Admin | ✅ |
+| `GET /api/admin/revenue` | Revenue reports | Admin | ✅ |
+| `GET /api/admin/activity` | Activity logs | Admin | ✅ |
+| `GET /api/admin/activity-logs` | Activity logs (alt) | Admin | ✅ |
+| `GET /api/stats` | Platform stats | Public | ✅ |
 
 ---
 
-## 12. GLOSSARY
+## 7. Gap Analysis vs Kompetitor
 
-| Istilah | Definisi |
-|---------|----------|
-| **160 Titik** | Sistem inspeksi 160 pemeriksaan pada kendaraan |
-| **KYC** | Know Your Customer — verifikasi identitas (KTP + Selfie) |
-| **VLM** | Vision Language Model — AI untuk analisis gambar kendaraan |
-| **Escrow** | Sistem pembayaran dimana dana ditahan sampai transaksi selesai |
-| **Token** | Mata uang digital platform (1 token = Rp 10.000) |
-| **Credit** | Satuan kredit untuk akses fitur (alias token) |
-| **Dealer Marketplace** | Marketplace khusus dealer (B2B) |
-| **Public Marketplace** | Marketplace umum (C2C) |
-| **Boost** | Fitur meningkatkan visibilitas listing |
-| **Counter-Offer** | Penawaran balik dari seller ke dealer |
-| **Grade** | Nilai inspeksi (A+ s/d E) berdasarkan 160 titik |
-| **Body Type** | Tipe bodi kendaraan (SUV, MPV, Sedan, dll) |
-| **RLS** | Row Level Security — keamanan database per baris |
-| **Visibility** | Tingkat visibilitas listing: public/dealer_marketplace/both |
+### 7.1 Feature Comparison
+
+| Feature | Mobil123 | Carmudi | OLX Autos | AutoMarket (Current) | Gap |
+|---------|----------|---------|-----------|----------------------|-----|
+| **AI Price Prediction** | ❌ | ❌ | ⚠️ Basic | ✅ VLM + Factors | ✅ BONUS |
+| **AstraPay Payment** | ❌ | ❌ | ❌ | ✅ Full Integration | ✅ BONUS |
+| **Credit/Financing** | ✅ | ✅ | ✅ | ✅ AstraPay Paylater | ✅ DONE |
+| **Vehicle Inspection** | ✅ | ✅ | ✅ 200+ pts | ✅ 160 pts | ✅ DONE |
+| **Inspection Certificate** | ✅ | ❌ | ✅ | ✅ + Purchase | ✅ DONE |
+| **Dealer Marketplace** | ✅ | ✅ | ❌ | ✅ B2B Bidding | ✅ BONUS |
+| **Chat System** | ✅ | ✅ | ✅ WA Only | ✅ In-app | ✅ DONE |
+| **KYC Verification** | ✅ | ✅ | ✅ | ✅ KTP + Selfie | ✅ DONE |
+| **Escrow System** | ❌ | ❌ | ✅ | ✅ Platform Fee | ✅ BONUS |
+| **Token Economy** | ✅ Credit | ✅ Listing Fee | ❌ | ✅ Flexible | ✅ BONUS |
+| **E-Tiket/Document** | ❌ | ❌ | ❌ | ✅ Certificate PDF | ✅ BONUS |
+| **WhatsApp Integration** | ✅ | ✅ | ✅ | ❌ | 🔴 HIGH |
+| **Test Drive Booking** | ✅ | ✅ | ✅ | ❌ | 🟡 MEDIUM |
+| **Insurance Integration** | ✅ | ✅ | ❌ | ❌ | 🟡 MEDIUM |
+| **Vehicle History Report** | ✅ | ❌ | ✅ | ❌ | 🟡 MEDIUM |
+| **Multi-Platform App** | ✅ | ✅ | ✅ | ❌ Web Only | 🟡 MEDIUM |
+| **SEO/SEM Tools** | ✅ | ✅ | ✅ | ⚠️ Basic meta | 🟡 MEDIUM |
+| **Push Notifications** | ✅ | ✅ | ✅ | ❌ | 🟡 MEDIUM |
+| **Video Walkaround** | ❌ | ❌ | ✅ | ✅ Upload | ✅ DONE |
+| **Car Comparison** | ✅ | ❌ | ❌ | ✅ Compare Panel | ✅ BONUS |
+
+### 7.2 Critical Missing Features (Prioritas)
+
+#### 🔴 P0 — Harus Ada (MVP Gap)
+
+1. **WhatsApp Integration**
+   - Kirim detail listing, hasil inspeksi, reminder pembayaran via WhatsApp
+   - Integrasi WhatsApp Business API / Fonnte / Wablas
+   - Flow: Chat seller → Redirect WA, Payment success → Send WA receipt
+   - Backend: `POST /api/notifications/whatsapp`
+
+2. **Test Drive Booking**
+   - Buyer bisa booking jadwal test drive
+   - Seller/dealer approve/reject
+   - Calendar integration, location picker
+   - Backend: `test_drive_bookings` table, 5 endpoints
+
+3. **Vehicle History Report**
+   - Riwayat kepemilikan, kecelakaan (dari inspeksi), perawatan
+   - Generate dari data inspeksi + order history
+   - Backend: `vehicle_histories` table, integration with inspection results
+
+#### 🟡 P1 — Penting (Competitive Parity)
+
+4. **Insurance Integration**
+   - Penawaran asuransi kendaraan saat checkout
+   - Partner: Asuransi Astra, Simas Insurtech, etc.
+   - Backend: `insurance_offers` table, API integration
+
+5. **Push Notifications**
+   - Browser push + mobile push (PWA)
+   - Real-time notification for: new offer, chat message, payment status
+   - Backend: Service Worker + Push API / Firebase Cloud Messaging
+
+6. **SEO Optimization**
+   - Dynamic meta tags per listing (title, description, OG image)
+   - Sitemap.xml auto-generated
+   - Schema.org structured data (Car, AutoDealer)
+   - Google Indexing API integration
+
+7. **Progressive Web App (PWA)**
+   - Service worker for offline access
+   - Add to home screen
+   - Push notifications support
+
+#### 🟢 P2 — Nice to Have
+
+8. **Auction System**
+   - Timed auction with bidding
+   - Reserve price, buy-it-now
+   - Backend: `auctions` table, `bids` table, real-time updates
+
+9. **Vehicle Valuation API**
+   - Public API for third-party valuation queries
+   - Rate limited, monetized per query
+   - Backend: API key management, rate limiting
+
+10. **Analytics Export**
+    - Export data ke Excel/CSV
+    - Sales reports, inspection reports, financial reports
+    - Scheduled email reports
 
 ---
 
-*Dokumen ini di-generate dari analisis lengkap seluruh codebase AutoMarket — 300+ file, 90 database tables, 80+ API routes, 60+ components, 11 hooks, 62 Prisma models. Semua bug yang ditemukan telah diperbaiki.*
+## 8. Status Implementasi
+
+### 8.1 Backend API Status
+
+| Modul | Endpoints | Status | Catatan |
+|-------|-----------|--------|---------|
+| Auth/Profile | 4 | ✅ Lengkap | NextAuth + Supabase |
+| Listings | 12 | ✅ Lengkap | CRUD + Search + Compare + Ban |
+| Dealers | 7 | ✅ Lengkap | CRUD + Team + Reviews + Stats |
+| Dealer Marketplace | 7 | ✅ Lengkap | Offers + Favorites + Settings |
+| Inspections | 10 | ✅ Lengkap | Book/Pricing/Certificate/PDF |
+| Credit/Financing | 6 | ✅ Lengkap | Calculator + Apply + Pay Monthly |
+| AstraPay | 6 | ✅ Lengkap | Auth + Payment + Callback + Link |
+| Tokens | 6 | ✅ Lengkap | Settings + Purchase + Transactions |
+| Credits | 9 | ✅ Lengkap | Balance + Packages + Deduct + Boost |
+| Chat | 2 | ✅ Lengkap | Conversations + Messages |
+| Orders | 2 | ✅ Lengkap | Create + List |
+| AI Predictions | 2 | ✅ Lengkap | Create + My Predictions |
+| KYC | 2 | ✅ Lengkap | Submit + Review |
+| Wallet | 2 | ✅ Lengkap | Balance + Transactions |
+| Notifications | 2 | ✅ Lengkap | List + Admin Manage |
+| Location | 5 | ✅ Lengkap | Province/City/District/Village |
+| Banners | 4 | ✅ Lengkap | Active + CRUD + Click Track |
+| Dashboard | 9 | ✅ Lengkap | Stats + Charts + Activity |
+| Admin Routes | 24 | ✅ Lengkap | Full admin panel |
+| Car Master Data | 4 | ✅ Lengkap | Brands + Models + Colors + Seed |
+| Favorites | 3 | ✅ Lengkap | Add + Remove + My Favorites |
+| Boost Features | 1 | ✅ Lengkap | Available boosts |
+| Rentals | 1 | ✅ Lengkap | Rental listings |
+| Stats | 1 | ✅ Lengkap | Platform stats |
+| **WhatsApp** | 0 | ❌ Missing | Not started |
+| **Test Drive** | 0 | ❌ Missing | Not started |
+| **Insurance** | 0 | ❌ Missing | Not started |
+| **Push Notifications** | 0 | ❌ Missing | Not started |
+| **Auction** | 0 | ❌ Missing | Not started |
+
+### 8.2 Frontend Page Status
+
+| Page | Route | Status | Backend? |
+|------|-------|--------|----------|
+| **Landing Page** | `/` | ✅ Functional | ✅ |
+| **Auth** | `/auth` | ✅ Functional | ✅ |
+| **Onboarding** | `/onboarding` | ✅ Functional | ✅ |
+| **Marketplace** | `/marketplace` | ✅ Functional | ✅ |
+| **Dealer Marketplace** | `/dealer-marketplace` | ✅ Functional | ✅ |
+| **Listing Detail** | `/listing/[slug]` | ✅ Functional | ✅ |
+| **Create Listing** | `/listing/create` | ✅ Functional | ✅ |
+| **AI Prediction** | `/prediction` | ✅ Functional | ✅ |
+| **Inspections** | `/inspections` | ✅ Functional | ✅ |
+| **Inspection Preview** | `/inspection-preview` | ✅ Functional | ✅ |
+| **Certificate** | `/certificate/[id]` | ✅ Functional | ✅ |
+| **Tokens** | `/tokens` | ✅ Functional | ✅ |
+| **Credits** | `/credits` | ✅ Functional | ✅ |
+| **User Profile** | `/user/[id]` | ✅ Functional | ✅ |
+| **Dealer Profile** | `/dealer/[slug]` | ✅ Functional | ✅ |
+| **Cara Kerja** | `/cara-kerja` | ✅ Functional | ❌ (static) |
+| **Kategori** | `/kategori` | ✅ Functional | ✅ |
+| **Dashboard** | `/dashboard` | ✅ Functional | ✅ |
+| Dashboard Profile | `/dashboard/profile` | ✅ Functional | ✅ |
+| Dashboard Listings | `/dashboard/listings` | ✅ Functional | ✅ |
+| Dashboard Create | `/dashboard/listings/create` | ✅ Functional | ✅ |
+| Dashboard Edit | `/dashboard/listings/[id]/edit` | ✅ Functional | ✅ |
+| Dashboard Favorites | `/dashboard/favorites` | ✅ Functional | ✅ |
+| Dashboard Messages | `/dashboard/messages` | ✅ Functional | ✅ |
+| Dashboard Orders | `/dashboard/orders` | ✅ Functional | ✅ |
+| Dashboard Inspeksi | `/dashboard/inspeksi` | ✅ Functional | ✅ |
+| Dashboard Predictions | `/dashboard/predictions` | ✅ Functional | ✅ |
+| Dashboard Tokens | `/dashboard/tokens` | ✅ Functional | ✅ |
+| Dashboard Credits | `/dashboard/credits` | ✅ Functional | ✅ |
+| Dashboard Wallet | `/dashboard/wallet` | ✅ Functional | ✅ |
+| Dashboard Withdraw | `/dashboard/withdraw` | ✅ Functional | ✅ |
+| Dashboard KYC | `/dashboard/kyc` | ✅ Functional | ✅ |
+| Dashboard Notifications | `/dashboard/notifications` | ✅ Functional | ✅ |
+| Dashboard Settings | `/dashboard/settings` | ✅ Functional | ✅ |
+| Dashboard Offers | `/dashboard/offers` | ✅ Functional | ✅ |
+| Dealer Dashboard | `/dealer/dashboard` | ✅ Functional | ✅ |
+| Dealer Inventory | `/dealer/inventory` | ✅ Functional | ✅ |
+| Dealer Offers | `/dealer/offers` | ✅ Functional | ✅ |
+| Dealer Profile | `/dealer/profile` | ✅ Functional | ✅ |
+| Dealer Stats | `/dealer/stats` | ✅ Functional | ✅ |
+| Dealer Team | `/dealer/team` | ✅ Functional | ✅ |
+| Dealer Marketplace | `/dealer/marketplace` | ✅ Functional | ✅ |
+| Admin Dashboard | `/admin` | ✅ Functional | ✅ |
+| Admin Users | `/admin/users` | ✅ Functional | ✅ |
+| Admin Listings | `/admin/listings` | ✅ Functional | ✅ |
+| Admin Dealers | `/admin/dealers` | ✅ Functional | ✅ |
+| Admin Orders | `/admin/orders` | ✅ Functional | ✅ |
+| Admin Payments | `/admin/payments` | ✅ Functional | ✅ |
+| Admin Credits | `/admin/credits` | ✅ Functional | ✅ |
+| Admin Tokens | `/admin/tokens` | ✅ Functional | ✅ |
+| Admin KYC | `/admin/kyc` | ✅ Functional | ✅ |
+| Admin Analytics | `/admin/analytics` | ✅ Functional | ✅ |
+| Admin Revenue | `/admin/revenue` | ✅ Functional | ✅ |
+| Admin Banners | `/admin/banners` | ✅ Functional | ✅ |
+| Admin Settings | `/admin/settings` | ✅ Functional | ✅ |
+| Admin Activity | `/admin/activity` | ✅ Functional | ✅ |
+| Admin Withdrawals | `/admin/withdrawals` | ✅ Functional | ✅ |
+| **WhatsApp Chat** | - | ❌ Missing | ❌ |
+| **Test Drive** | - | ❌ Missing | ❌ |
+| **Insurance** | - | ❌ Missing | ❌ |
+| **Auction** | - | ❌ Missing | ❌ |
+
+### 8.3 Total Count
+
+| Area | Count |
+|------|-------|
+| Prisma Models | **67** |
+| API Route Files | **127** |
+| Frontend Pages | **76** |
+| Component Files | **95** |
+| Custom Hooks | **11** |
+| Library Files | **11** |
+| Schema Modules | **20** |
+| Admin Pages | **27** |
+| Dashboard Pages | **24** |
+| Dealer Pages | **8** |
+| Missing Features | **5 modules** |
+
+---
+
+## 9. Roadmap
+
+### Phase 1 — Communication & Trust (Prioritas Tinggi)
+> Target: 2 minggu
+
+| # | Feature | Backend | Frontend | Estimasi |
+|---|---------|---------|----------|----------|
+| 1 | WhatsApp Chat | Fonnte/Wablas API + `POST /api/chat/whatsapp` | WA button on listing + chat | 3 hari |
+| 2 | Test Drive Booking | `test_drive_bookings` table + 5 endpoints | Booking form + calendar | 3 hari |
+| 3 | Vehicle History Report | Generate dari inspection + order data | History tab on listing detail | 3 hari |
+| 4 | Push Notifications | FCM + Service Worker + `POST /api/push` | Notification permission + SW | 3 hari |
+
+### Phase 2 — Competitive Features
+> Target: 3 minggu
+
+| # | Feature | Backend | Frontend | Estimasi |
+|---|---------|---------|----------|----------|
+| 5 | Insurance Integration | `insurance_offers` table + partner API | Insurance offer at checkout | 5 hari |
+| 6 | SEO Optimization | Dynamic meta + Sitemap + Schema.org | OG tags + structured data | 3 hari |
+| 7 | PWA Support | Service Worker + Manifest | Install prompt + offline mode | 3 hari |
+| 8 | Auction System | `auctions` + `bids` tables + real-time | Auction page + live bidding | 5 hari |
+
+### Phase 3 — Monetization & Scale
+> Target: 2 minggu
+
+| # | Feature | Detail | Estimasi |
+|---|---------|--------|----------|
+| 9 | Analytics Export | CSV/Excel download for dealers & admin | 2 hari |
+| 10 | Valuation API | Public API with rate limiting & API keys | 3 hari |
+| 11 | Scheduled Reports | Email reports (daily/weekly/monthly) | 2 hari |
+| 12 | Advanced Matching | AI-powered car recommendation engine | 3 hari |
+| 13 | Multi-Language | English + Bahasa Indonesia toggle | 2 hari |
+| 14 | Mobile App API | React Native API optimization | 5 hari |
+
+---
+
+*Dokumen ini dibuat berdasarkan analisis codebase AutoMarket per 4 Maret 2026.*
+*Total: 67 Prisma models, 127 API routes, 76 frontend pages, 95 components, 5 user roles.*

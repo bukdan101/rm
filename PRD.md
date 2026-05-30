@@ -56,25 +56,423 @@ INSPECTOR (assigned by system/admin)
 
 ### 2.2 Persona Detail
 
-| Role | Deskripsi | Akses Utama | Login Via |
-|------|-----------|-------------|-----------|
-| **ADMIN** | Platform owner, mengelola seluruh sistem, approve KYC & dealer | `/admin` — Semua menu | NextAuth / Supabase |
-| **BUYER** | Pengguna umum yang mencari & membeli mobil | `/` — Marketplace + `/dashboard` (terbatas) | NextAuth / Google |
-| **SELLER** | Pemilik mobil yang ingin menjual (wajib KYC) | `/dashboard` — Listing, inspeksi, pesan | NextAuth / Google |
-| **DEALER** | Showroom/dealer resmi dengan banyak inventory | `/dealer` — Dealer dashboard + marketplace | NextAuth / Google |
-| **DEALER_STAFF** | Staf dealer yang membantu operasional | `/dealer` — Menu terbatas sesuai permission | NextAuth / Google |
-| **INSPECTOR** | Pihak ketiga yang melakukan inspeksi kendaraan | `/dashboard/inspeksi` — Input hasil inspeksi | NextAuth / Google |
+#### 🟢 Persona 1: Andi — ADMIN (Platform Owner)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  👤 ANDI — ADMIN                                                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Usia: 35 tahun                                                 │
+│  Pekerjaan: Founder & CEO AutoMarket                            │
+│  Lokasi: Jakarta Selatan                                        │
+│  Teknologi: Mahir, daily driver laptop + smartphone             │
+│                                                                  │
+│  ── PROFIL ─────────────────────────────────────────────────── │
+│  Andi adalah pemilik platform yang bertanggung jawab atas       │
+│  seluruh operasional AutoMarket. Setiap hari dia cek dashboard │
+│  untuk memantau pertumbuhan platform, approve dealer baru,      │
+│  dan review laporan keuangan.                                   │
+│                                                                  │
+│  ── TUJUAN ─────────────────────────────────────────────────── │
+│  ✓ Memastikan platform tumbuh 20% MoM                          │
+│  ✓ Menjaga kualitas listing & mencegah penipuan                │
+│  ✓ Mengoptimalkan revenue dari token & fee                     │
+│  ✓ Menyetujui dealer & KYC dengan cepat                        │
+│  ✓ Memantau metrik: GMV, active users, conversion rate         │
+│                                                                  │
+│  ── PAIN POINTS ────────────────────────────────────────────── │
+│  ✗ Sulit memantau semua listing yang melanggar aturan          │
+│  ✗ Proses approval KYC & dealer masih manual & lambat          │
+│  ✗ Belum ada WhatsApp notifikasi untuk alert penting           │
+│  ✗ Laporan revenue harus export manual ke Excel                │
+│                                                                  │
+│  ── HARI-HARI ANDI ─────────────────────────────────────────── │
+│  08:00  Buka dashboard → cek KPI harian                        │
+│  09:00  Review 5 dealer registration → approve 3, reject 2     │
+│  10:00  Cek listing yang di-flag → ban 2 listing scam          │
+│  11:00  Review revenue report → cek fee collection              │
+│  14:00  Meeting tim → bahas roadmap fitur baru                  │
+│  16:00  Cek withdrawal requests → approve 4 pencairan          │
+│                                                                  │
+│  ── FITUR YANG DIBUTUHKAN ─────────────────────────────────── │
+│  → Dashboard dengan real-time KPI (GMV, users, listings)       │
+│  → Bulk approve/reject KYC & dealer                             │
+│  → Auto-flag listing scam (AI-based)                            │
+│  → Revenue analytics dengan chart & export                      │
+│  → Withdrawal management dengan DOKU/AstraPay disbursement      │
+│  → Activity log yang bisa di-filter                             │
+│                                                                  │
+│  Akses: /admin — Semua menu (27 halaman)                       │
+│  Login: NextAuth + Supabase                                     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 🔵 Persona 2: Budi — BUYER (Pembeli Mobil)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  👤 BUDI — BUYER                                                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Usia: 29 tahun                                                 │
+│  Pekerjaan: Software Engineer di startup tech                   │
+│  Lokasi: Bandung                                                │
+│  Teknologi: Very tech-savvy, Android + laptop                   │
+│  Penghasilan: Rp 12.000.000/bulan                              │
+│                                                                  │
+│  ── PROFIL ─────────────────────────────────────────────────── │
+│  Budi ingin membeli mobil pertamanya, Avanza 2020, budget      │
+│  Rp 150-180 juta. Dia riset online setiap malam, bandingkan    │
+│  harga di beberapa platform, tapi bingung mana yang aman.       │
+│  Dia tertarik opsi kredit agar tidak harus bayar tunai.         │
+│                                                                  │
+│  ── TUJUAN ─────────────────────────────────────────────────── │
+│  ✓ Menemukan mobil berkualitas dengan harga wajar              │
+│  ✓ Memastikan mobil tidak bekas kecelakaan/banjir              │
+│  ✓ Bisa beli dengan kredit DP ringan via AstraPay              │
+│  ✓ Proses aman — ada escrow & inspeksi                         │
+│  ✓ Bandingkan beberapa mobil sebelum decide                    │
+│                                                                  │
+│  ── PAIN POINTS ────────────────────────────────────────────── │
+│  ✗ Takut ditipu — foto bagus tapi aslinya rusak                │
+│  ✗ Bingung cara cek harga pasar — apakah harga wajar?          │
+│  ✗ Proses kredit di leasing ribet & lama                       │
+│  ✗ Tidak tahu cara negosiasi dengan seller                     │
+│  ✗ Belum bisa booking test drive online                         │
+│                                                                  │
+│  ── HARI-HARI BUDI ─────────────────────────────────────────── │
+│  20:00  Buka AutoMarket → search "Avanza 2020 Bandung"         │
+│  20:15  Filter: harga 150-180jt, mileage <80rb km              │
+│  20:30  Lihat 3 listing → compare side-by-side                 │
+│  20:45  Buka listing favorit → lihat inspeksi report           │
+│  21:00  Pakai AI Prediction → cek harga wajar                  │
+│  21:15  Chat seller → tanya riwayat & test drive               │
+│  21:30  Hitung kredit → DP 30%, tenor 36 bulan, cicilan 3.5jt │
+│  21:45  Apply kredit via AstraPay → upload KTP + slip gaji     │
+│                                                                  │
+│  ── FITUR YANG DIBUTUHKAN ─────────────────────────────────── │
+│  → Search & filter canggih (brand, harga, lokasi, tahun)       │
+│  → AI Price Prediction (apakah harga wajar?)                    │
+│  → Inspection report + sertifikat (bukti kondisi mobil)        │
+│  → Compare panel (bandingkan 2-3 mobil sekaligus)              │
+│  → Credit calculator (simulasi cicilan flat rate)               │
+│  → AstraPay payment (kredit, paylater, VA, QRIS)               │
+│  → Chat seller langsung dari listing                            │
+│  → Favorite & watch list                                        │
+│                                                                  │
+│  Akses: / — Marketplace + /dashboard (terbatas)                │
+│  Login: Google OAuth / NextAuth                                 │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 🟠 Persona 3: Siti — SELLER (Penjual Mobil)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  👤 SITI — SELLER                                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Usia: 34 tahun                                                 │
+│  Pekerjaan: Guru SMP, jual mobil pribadi pertama kali           │
+│  Lokasi: Surabaya                                               │
+│  Teknologi: Cukup mahir, iPhone + laptop                        │
+│                                                                  │
+│  ── PROFIL ─────────────────────────────────────────────────── │
+│  Siti mau jual Honda Jazz 2019-nya karena butuh uang. Dia      │
+│  tidak pengalaman jual mobil, takut harga terlalu murah,       │
+│  dan bingung cara pasang iklan yang menarik. Dia mau proses    │
+│  yang aman agar tidak ditipu buyer.                              │
+│                                                                  │
+│  ── TUJUAN ─────────────────────────────────────────────────── │
+│  ✓ Jual mobil dengan harga optimal (tidak terlalu murah)       │
+│  ✓ Proses aman — uang diterima sebelum BAST                    │
+│  ✓ Pasang iklan mudah tanpa ribet                               │
+│  ✓ Dapatkan penawaran terbaik dari beberapa calon buyer        │
+│  ✓ Tahu berapa harga pasar sebelum listing                      │
+│                                                                  │
+│  ── PAIN POINTS ────────────────────────────────────────────── │
+│  ✗ Tidak tahu cara menentukan harga jual                       │
+│  ✗ Takut buyer menghilang setelah negosiasi panjang            │
+│  ✗ Proses BAST & transfer uang yang tidak aman                 │
+│  ✗ Tidak punya waktu untuk foto profesional                    │
+│  ✗ Bingung harus isi form listing yang panjang                 │
+│                                                                  │
+│  ── HARI-HARI SITI ─────────────────────────────────────────── │
+│  10:00  Sign up → upload KTP + selfie (KYC)                    │
+│  10:30  Buat listing → pilih Honda Jazz 2019                   │
+│  11:00  Upload 8 foto → isi fitur & spesifikasi                │
+│  11:30  Cek AI Prediction → harga rekomendasi Rp 185jt         │
+│  11:45  Set harga Rp 188jt (negotiable)                        │
+│  12:00  Publish → pakai 1 token untuk listing 30 hari          │
+│  Hari 3: Dapat 2 chat dari buyer → negosiasi                   │
+│  Hari 7: Terima offer Rp 183jt → deal!                         │
+│  Hari 8: Buat order → escrow → buyer bayar → dana masuk        │
+│                                                                  │
+│  ── FITUR YANG DIBUTUHKAN ─────────────────────────────────── │
+│  → Listing wizard 5 langkah (mudah & guided)                   │
+│  → AI Price Prediction (rekomendasi harga jual)                │
+│  → Escrow system (uang aman sampai deal selesai)               │
+│  → Chat system (negosiasi langsung dengan buyer)               │
+│  → Inspection request (tambah kepercayaan buyer)               │
+│  → Token system (bayar per listing, transparan)                │
+│  → Boost listing (featured/urgent biar cepat laku)             │
+│  → KYC verification (tambah trust badge di profil)             │
+│                                                                  │
+│  Akses: /dashboard — Listing, inspeksi, pesan                  │
+│  Login: Google OAuth / NextAuth                                 │
+│  Wajib: KYC verified sebelum bisa publish listing              │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 🟣 Persona 4: Pak Hendra — DEALER (Pemilik Showroom)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  👤 PAK HENDRA — DEALER                                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Usia: 45 tahun                                                 │
+│  Pekerjaan: Pemilik showroom "Hendra Motor" (15 unit mobil)     │
+│  Lokasi: Medan                                                  │
+│  Teknologi: Cukup mahir, Samsung Galaxy + iPad                  │
+│                                                                  │
+│  ── PROFIL ─────────────────────────────────────────────────── │
+│  Pak Hendra punya showroom mobil bekas di Medan. Setiap bulan   │
+│  dia beli 5-8 mobil dari owner, refurbish, lalu jual dengan    │
+│  margin 10-20%. Dia butuh tools untuk mengelola inventory,     │
+│  membeli mobil dari C2C marketplace, dan tracking penjualan.    │
+│                                                                  │
+│  ── TUJUAN ─────────────────────────────────────────────────── │
+│  ✓ Mengelola inventory 15+ mobil secara efisien                │
+│  ✓ Membeli mobil dari C2C marketplace dengan harga bagus       │
+│  ✓ Menjual mobil lebih cepat dengan曝光 lebih besar            │
+│  ✓ Tracking ROI per unit (beli → refurbish → jual)            │
+│  ✓ Delegasikan ke staf sales tanpa kehilangan kontrol          │
+│                                                                  │
+│  ── PAIN POINTS ────────────────────────────────────────────── │
+│  ✗ Inventory management masih pakai Excel / buku tulis         │
+│  ✗ Sulit cari mobil bekas bagus untuk di-stok                  │
+│  ✗ Tidak tahu harga pasar real-time untuk beli mobil           │
+│  ✗ Staf sales tidak terkontrol — bisa makan komisi             │
+│  ✗ Listing di banyak platform, repot update satu-satu          │
+│                                                                  │
+│  ── HARI-HARI PAK HENDRA ───────────────────────────────────── │
+│  08:00  Buka dealer dashboard → cek inventory status           │
+│  09:00  Browse dealer marketplace → cari Avanza murah          │
+│  09:30  Found! Harga Rp 140jt → make offer Rp 135jt           │
+│  10:00  Counter-offer dari seller Rp 137jt → ACCEPT             │
+│  10:30  Assign staf Rudi untuk pick-up & inspeksi              │
+│  11:00  Update listing yang sudah terjual → mark SOLD          │
+│  14:00  Upload 3 mobil baru → pakai dealer token               │
+│  15:00  Cek stats → 450 views, 12 chat, 3 offers minggu ini   │
+│  16:00  Review team performance → Rudi closing 2 unit          │
+│                                                                  │
+│  ── FITUR YANG DIBUTUHKAN ─────────────────────────────────── │
+│  → Dealer dashboard (inventory, stats, team)                    │
+│  → Dealer Marketplace (browse + make offer + counter)           │
+│  → Dealer staff management (role: sales, permission: edit/view) │
+│  → AI Prediction untuk beli mobil (cek harga wajar)            │
+│  → Inspection integration (sertifikat meningkatkan trust)       │
+│  → Bulk listing upload (XML/CSV)                                │
+│  → Dealer analytics (views, leads, conversion per listing)     │
+│  → Auto-reject offer jika listing expired/banned                │
+│  → Dealer review & rating system                                │
+│                                                                  │
+│  Akses: /dealer — Dashboard + Marketplace + Team               │
+│  Login: Google OAuth / NextAuth                                 │
+│  Wajib: Dealer registration (NPWP, NIB, SIUP) + admin approval │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 🔴 Persona 5: Rudi — DEALER STAFF (Sales Executive)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  👤 RUDI — DEALER STAFF                                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Usia: 27 tahun                                                 │
+│  Pekerjaan: Sales Executive di Hendra Motor                     │
+│  Lokasi: Medan                                                  │
+│  Teknologi: Mahir, iPhone (utama) + laptop kantor              │
+│                                                                  │
+│  ── PROFIL ─────────────────────────────────────────────────── │
+│  Rudi adalah sales di showroom Pak Hendra. Tugasnya menjawab   │
+│  chat calon buyer, melakukan test drive, dan closing penjualan. │
+│  Dia sering di lapangan, jadi butuh akses mobile-friendly.     │
+│                                                                  │
+│  ── TUJUAN ─────────────────────────────────────────────────── │
+│  ✓ Menjawab chat buyer dengan cepat (closing rate tinggi)      │
+│  ✓ Melakukan test drive & closing penjualan                    │
+│  ✓ Update status listing yang sudah terjual                    │
+│  ✓ Menjangkau buyer aktif di marketplace                       │
+│                                                                  │
+│  ── PAIN POINTS ────────────────────────────────────────────── │
+│  ✗ Sering ketinggalan chat karena tidak ada push notification  │
+│  ✗ Harus buka laptop untuk update listing                      │
+│  ✗ Tidak bisa booking test drive untuk buyer                   │
+│  ✗ Tidak tahu riwayat chat buyer sebelumnya                    │
+│                                                                  │
+│  ── HARI-HARI RUDI ─────────────────────────────────────────── │
+│  09:00  Cek chat → 5 pesan baru dari buyer                     │
+│  09:30  Jawab semua chat → schedule test drive 2 buyer         │
+│  10:00  Test drive buyer #1 → closing!                         │
+│  11:30  Test drive buyer #2 → minta diskon, negosiasi          │
+│  14:00  Update listing #1 → mark SOLD                          │
+│  15:00  Follow up 3 buyer yang belum respon                    │
+│                                                                  │
+│  ── FITUR YANG DIBUTUHKAN ─────────────────────────────────── │
+│  → Mobile-friendly chat (push notification)                     │
+│  → Test drive booking system                                     │
+│  → Quick listing update dari mobile                             │
+│  → Chat history per buyer (konteks negosiasi)                   │
+│  → Permission: can_edit listing, can_delete (aturan dealer)     │
+│                                                                  │
+│  Akses: /dealer — Menu terbatas sesuai permission               │
+│  Login: Google OAuth (created by DEALER)                        │
+│  Permission: can_edit, can_delete (set oleh dealer owner)       │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 🟡 Persona 6: Mas Dwi — INSPECTOR (Mekanik Inspeksi)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  👤 MAS DWI — INSPECTOR                                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Usia: 40 tahun                                                 │
+│  Pekerjaan: Kepala bengkel & inspektor bersertifikat            │
+│  Lokasi: Semarang                                               │
+│  Teknologi: Cukup mahir, Android + tablet                       │
+│                                                                  │
+│  ── PROFIL ─────────────────────────────────────────────────── │
+│  Mas Dwi sudah 15 tahun jadi mekanik dan 5 tahun jadi          │
+│  inspektor mobil bekas. Dia melakukan inspeksi 160 poin untuk   │
+│  setiap mobil, foto setiap kerusakan, dan membuat sertifikat.   │
+│  Dia butuh tools yang mempercepat proses input hasil inspeksi.  │
+│                                                                  │
+│  ── TUJUAN ─────────────────────────────────────────────────── │
+│  ✓ Melakukan inspeksi 160 poin secara sistematis & cepat       │
+│  ✓ Menghasilkan sertifikat inspeksi yang profesional            │
+│  ✓ Foto & dokumentasi setiap temuan kerusakan                  │
+│  ✓ Memberikan grade & rekomendasi harga                        │
+│  ✓ Tracking booking & jadwal inspeksi                           │
+│                                                                  │
+│  ── PAIN POINTS ────────────────────────────────────────────── │
+│  ✗ Input 160 poin inspeksi manual sangat lama                  │
+│  ✗ Foto harus upload satu-satu                                  │
+│  ✗ Tidak ada template standar untuk sertifikat                  │
+│  ✗ Sering double booking karena jadwal tidak terintegrasi       │
+│  ✗ Perhitungan grade & skor masih manual                       │
+│                                                                  │
+│  ── HARI-HARI MAS DWI ──────────────────────────────────────── │
+│  08:00  Cek booking → 3 inspeksi hari ini                      │
+│  09:00  Inspeksi mobil #1 → foto + input 160 poin              │
+│  11:00  Submit hasil → auto-calculate grade B, score 72%       │
+│  11:30  AI price analysis → recommended Rp 175jt               │
+│  13:00  Inspeksi mobil #2 → flood damage detected!             │
+│  14:30  Submit → grade E, NOT recommended                      │
+│  15:00  Generate sertifikat PDF → kirim ke owner               │
+│  16:00  Inspeksi mobil #3 → selesai, grade A                   │
+│                                                                  │
+│  ── FITUR YANG DIBUTUHKAN ─────────────────────────────────── │
+│  → Inspection checklist digital (160 poin per kategori)         │
+│  → Photo upload per item (langsung dari kamera)                │
+│  → Auto-calculate score & grade (A/B/C/D/E)                    │
+│  → Certificate generation (PDF + QR verify)                     │
+│  → AI price analysis (market comparison)                        │
+│  → Booking & scheduling system                                  │
+│  → Inspection pricing management                                │
+│                                                                  │
+│  Akses: /dashboard/inspeksi — Input hasil inspeksi              │
+│  Login: NextAuth / Google (assigned by admin)                   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### 2.3 Perbandingan Dashboard
 
-| Aspek | ADMIN | DEALER | SELLER | BUYER |
-|-------|-------|--------|--------|-------|
-| **Dashboard** | Platform-wide KPIs: total listings, revenue, users | Dealer-scope: inventory, offers, team | My listings, views, inquiries | My favorites, orders, predictions |
-| **Listings** | Semua listing di platform | Hanya listing dealer sendiri | Hanya listing milik sendiri | Browse & search saja |
-| **Keuangan** | Semua transaksi, fee, withdrawal | Pendapatan dealer, saldo, withdrawal | Penjualan, saldo | Pembayaran, kredit |
-| **Dealer** | Approve/reject dealer, set fee | Edit profil, kelola tim | Tidak ada akses | Lihat profil dealer |
-| **Inspeksi** | Semua inspeksi, kategori, pricing | Inspeksi listing dealer | Inspeksi listing sendiri | Lihat hasil inspeksi |
-| **Settings** | Fee, AstraPay, token, sistem | Pengaturan dealer marketplace | Pengaturan profil | Pengaturan profil |
+| Aspek | ADMIN (Andi) | DEALER (Pak Hendra) | SELLER (Siti) | BUYER (Budi) | INSPECTOR (Mas Dwi) |
+|-------|-------------|--------------------|--------------|-------------|--------------------|
+| **Dashboard** | Platform KPIs: GMV, users, revenue, growth | Inventory KPIs: stock, offers, team stats | My listings, views, inquiries, chat | My favorites, orders, credit status | Inspections: bookings, completed, queue |
+| **Listings** | Semua listing di platform + ban power | Hanya listing dealer sendiri (15+ unit) | Hanya listing milik sendiri (1-5 unit) | Browse & search saja | Lihat listing yang di-inspeksi |
+| **Keuangan** | Semua transaksi, fee, withdrawal admin | Pendapatan dealer, saldo, withdraw | Penjualan, saldo, token balance | Pembayaran, kredit cicilan | Income dari inspeksi |
+| **Dealer** | Approve/reject dealer, set fee, manage | Edit profil, kelola tim, marketplace | Tidak ada akses | Lihat profil dealer | - |
+| **Inspeksi** | Semua inspeksi, kategori, pricing | Inspeksi listing dealer | Inspeksi listing sendiri | Lihat hasil inspeksi | Create & submit inspeksi |
+| **Marketplace** | View all, settings | Browse + make offer + counter | Publish ke DM, accept/reject offer | - | - |
+| **Settings** | Fee, AstraPay, token, sistem global | Dealer marketplace settings | Pengaturan profil | Pengaturan profil | - |
+| **Chat** | - | ✅ Chat buyer | ✅ Chat buyer | ✅ Chat seller/dealer | - |
+
+### 2.4 Persona Journey Map
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        PERSONA JOURNEY MAP                                  │
+├──────────┬──────────┬──────────┬──────────┬──────────┬─────────────────────┤
+│  Stage   │  BUDI    │  SITI    │ PAK      │  RUDI    │  MAS DWI            │
+│          │ (Buyer)  │ (Seller) │ HENDRA   │ (Staff)  │ (Inspector)         │
+│          │          │          │ (Dealer) │          │                     │
+├──────────┼──────────┼──────────┼──────────┼──────────┼─────────────────────┤
+│ AWARE    │ Search   │ Dengar   │ Cari     │ Dipekerj │ Dipekerjak          │
+│          │ Google   │ dari     │ platform │ an Pak   │ admin               │
+│          │ "mobil   │ teman    │ untuk    │ Hendra   │ sbg inspektor       │
+│          │ bekas"   │ /iklan   │ jual     │          │                     │
+├──────────┼──────────┼──────────┼──────────┼──────────┼─────────────────────┤
+│ REGISTER │ Sign up  │ Sign up  │ Register │ Akun     │ Akun dibuat         │
+│          │ Google   │ Google   │ dealer   │ dibuat   │ admin               │
+│          │ → Buyer  │ + KYC    │ + NPWP   │ Pak      │                     │
+│          │          │ → Seller │ → Dealer │ Hendra   │                     │
+├──────────┼──────────┼──────────┼──────────┼──────────┼─────────────────────┤
+│ EXPLORE  │ Browse   │ Cek AI   │ Browse   │ -        │ Lihat               │
+│          │ listing  │ Predict  │ dealer   │          │ booking             │
+│          │ → filter │ → harga  │ market-  │          │ jadwal              │
+│          │ → compare│ wajar    │ place    │          │                     │
+├──────────┼──────────┼──────────┼──────────┼──────────┼─────────────────────┤
+│ ENGAGE   │ Chat     │ Buat     │ Make     │ Jawab    │ Datang              │
+│          │ seller   │ listing  │ offer    │ chat     │ lokasi              │
+│          │ → cek    │ → upload │ → nego   │ buyer    │ → inspeksi          │
+│          │ inspeksi │ foto     │ → accept │ → sched  │ 160 poin            │
+├──────────┼──────────┼──────────┼──────────┼──────────┼─────────────────────┤
+│ TRANSACT │ Apply    │ Accept   │ Pembelia │ Closing  │ Submit               │
+│          │ kredit   │ offer    │ an mobil │ penjua-  │ hasil               │
+│          │ → Astra- │ → escrow │ → pay    │ lan →    │ → grade             │
+│          │ Pay      │ → dana   │ → pick   │ update   │ → sertifikat        │
+│          │ → cicilan│ masuk    │ up       │ listing  │ → PDF               │
+├──────────┼──────────┼──────────┼──────────┼──────────┼─────────────────────┤
+│ RETAIN   │ Review   │ Jual    │ Repeat   │ Review   │ Inspeksi            │
+│          │ dealer   │ lagi    │ buy +    │ stats    │ mobil               │
+│          │ → repeat │ → boost │ sell     │ → follow │ berikutnya          │
+│          │ purchase │ listing │ cycle    │ up       │ → rating            │
+└──────────┴──────────┴──────────┴──────────┴──────────┴─────────────────────┘
+```
+
+### 2.5 Persona Pain Points vs Feature Mapping
+
+| Pain Point | Persona | Fitur Solusi | Status |
+|------------|---------|-------------|--------|
+| Takut ditipu — foto bagus tapi aslinya rusak | Budi (Buyer) | Inspection Report + Sertifikat + AI Prediction | ✅ Done |
+| Bingung cara cek harga pasar | Budi (Buyer) | AI Price Prediction + Market Analysis | ✅ Done |
+| Proses kredit ribet & lama | Budi (Buyer) | Credit Calculator + AstraPay Paylater | ✅ Done |
+| Tidak tahu cara menentukan harga jual | Siti (Seller) | AI Price Prediction (seller mode) | ✅ Done |
+| Proses transfer uang tidak aman | Siti (Seller) | Escrow System + Platform Fee | ✅ Done |
+| Form listing panjang & ribet | Siti (Seller) | 5-step Listing Wizard | ✅ Done |
+| Inventory management masih Excel | Pak Hendra (Dealer) | Dealer Dashboard + Inventory | ✅ Done |
+| Sulit cari mobil bekas bagus | Pak Hendra (Dealer) | Dealer Marketplace + Make Offer | ✅ Done |
+| Staf sales tidak terkontrol | Pak Hendra (Dealer) | Dealer Staff + Permission System | ✅ Done |
+| Ketinggalan chat buyer | Rudi (Staff) | Chat System + Notification | ⚠️ No Push |
+| Tidak bisa booking test drive | Rudi (Staff) | Test Drive Booking | ❌ Missing |
+| Input 160 poin inspeksi lama | Mas Dwi (Inspector) | Digital Checklist + Photo Upload | ✅ Done |
+| Perhitungan grade masih manual | Mas Dwi (Inspector) | Auto-calculate Score & Grade | ✅ Done |
+| Tidak ada WhatsApp notifikasi | Semua | WhatsApp Integration | ❌ Missing |
+| Laporan revenue harus export manual | Andi (Admin) | Analytics + Export | ❌ Missing |
+| Approval KYC lambat | Andi (Admin) | Bulk Approve/Reject | ⚠️ Partial |
 
 ---
 
